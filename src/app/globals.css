@@ -1,0 +1,158 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand navy — trust */
+  --color-brand-50: #f0f5fb;
+  --color-brand-100: #dbe9f6;
+  --color-brand-200: #b9d3ec;
+  --color-brand-300: #88b4de;
+  --color-brand-400: #5190c9;
+  --color-brand-500: #2f72ac;
+  --color-brand-600: #235c90;
+  --color-brand-700: #1d4a75;
+  --color-brand-800: #1a3f61;
+  --color-brand-900: #0b2a4a;
+  --color-brand-950: #071d33;
+
+  /* Health teal */
+  --color-mint-50: #ecfaf6;
+  --color-mint-100: #d0f1e8;
+  --color-mint-200: #a2e3d3;
+  --color-mint-300: #6aceba;
+  --color-mint-400: #3ab09d;
+  --color-mint-500: #1f9583;
+  --color-mint-600: #14786b;
+  --color-mint-700: #126157;
+  --color-mint-800: #114e47;
+  --color-mint-900: #10413c;
+
+  --font-sans: var(--font-inter), var(--font-dev), system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+
+  --shadow-soft: 0 1px 2px rgba(11, 42, 74, 0.05), 0 10px 30px -10px rgba(11, 42, 74, 0.12);
+  --shadow-lift: 0 2px 6px rgba(11, 42, 74, 0.08), 0 20px 45px -12px rgba(11, 42, 74, 0.18);
+
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-scan: scan 2.6s ease-in-out infinite;
+  --animate-pulse-ring: pulsering 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-eq: eq 0.9s ease-in-out infinite;
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-12px); }
+  }
+  @keyframes scan {
+    0%, 100% { top: 6%; opacity: 0.9; }
+    50% { top: 90%; opacity: 0.9; }
+  }
+  @keyframes pulsering {
+    0% { transform: scale(1); opacity: 0.55; }
+    100% { transform: scale(1.9); opacity: 0; }
+  }
+  @keyframes shimmer {
+    from { background-position: -200px 0; }
+    to { background-position: 200px 0; }
+  }
+  @keyframes eq {
+    0%, 100% { transform: scaleY(0.35); }
+    50% { transform: scaleY(1); }
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: #f3f6fa;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.card-shadow {
+  box-shadow: var(--shadow-soft);
+}
+.card-lift {
+  box-shadow: var(--shadow-lift);
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.14) 25%,
+    rgba(148, 163, 184, 0.28) 37%,
+    rgba(148, 163, 184, 0.14) 63%
+  );
+  background-size: 400px 100%;
+  animation: var(--animate-shimmer);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* Range bar marker ticks */
+.rangebar-track {
+  background: linear-gradient(
+    to right,
+    #fca5a5 0%,
+    #fca5a5 var(--lo),
+    #86efac var(--lo),
+    #86efac var(--hi),
+    #fca5a5 var(--hi),
+    #fca5a5 100%
+  );
+}
+
+/* High-contrast accessibility mode */
+html.hc body {
+  background: #ffffff;
+}
+html.hc .card-shadow,
+html.hc .card-lift {
+  box-shadow: none;
+  border-width: 2px;
+  border-color: #0f172a;
+}
+html.hc .hc-bump {
+  border-width: 2px !important;
+}
+
+/* Reduce motion accessibility mode */
+html.rm *,
+html.rm *::before,
+html.rm *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Print (doctor summary) */
+@media print {
+  .print\:hidden {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+}
+
+::selection {
+  background: #0f766e;
+  color: #fff;
+}

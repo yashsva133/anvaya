@@ -1,0 +1,181 @@
+"use client";
+
+// Screen 4 — extraction confirmation with trusted "did we read this right?" step.
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import { BadgeCheck, ChevronDown, Keyboard, PencilLine, ShieldQuestion } from "lucide-react";
+import { FlowShell } from "@/components/shell";
+import { useI18n, pick } from "@/lib/i18n";
+import { Sheet, StatusPill, TestIcon, useToast } from "@/components/core";
+import { LATEST, TESTS, fmtValue, type ReportEntry } from "@/lib/data";
+
+const HEADLINE = ["hemoglobin", "hba1c", "ldl", "hdl", "glucose", "creatinine"];
+
+export default function ExtractedPage() {
+  const router = useRouter();
+  const { t, s } = useI18n();
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false);
+  const [editEntry, setEditEntry] = useState<ReportEntry | null>(null);
+  const [editVal, setEditVal] = useState("");
+  const [fixed, setFixed] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const id = setTimeout(() => setLoading(false), 900);
+    return () => clearTimeout(id);
+  }, []);
+
+  const entries = LATEST.entries;
+  const visible = showAll ? entries : entries.filter((e) => HEADLINE.includes(e.test));
+
+  const valueOf = (e: ReportEntry) => fixed[e.test] ?? e.value;
+
+  return (
+    <FlowShell>
+      {loading ? (
+        <div className="space-y-3 pt-4" aria-busy="true">
+          <div className="skeleton h-9 w-2/3 rounded-xl" />
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="skeleton h-20 rounded-3xl" style={{ animationDelay: `${i * 0.1}s` }} />
+          ))}
+        </div>
+      ) : (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <h1 className="text-center text-2xl font-extrabold tracking-tight text-brand-950 md:text-3xl">
+            {t("extract.title")}
+          </h1>
+          <p className="mt-1.5 text-center text-sm font-semibold text-slate-500">
+            {t("extract.subtitle")}
+          </p>
+
+          {/* trust question */}
+          <div className="mt-5 flex items-center gap-3 rounded-3xl border-2 border-mint-200 bg-mint-50 p-4">
+            <ShieldQuestion className="h-8 w-8 shrink-0 text-mint-700" />
+            <p className="text-base font-extrabold text-mint-900">
+              {t("extract.question")}
+            </p>
+          </div>
+
+          {/* result cards */}
+          <div className="mt-4 space-y-2.5">
+            {visible.map((e, i) => {
+              const def = TESTS[e.test];
+              return (
+                <motion.div
+                  key={e.test}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="card-shadow flex items-center gap-3.5 rounded-3xl border border-slate-100 bg-white p-4"
+                >
+                  <TestIcon testId={e.test} size={46} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-extrabold text-slate-800">
+                      {pick(def.name, s.lang)}
+                    </p>
+                    <p className="text-xs font-bold text-slate-400">
+                      {def.ref.text} · {t("common.perReport")}
+                    </p>
+                    <div className="mt-1.5">
+                      <StatusPill status={fixed[e.test] != null && fixed[e.test] !== e.value ? evolved(e) : e.status} size="sm" />
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="tabular text-2xl font-extrabold text-brand-900">
+                      {fmtValue(valueOf(e))}
+                    </p>
+                    <p className="text-[11px] font-bold text-slate-400">{def.unit}</p>
+                    <button
+                      onClick={() => {
+                        setEditEntry(e);
+                        setEditVal(String(valueOf(e)));
+                      }}
+                      aria-label={t("extract.edit")}
+                      className="mt-1.5 inline-flex min-h-9 items-center gap-1.5 rounded-full border border-slate-200 px-3 text-xs font-extrabold text-slate-500 transition hover:border-brand-300 hover:text-brand-700"
+                    >
+                      <PencilLine className="h-3.5 w-3.5" />
+                      {t("extract.edit")}
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-sm font-extrabold text-slate-500 transition hover:text-brand-700"
+          >
+            {showAll ? t("extract.showLess") : t("extract.showAll")}
+            <ChevronDown className={`h-4 w-4 transition ${showAll ? "rotate-180" : ""}`} />
+          </button>
+
+          {/* actions */}
+          <div className="sticky bottom-4 mt-6 flex gap-3">
+            <button
+              onClick={() => {
+                toast(t("extract.correctToast"));
+                setTimeout(() => router.push("/dashboard"), 650);
+              }}
+              className="flex min-h-16 flex-1 items-center justify-center gap-2.5 rounded-3xl bg-mint-600 text-lg font-extrabold text-white shadow-lg shadow-mint-600/30 transition hover:bg-mint-500 active:scale-[0.98]"
+            >
+              <BadgeCheck className="h-6 w-6" />
+              {t("extract.correct")}
+            </button>
+            <button
+              onClick={() => {
+                setEditEntry(entries[0]);
+                setEditVal(String(entries[0].value));
+              }}
+              aria-label={t("extract.edit")}
+              className="flex min-h-16 w-16 items-center justify-center rounded-3xl border-2 border-slate-200 bg-white text-slate-500 transition hover:border-brand-300 hover:text-brand-700 active:scale-[0.98]"
+            >
+              <Keyboard className="h-6 w-6" />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* edit sheet */}
+      <Sheet
+        open={!!editEntry}
+        onClose={() => setEditEntry(null)}
+        title={editEntry ? `${t("extract.edit")} — ${pick(TESTS[editEntry.test].name, s.lang)}` : ""}
+      >
+        {editEntry && (
+          <div className="mt-2">
+            <label className="text-xs font-extrabold uppercase tracking-wide text-slate-400">
+              {t("doctor.result")} ({TESTS[editEntry.test].unit})
+            </label>
+            <input
+              value={editVal}
+              onChange={(e) => setEditVal(e.target.value)}
+              inputMode="decimal"
+              className="tabular mt-2 min-h-16 w-full rounded-2xl border-2 border-brand-200 bg-brand-50 px-4 text-center text-3xl font-extrabold text-brand-900 outline-none focus:border-brand-500"
+            />
+            <button
+              onClick={() => {
+                const v = parseFloat(editVal);
+                if (!Number.isNaN(v)) {
+                  setFixed((p) => ({ ...p, [editEntry.test]: v }));
+                  toast(t("common.saved"));
+                }
+                setEditEntry(null);
+              }}
+              className="mt-4 min-h-14 w-full rounded-2xl bg-brand-700 text-base font-extrabold text-white transition hover:bg-brand-600 active:scale-[0.98]"
+            >
+              {t("common.done")}
+            </button>
+          </div>
+        )}
+      </Sheet>
+    </FlowShell>
+  );
+}
+
+function evolved(e: ReportEntry) {
+  return e.status === "normal" ? "borderline" : "normal";
+}
