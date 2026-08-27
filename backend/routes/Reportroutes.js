@@ -14,7 +14,7 @@ import {
   getReportHandler,
   confirmReportHandler,
   editResultHandler,
-} from "../controllers/reportController.js";
+} from "../Reportcontroller.js";
 
 const router = Router();
 

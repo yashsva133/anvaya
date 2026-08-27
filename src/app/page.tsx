@@ -415,21 +415,6 @@ export default function LandingPage() {
                 This number tells us about your blood sugar over the past
                 few months.
               </p>
-              <div className="flex flex-wrap justify-center gap-3">
-                <Link
-                  href="/login?mode=signup"
-                  className="inline-flex min-h-14 items-center gap-2 rounded-2xl bg-white px-7 text-base font-extrabold text-brand-800 shadow-lg transition hover:-translate-y-0.5 active:scale-95"
-                >
-                  Get Started
-                  <ArrowRight className="h-5 w-5" />
-                </Link>
-                <Link
-                  href="/how"
-                  className="inline-flex min-h-14 items-center gap-2 rounded-2xl border-2 border-white/40 px-7 text-base font-extrabold text-white transition hover:bg-white/10 active:scale-95"
-                >
-                  How it works
-                </Link>
-              </div>
               <div className="mt-4 flex items-center gap-2">
                 <ListenBtn text="Average blood sugar is 7.2 percent. This is higher than usual. This number tells us about your blood sugar over the past few months." />
                 <span className="text-xs font-bold text-slate-400">

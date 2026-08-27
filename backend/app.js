@@ -15,7 +15,7 @@ import { requestLogger } from "./middleware/Requestlogger.js";
 import { globalLimiter } from "./middleware/Ratelimiter.js";
 import { errorHandler } from "./middleware/Errorhandler.js";
 
-import reportRoutes from "./routes/reportRoutes.js";
+import reportRoutes from "./routes/Reportroutes.js";
 
 const app = express();
 

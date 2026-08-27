@@ -118,8 +118,11 @@ export function loadAiEnv(): AiEnv {
   const topK = Math.min(8, Math.max(1, Math.floor(num("AI_TOP_K", 3))));
   const minScore = Math.min(1, Math.max(0, num("AI_MIN_SCORE", 0.3)));
 
-  const url = str("SUPABASE_URL");
-  const serviceKey = str("SUPABASE_SERVICE_ROLE_KEY");
+  const url = str("SUPABASE_URL") ?? str("NEXT_PUBLIC_SUPABASE_URL");
+  const serviceKey =
+    str("SUPABASE_SERVICE_ROLE_KEY") ??
+    str("SUPABASE_ANON_KEY") ??
+    str("NEXT_PUBLIC_SUPABASE_ANON_KEY");
 
   return {
     ai: {

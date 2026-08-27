@@ -382,37 +382,31 @@ report_date,test_name,value,unit,ref_low,ref_high,status,ocr_confidence
 That maps almost 1:1 onto `test_results` (`raw_name`, `original_value`, unit,
 `printed_ref_low`, `printed_ref_high`, `ocr_confidence`). No reshaping needed.
 
-### 11.2 Test-name coverage — the core CBC tests are now in the catalogue
+### 11.2 Test-name coverage is the real gap — 4 of 21
 
 The OCR emits **21 distinct test names**; the `TESTS` catalogue in
-`src/lib/data.ts` originally recognised only **4** of them. The missing core
-CBC tests (red-cell indices + the white-cell differential) have since been
-added to the catalogue, so the agent can now accept and explain them.
+`src/lib/data.ts` recognises **4** of them.
 
 | | |
 |---|---|
-| Covered | Hemoglobin, MCV, RBC Count, WBC Count, **MCH, MCHC, RDW, Neutrophils, Lymphocytes, Eosinophils, Monocytes, Basophils** (12) |
-| Still to be aliased (9) | Absolute Lymphocytes, Absolute Eosinophils, Absolute Monocytes, Packed Cell Volume (PCV), Platelet Count, PCT, MPV, PDW, RDW-CV / RDW-SD |
+| Covered | Hemoglobin, MCV, RBC Count, WBC Count |
+| Not covered (17) | Neutrophils, Lymphocytes, Eosinophils, Monocytes, Basophils, Absolute Lymphocytes, Absolute Eosinophils, Absolute Monocytes, Packed Cell Volume, MCH, MCHC, RDW-CV, RDW-SD, Platelet Count, PCT, MPV, PDW |
 
-The catalogue entry is what gives a test its unit, bilingual label and reference
-range. With the CBC tests present, `parseClientReport()` (and the anonymiser)
-accept those rows instead of silently dropping them — a scanned CBC now reaches
-the agent with its real values, not only hemoglobin + MCV.
+The anonymiser drops any row whose test is not in `TESTS`, because that is where
+the unit, the bilingual label and the reference range come from. So a real CBC
+would currently reach the chatbot with 4 of its 21 results.
 
-What remains is the OCR **name → catalogue id** map (`lab_test_aliases`), which
-resolves a printed label like "Packed Cell Volume" to `hematocrit` / "RDW-CV" to
-`rdw` / "Platelet Count" to `platelets`. That lives in the database per spec
-§10.4 step 3:
+This is exactly what the schema anticipated: `lab_test_aliases` exists to resolve
+`raw_name` → `lab_test_catalog` (spec §10.4 step 3). Two ways forward:
 
-- **Proper fix:** seed `lab_test_catalog` + `lab_test_aliases` (ICMR reference
-  ranges) and read the catalogue from the database instead of the `TESTS`
-  constant.
-- **Quick fix for a demo:** add the remaining aliases to the `TESTS` map's name
-  matching / the mapping in the frontend.
+- **Proper fix:** seed `lab_test_catalog` + `lab_test_aliases` with the 17
+  missing tests (ICMR reference ranges), and read the catalogue from the database
+  instead of the `TESTS` constant.
+- **Quick fix for a demo:** add the missing entries to `TESTS`. Faster, but it
+  puts clinical reference ranges in a frontend constant.
 
-Until the alias step is done, the agent answers correctly about a CBC as long
-as the client sends the catalogue ids (which the report context does — the
-frontend maps the viewer's report through the same `TESTS` keys).
+Until one of these happens, expect the chatbot to answer only about hemoglobin,
+MCV, RBC and WBC from a scanned report.
 
 ### 11.3 The OCR's `status` must not be trusted
 
