@@ -6,6 +6,29 @@ to run it in production.
 **Scope:** the voice agent and the multilingual answer path. Report ingestion
 (PaddleOCR) is untouched.
 
+**This pass (verified 2026-08-27):** the voice page and the whole app now run
+end to end. Three real bugs were fixed and the CBC gap was closed:
+
+1. `src/components/providers.tsx` rendered `{children}` **twice** — once
+   outside `ReportDataProvider`. Any page using `useReportData()` (`/ask`,
+   `/dashboard`, `/voice`) threw `useReportData must be used within a
+   ReportDataProvider` and returned 500. It is now a single provider tree. All
+   pages return 200.
+2. `src/app/page.tsx` had an unclosed `<div>` (a merge artifact) that broke
+   `tsc`. Closed it.
+3. `next.config.ts` carried a stale `@ts-expect-error` for a property that now
+   exists, and `src/components/core.tsx`'s toast type lacked the `"error"`
+   variant that `src/app/scan/page.tsx` passes. Both fixed; `tsc --noEmit` is
+   clean.
+
+**CBC coverage.** The catalogue in `src/lib/data.ts` now includes the tests a
+Complete Blood Count report carries: **MCH, MCHC, RDW**, and the **white-cell
+differential** (neutrophils, lymphocytes, eosinophils, monocytes, basophils),
+with bilingual explanations and reference ranges. Retrieval synonyms in
+`src/lib/ai/rag.ts` were extended to match questions about them. Until this,
+`parseClientReport()` silently dropped every one of those rows, so a scanned CBC
+like the sample PDF reached the agent with only its hemoglobin + MCV.
+
 ---
 
 ## 1. What is new
@@ -248,6 +271,10 @@ Against `next dev` with `AI_PROVIDER=mock` (2026-08-27):
 | `GET /api/ai/status` | 14 languages, prompt `2026-08-27.2`, voice config |
 | `/voice`, `/ask`, `/dashboard` | 200; `/voice` renders all 14 language options |
 | `tsc --noEmit`, `eslint .` | clean (4 pre-existing warnings in untouched files) |
+| Ollama/MedGemma path (fake-ollama stub) | `/api/ai/status` → `reachable:true, medgemma:4b present`; `/api/answer` → `engine:"medgemma"`, `model:"medgemma:4b"`, `personalized:true`, payload delivered to the HTTP boundary |
+| `/api/stt` + `/api/tts` (fake-voice stub) | STT `ok:true, text, detected_language`; TTS 200, 98,710 bytes WAV, `x-anvaya-lang: ta` |
+| Personalised CBC turn | a CBC report with MCH/MCHC/RDW/differential is accepted; MCH 30 in range, MCHC 41.67 outside 32–36, explained with citations |
+| `/voice`, `/ask`, `/dashboard`, all routes | 200 after the provider fix |
 
 **Not verified here, and why:** `next build` cannot complete in this sandbox
 because `src/app/layout.tsx` fetches Inter and Noto Sans Devanagari from

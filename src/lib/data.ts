@@ -620,6 +620,346 @@ export const TESTS: Record<string, TestDef> = {
     sources: [],
     related: ["creatinine"],
   },
+
+  /* --------------- Complete blood count (CBC) — red cell indices ----------- */
+
+  mch: {
+    id: "mch",
+    unit: "pg",
+    name: { en: "MCH", hi: "MCH (लाल कोशिका हीमोग्लोबिन)" },
+    simple: { en: "Average hemoglobin per red cell", hi: "प्रति लाल कोशिका औसत हीमोग्लोबिन" },
+    icon: "droplets",
+    tint: "bg-rose-50",
+    ink: "text-rose-500",
+    ref: { low: 27, high: 32, text: "27–32 pg" },
+    what: {
+      med: "Mean corpuscular haemoglobin (MCH) is the average mass of haemoglobin carried by a single red blood cell.",
+      en: "MCH is the average amount of hemoglobin in each of your red blood cells.",
+      hi: "MCH आपकी हर लाल रक्त कोशिका में मौजूद हीमोग्लोबिन की औसत मात्रा है।",
+      vs_en: "This tells how much oxygen-carrying protein is inside a typical red cell.",
+      vs_hi: "यह बताता है कि एक सामान्य लाल कोशिका के अंदर ऑक्सीजन ले जाने वाला प्रोटीन कितना है।",
+    },
+    why: {
+      en: "Your result is within the usual range when read with your other red-cell numbers.",
+      hi: "आपका परिणाम अन्य लाल कोशिका संख्याओं के साथ देखने पर सामान्य सीमा में है।",
+      vs_en: "This number looks within range.",
+    },
+    causes: {
+      en: "MCH is interpreted together with MCV. A low MCH is commonly seen with low iron. Only a doctor connects it to the cause.",
+      hi: "MCH को MCV के साथ मिलाकर देखा जाता है। कम MCH आमतौर पर आयरन की कमी में देखा जाता है। असली कारण केवल डॉक्टर बता सकते हैं।",
+    },
+    todo: {
+      en: "Discuss this together with your MCV and hemoglobin. Your doctor may suggest iron studies.",
+      hi: "इसे MCV और हीमोग्लोबिन के साथ डॉक्टर से चर्चा करें। डॉक्टर आयरन की जाँच सुझा सकते हैं।",
+      vs_en: "Talk to your doctor with your MCV and hemoglobin.",
+    },
+    conf: {
+      level: "high",
+      pct: 93,
+      note: {
+        en: "Clear test name, value, unit and reference range were detected.",
+        hi: "जाँच का नाम, मान, इकाई और सामान्य सीमा स्पष्ट रूप से पढ़ी गई।",
+      },
+    },
+    sources: ["medlineplus-hgb"],
+    related: ["mcv", "mchc", "hemoglobin"],
+  },
+
+  mchc: {
+    id: "mchc",
+    unit: "g/dL",
+    name: { en: "MCHC", hi: "MCHC (लाल कोशिका हीमोग्लोबिन सांद्रता)" },
+    simple: { en: "Hemoglobin density in red cells", hi: "लाल कोशिका में हीमोग्लोबिन की सघनता" },
+    icon: "droplets",
+    tint: "bg-rose-100",
+    ink: "text-rose-600",
+    ref: { low: 32, high: 36, text: "32–36 g/dL" },
+    what: {
+      med: "Mean corpuscular haemoglobin concentration (MCHC) is the average concentration of haemoglobin per unit volume of red cells.",
+      en: "MCHC measures how concentrated the hemoglobin is inside your red blood cells.",
+      hi: "MCHC मापता है कि आपकी लाल कोशिकाओं के अंदर हीमोग्लोबिन कितनी सघनता से है।",
+      vs_en: "This shows how tightly packed the oxygen-carrying protein is in your red cells.",
+      vs_hi: "यह बताता है कि ऑक्सीजन ले जाने वाला प्रोटीन आपकी लाल कोशिकाओं में कितनी कसकर भरा है।",
+    },
+    why: {
+      en: "Your result is read with MCV and MCH. A high value is usually a laboratory finding and is best discussed, not worried over.",
+      hi: "आपका परिणाम MCV और MCH के साथ देखा जाता है। अधिक मान आमतौर पर एक लैब निष्कर्ष है — चिंता नहीं, चर्चा करें।",
+      vs_en: "This result should be read together with MCV and MCH.",
+    },
+    causes: {
+      en: "MCHC rarely changes on its own. Doctors interpret it with the rest of the blood count; a single high reading is seldom clinically significant.",
+      hi: "MCHC अकेले शायद ही बदलता है। डॉक्टर इसे पूरी रक्त गणना के साथ देखते हैं; एक बार की अधिक रीडिंग प्रायः चिकित्सकीय रूप से महत्वपूर्ण नहीं होती।",
+    },
+    todo: {
+      en: "Nothing urgent — review the full blood count with your doctor.",
+      hi: "कुछ भी तुरंत नहीं — पूरी रक्त गणना डॉक्टर से समीक्षा करें।",
+      vs_en: "Nothing to do on its own; review the full count.",
+    },
+    conf: {
+      level: "high",
+      pct: 92,
+      note: {
+        en: "Clear test name, value, unit and reference range were detected.",
+        hi: "जाँच का नाम, मान, इकाई और सामान्य सीमा स्पष्ट रूप से पढ़ी गई।",
+      },
+    },
+    sources: ["medlineplus-hgb"],
+    related: ["mcv", "mch", "hemoglobin"],
+  },
+
+  rdw: {
+    id: "rdw",
+    unit: "%",
+    name: { en: "RDW", hi: "RDW (लाल कोशिका वितरण चौड़ाई)" },
+    simple: { en: "Red cell size variance", hi: "लाल कोशिका आकार की भिन्नता" },
+    icon: "activity",
+    tint: "bg-fuchsia-50",
+    ink: "text-fuchsia-500",
+    ref: { low: 11.5, high: 14.5, text: "11.5–14.5%" },
+    what: {
+      med: "Red cell distribution width (RDW) quantifies the variation in red blood cell size.",
+      en: "RDW shows how much your red blood cells vary in size.",
+      hi: "RDW बताता है कि आपकी लाल रक्त कोशिकाओं का आकार कितना भिन्न है।",
+      vs_en: "This tells whether your red cells are all similar in size or quite mixed.",
+      vs_hi: "यह बताता है कि आपकी लाल कोशिकाएँ सभी एक जैसी हैं या आकार में काफ़ी भिन्न हैं।",
+    },
+    why: {
+      en: "Your result is interpreted with MCV. A high RDW with a normal MCV can be a clue worth discussing.",
+      hi: "आपका परिणाम MCV के साथ देखा जाता है। सामान्य MCV के साथ अधिक RDW चर्चा के योग्य संकेत हो सकता है।",
+      vs_en: "This is read together with MCV.",
+    },
+    causes: {
+      en: "RDW rises when the body makes red cells of very different sizes, which can happen with iron or vitamin deficiency. A doctor decides what it means.",
+      hi: "जब शरीर बहुत अलग आकार की लाल कोशिकाएँ बनाता है — जैसे आयरन या विटामिन की कमी में — तब RDW बढ़ता है। इसका अर्थ डॉक्टर ही तय करते हैं।",
+    },
+    todo: {
+      en: "Discuss with your doctor, ideally with your MCV and hemoglobin.",
+      hi: "अपने डॉक्टर से चर्चा करें, अधिमानतः MCV और हीमोग्लोबिन के साथ।",
+      vs_en: "Talk to your doctor with MCV and hemoglobin.",
+    },
+    conf: {
+      level: "moderate",
+      pct: 85,
+      note: {
+        en: "Value was clear; RDW appeared as a short abbreviation in a dense table column.",
+        hi: "मान स्पष्ट था; RDW एक छोटा संक्षिप्त नाम घने कॉलम में छपा था।",
+      },
+    },
+    sources: ["medlineplus-hgb"],
+    related: ["mcv", "mch", "hemoglobin"],
+  },
+
+  /* ----------------- CBC — white cell differential ------------------------ */
+
+  neutrophils: {
+    id: "neutrophils",
+    unit: "%",
+    name: { en: "Neutrophils", hi: "न्यूट्रोफ़िल्स" },
+    simple: { en: "First-line defence cells", hi: "पहली पंक्ति की रक्षा कोशिकाएँ" },
+    icon: "shieldplus",
+    tint: "bg-emerald-50",
+    ink: "text-emerald-600",
+    ref: { low: 40, high: 75, text: "40–75%" },
+    what: {
+      med: "Neutrophils are the most abundant circulating white blood cells and the primary responders to bacterial infection.",
+      en: "Neutrophils are the main white blood cells that fight bacteria and infection.",
+      hi: "न्यूट्रोफ़िल्स मुख्य सफ़ेद रक्त कोशिकाएँ हैं जो बैक्टीरिया और संक्रमण से लड़ती हैं।",
+      vs_en: "These are your body's first responders against infection.",
+      vs_hi: "ये आपके शरीर की संक्रमण से लड़ने वाली पहली कोशिकाएँ हैं।",
+    },
+    why: {
+      en: "Your result is within the usual range.",
+      hi: "आपका परिणाम सामान्य सीमा में है।",
+      vs_en: "This result is within range.",
+    },
+    causes: {
+      en: "Neutrophils rise with infections or inflammation and can fall with some medicines. Yours is within range.",
+      hi: "संक्रमण या सूजन से न्यूट्रोफ़िल्स बढ़ते हैं और कुछ दवाओं से घट सकते हैं। आपका परिणाम सामान्य सीमा में है।",
+    },
+    todo: {
+      en: "No action needed for this result alone.",
+      hi: "केवल इस परिणाम के लिए कोई कार्रवाई ज़रूरी नहीं।",
+      vs_en: "Nothing to do for this result.",
+    },
+    conf: {
+      level: "high",
+      pct: 94,
+      note: {
+        en: "Clear test name, value, unit and reference range were detected.",
+        hi: "जाँच का नाम, मान, इकाई और सामान्य सीमा स्पष्ट रूप से पढ़ी गई।",
+      },
+    },
+    sources: ["medlineplus-hgb"],
+    related: ["wbc", "lymphocytes", "eosinophils"],
+  },
+
+  lymphocytes: {
+    id: "lymphocytes",
+    unit: "%",
+    name: { en: "Lymphocytes", hi: "लिम्फोसाइट्स" },
+    simple: { en: "Viral-fighting cells", hi: "वायरस से लड़ने वाली कोशिकाएँ" },
+    icon: "shieldplus",
+    tint: "bg-sky-50",
+    ink: "text-sky-600",
+    ref: { low: 20, high: 45, text: "20–45%" },
+    what: {
+      med: "Lymphocytes mediate the adaptive immune response, including antibody and cellular immunity.",
+      en: "Lymphocytes are white blood cells that help fight viruses and build immunity.",
+      hi: "लिम्फोसाइट्स सफ़ेद रक्त कोशिकाएँ हैं जो वायरस से लड़ने और रोग प्रतिरोधक क्षमता बनाने में मदद करती हैं।",
+      vs_en: "These cells help your body remember and fight past infections.",
+      vs_hi: "ये कोशिकाएँ पिछले संक्रमण को याद रखने और लड़ने में मदद करती हैं।",
+    },
+    why: {
+      en: "Your result is within the usual range.",
+      hi: "आपका परिणाम सामान्य सीमा में है।",
+      vs_en: "This result is within range.",
+    },
+    causes: {
+      en: "Lymphocytes change with infections, stress and age. Yours is within range.",
+      hi: "संक्रमण, तनाव और उम्र के साथ लिम्फोसाइट्स बदलते हैं। आपका परिणाम सामान्य सीमा में है।",
+    },
+    todo: {
+      en: "No action needed for this result alone.",
+      hi: "केवल इस परिणाम के लिए कोई कार्रवाई ज़रूरी नहीं।",
+      vs_en: "Nothing to do for this result.",
+    },
+    conf: {
+      level: "high",
+      pct: 94,
+      note: {
+        en: "Clear test name, value, unit and reference range were detected.",
+        hi: "जाँच का नाम, मान, इकाई और सामान्य सीमा स्पष्ट रूप से पढ़ी गई।",
+      },
+    },
+    sources: ["medlineplus-hgb"],
+    related: ["wbc", "neutrophils", "eosinophils"],
+  },
+
+  eosinophils: {
+    id: "eosinophils",
+    unit: "%",
+    name: { en: "Eosinophils", hi: "इोसिनोफ़िल्स" },
+    simple: { en: "Allergy-related cells", hi: "एलर्जी से जुड़ी कोशिकाएँ" },
+    icon: "shieldplus",
+    tint: "bg-orange-50",
+    ink: "text-orange-500",
+    ref: { low: 0, high: 6, text: "0–6%" },
+    what: {
+      med: "Eosinophils are white blood cells involved in allergic responses and defence against parasites.",
+      en: "Eosinophils are white blood cells that rise with allergies or certain infections.",
+      hi: "इोसिनोफ़िल्स सफ़ेद रक्त कोशिकाएँ हैं जो एलर्जी या कुछ संक्रमणों में बढ़ती हैं।",
+      vs_en: "These cells are linked to allergies.",
+      vs_hi: "ये कोशिकाएँ एलर्जी से जुड़ी होती हैं।",
+    },
+    why: {
+      en: "Your result is within the usual range.",
+      hi: "आपका परिणाम सामान्य सीमा में है।",
+      vs_en: "This result is within range.",
+    },
+    causes: {
+      en: "Eosinophils can rise with allergies and some infections. Yours is within range.",
+      hi: "एलर्जी और कुछ संक्रमणों से इोसिनोफ़िल्स बढ़ सकते हैं। आपका परिणाम सामान्य सीमा में है।",
+    },
+    todo: {
+      en: "No action needed for this result alone.",
+      hi: "केवल इस परिणाम के लिए कोई कार्रवाई ज़रूरी नहीं।",
+      vs_en: "Nothing to do for this result.",
+    },
+    conf: {
+      level: "high",
+      pct: 92,
+      note: {
+        en: "Clear test name, value, unit and reference range were detected.",
+        hi: "जाँच का नाम, मान, इकाई और सामान्य सीमा स्पष्ट रूप से पढ़ी गई।",
+      },
+    },
+    sources: ["medlineplus-hgb"],
+    related: ["wbc", "basophils", "lymphocytes"],
+  },
+
+  monocytes: {
+    id: "monocytes",
+    unit: "%",
+    name: { en: "Monocytes", hi: "मोनोसाइट्स" },
+    simple: { en: "Clean-up cells", hi: "सफ़ाई करने वाली कोशिकाएँ" },
+    icon: "shieldplus",
+    tint: "bg-indigo-50",
+    ink: "text-indigo-600",
+    ref: { low: 2, high: 10, text: "2–10%" },
+    what: {
+      med: "Monocytes are circulating white blood cells that mature into macrophages to clear cellular debris and pathogens.",
+      en: "Monocytes are white blood cells that help clean up dead cells and fight infection.",
+      hi: "मोनोसाइट्स सफ़ेद रक्त कोशिकाएँ हैं जो मृत कोशिकाओं की सफ़ाई और संक्रमण से लड़ने में मदद करती हैं।",
+      vs_en: "These cells help clean up and defend tissue.",
+      vs_hi: "ये कोशिकाएँ सफ़ाई और ऊतक की रक्षा में मदद करती हैं।",
+    },
+    why: {
+      en: "Your result is within the usual range.",
+      hi: "आपका परिणाम सामान्य सीमा में है।",
+      vs_en: "This result is within range.",
+    },
+    causes: {
+      en: "Monocytes can rise with inflammation or infection. Yours is within range.",
+      hi: "सूजन या संक्रमण से मोनोसाइट्स बढ़ सकते हैं। आपका परिणाम सामान्य सीमा में है।",
+    },
+    todo: {
+      en: "No action needed for this result alone.",
+      hi: "केवल इस परिणाम के लिए कोई कार्रवाई ज़रूरी नहीं।",
+      vs_en: "Nothing to do for this result.",
+    },
+    conf: {
+      level: "high",
+      pct: 92,
+      note: {
+        en: "Clear test name, value, unit and reference range were detected.",
+        hi: "जाँच का नाम, मान, इकाई और सामान्य सीमा स्पष्ट रूप से पढ़ी गई।",
+      },
+    },
+    sources: ["medlineplus-hgb"],
+    related: ["wbc", "neutrophils"],
+  },
+
+  basophils: {
+    id: "basophils",
+    unit: "%",
+    name: { en: "Basophils", hi: "बेसोफ़िल्स" },
+    simple: { en: "Rare allergy cells", hi: "दुर्लभ एलर्जी कोशिकाएँ" },
+    icon: "shieldplus",
+    tint: "bg-purple-50",
+    ink: "text-purple-600",
+    ref: { low: 0, high: 1, text: "0–1%" },
+    what: {
+      med: "Basophils are the least numerous circulating white blood cells, involved in allergic and inflammatory responses.",
+      en: "Basophils are a rare white blood cell involved in allergic reactions.",
+      hi: "बेसोफ़िल्स एक दुर्लभ सफ़ेद रक्त कोशिका हैं जो एलर्जी की प्रतिक्रिया से जुड़ी होती हैं।",
+      vs_en: "These cells are involved in allergic responses and are usually very few.",
+      vs_hi: "ये कोशिकाएँ एलर्जी प्रतिक्रिया से जुड़ी हैं और आमतौर पर बहुत कम होती हैं।",
+    },
+    why: {
+      en: "Your result is within the usual range.",
+      hi: "आपका परिणाम सामान्य सीमा में है।",
+      vs_en: "This result is within range.",
+    },
+    causes: {
+      en: "Basophils are usually very low in number. A change is interpreted with the white-cell differential as a whole.",
+      hi: "बेसोफ़िल्स आमतौर पर बहुत कम होते हैं। बदलाव को पूरे श्वेत कोशिका अंतर के साथ देखा जाता है।",
+    },
+    todo: {
+      en: "No action needed for this result alone.",
+      hi: "केवल इस परिणाम के लिए कोई कार्रवाई ज़रूरी नहीं।",
+      vs_en: "Nothing to do for this result.",
+    },
+    conf: {
+      level: "high",
+      pct: 90,
+      note: {
+        en: "Clear test name, value, unit and reference range were detected.",
+        hi: "जाँच का नाम, मान, इकाई और सामान्य सीमा स्पष्ट रूप से पढ़ी गई।",
+      },
+    },
+    sources: ["medlineplus-hgb"],
+    related: ["wbc", "eosinophils"],
+  },
 };
 
 export const TEST_IDS = Object.keys(TESTS);
