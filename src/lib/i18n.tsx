@@ -38,7 +38,7 @@ type Dict = Record<string, string>;
 const EN: Dict = {
   "app.tagline": "Understand your health report. In simple language.",
   "app.taglineShort": "Your report, explained simply.",
-  "app.name": "Rxअन्वय",
+  "app.name": "Rxanvaya",
 
   "nav.overview": "Overview",
   "nav.reports": "My Reports",
@@ -51,7 +51,7 @@ const EN: Dict = {
   "nav.home": "Home",
   "nav.more": "More",
   "nav.how": "How it works",
-  "nav.why": "Why Rxअन्वय",
+  "nav.why": "Why Rxanvaya",
 
   "common.continue": "Continue",
   "common.back": "Back",
@@ -219,7 +219,7 @@ const EN: Dict = {
   "ask.notHelpful": "Not helpful",
   "ask.thanks": "Thank you — your feedback improves explanations.",
   "ask.tapMic": "Ask by speaking",
-  "ask.typing": "Rxअन्वय is thinking…",
+  "ask.typing": "Rxanvaya is thinking…",
 
   "sources.title": "Why do we say this?",
   "sources.sub": "Every explanation is grounded in trusted medical sources.",
@@ -274,7 +274,7 @@ const EN: Dict = {
 const HI: Dict = {
   "app.tagline": "अपनी हेल्थ रिपोर्ट समझें। आसान भाषा में।",
   "app.taglineShort": "आपकी रिपोर्ट, सरल भाषा में।",
-  "app.name": "Rxअन्वय",
+  "app.name": "Rxanvaya",
 
   "nav.overview": "मुख्य सारांश",
   "nav.reports": "मेरी रिपोर्ट्स",
@@ -287,7 +287,7 @@ const HI: Dict = {
   "nav.home": "होम",
   "nav.more": "और",
   "nav.how": "यह कैसे काम करता है",
-  "nav.why": "Rxअन्वय क्यों",
+  "nav.why": "Rxanvaya क्यों",
 
   "common.continue": "आगे बढ़ें",
   "common.back": "वापस",
@@ -452,7 +452,7 @@ const HI: Dict = {
   "ask.notHelpful": "उपयोगी नहीं",
   "ask.thanks": "धन्यवाद — आपकी प्रतिक्रिया व्याख्या बेहतर बनाती है।",
   "ask.tapMic": "बोलकर पूछें",
-  "ask.typing": "Rxअन्वय सोच रहा है…",
+  "ask.typing": "Rxanvaya सोच रहा है…",
 
   "sources.title": "हमने ऐसा क्यों कहा?",
   "sources.sub": "हर व्याख्या विश्वसनीय चिकित्सा स्रोतों पर आधारित है।",

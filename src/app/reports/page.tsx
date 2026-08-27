@@ -11,7 +11,6 @@ import {
   FileText,
   FolderOpen,
   GitCompareArrows,
-  Lock,
   UploadCloud,
 } from "lucide-react";
 import { AppShell } from "@/components/shell";
@@ -54,17 +53,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Privacy Health Locker Indicator */}
-      <div className="mt-4 flex items-center gap-2 rounded-2xl border border-mint-200 bg-mint-50/70 px-4 py-2.5 text-xs font-bold text-mint-900">
-        <Lock className="h-4 w-4 text-mint-700" />
-        <span>
-          {s.lang === "hi"
-            ? "सुरक्षित हेल्थ लॉकर — केवल आपके खाते (rahul.singh42@gmail.com) से सुलभ"
-            : "Private Health Locker — Encrypted & accessible only by rahul.singh42@gmail.com"}
-        </span>
-      </div>
-
-      <div className="mt-5 space-y-3">
+      <div className="mt-6 space-y-3">
         {[...REPORTS].reverse().map((r, idx) => {
           const isLatest = r.id === latest.id;
           const warn = r.attention > 0;

@@ -9,9 +9,7 @@ import {
   ArrowUpRight,
   BookOpenCheck,
   BrainCircuit,
-  Info,
   Plus,
-  Workflow,
 } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import {
@@ -22,7 +20,7 @@ import {
   TestIcon,
 } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
-import { KG_CLUSTERS, PATTERNS, SOURCES, TESTS } from "@/lib/data";
+import { PATTERNS, SOURCES, TESTS } from "@/lib/data";
 
 export default function InsightsPage() {
   const { t, s } = useI18n();
@@ -149,88 +147,6 @@ export default function InsightsPage() {
           );
         })}
       </div>
-
-      {/* knowledge graph */}
-      <section className="mt-12">
-        <SectionTitle
-          icon={Workflow}
-          title={s.lang === "hi" ? "AI का नॉलेज ग्राफ़" : "The AI knowledge graph"}
-          sub={
-            s.lang === "hi"
-              ? "जाँचें अकेले नहीं, जुड़कर देखी जाती हैं — यही अंतर है।"
-              : "Tests are connected, not isolated — that is the difference."
-          }
-        />
-        <div className="grid gap-5 md:grid-cols-2">
-          {KG_CLUSTERS.map((cluster) => (
-            <div
-              key={cluster.title.en}
-              className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-6"
-            >
-              <p className="text-sm font-extrabold text-slate-700">
-                {pick(cluster.title, s.lang)}
-              </p>
-              <div className="relative mt-3 h-64 w-full">
-                <svg className="absolute inset-0 h-full w-full" aria-hidden="true">
-                  {cluster.edges.map(([a, b], i) => {
-                    const A = cluster.nodes[a];
-                    const B = cluster.nodes[b];
-                    return (
-                      <motion.line
-                        key={i}
-                        x1={`${A.x}%`}
-                        y1={`${A.y}%`}
-                        x2={`${B.x}%`}
-                        y2={`${B.y}%`}
-                        stroke={cluster.color}
-                        strokeWidth="2"
-                        strokeDasharray="5 6"
-                        strokeOpacity="0.5"
-                        initial={{ pathLength: 0, opacity: 0 }}
-                        whileInView={{ pathLength: 1, opacity: 1 }}
-                        viewport={{ once: true }}
-                        transition={{ delay: i * 0.15, duration: 0.6 }}
-                      />
-                    );
-                  })}
-                </svg>
-                {cluster.nodes.map((n, i) => (
-                  <motion.div
-                    key={n.test}
-                    initial={{ scale: 0, opacity: 0 }}
-                    whileInView={{ scale: 1, opacity: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.1, type: "spring", stiffness: 240, damping: 14 }}
-                    className="absolute -translate-x-1/2 -translate-y-1/2"
-                    style={{ left: `${n.x}%`, top: `${n.y}%` }}
-                  >
-                    <Link
-                      href={`/test/${n.test}`}
-                      className="flex flex-col items-center gap-1.5"
-                    >
-                      <span
-                        className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-lg ring-2 transition hover:scale-110"
-                        style={{ ["--tw-ring-color" as string]: cluster.color }}
-                      >
-                        <TestIcon testId={n.test} size={40} />
-                      </span>
-                      <span className="rounded-full bg-slate-800/85 px-2.5 py-1 text-[10px] font-extrabold text-white">
-                        {TESTS[n.test].name.en}
-                      </span>
-                    </Link>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-4 flex items-start gap-2 text-sm font-semibold text-slate-500">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
-          {s.lang === "hi"
-            ? "इन्हीं संबंधों की वजह से Rxअन्वय पैटर्न पा सकता है — एक संख्या पूरी कहानी नहीं होती।"
-            : "These connections let Rxअन्वय find patterns — one number never tells the whole story."}
-        </p>
-      </section>
 
       <div className="mt-10">
         <SafetyNote />

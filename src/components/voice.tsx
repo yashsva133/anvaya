@@ -179,7 +179,7 @@ export function VoiceSheet({ open, onClose }: { open: boolean; onClose: () => vo
                   {showEn ? t("ask.showHindi") : t("ask.showEnglish")}
                 </button>
                 <Link
-                  href="/sources"
+                  href="/settings#sources"
                   onClick={onClose}
                   className="col-span-2 inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-extrabold text-slate-700 transition hover:bg-slate-100 active:scale-95"
                 >

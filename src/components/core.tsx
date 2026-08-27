@@ -114,7 +114,7 @@ export function Logo({ withTagline = true }: { withTagline?: boolean }) {
       <LogoMark size={withTagline ? 42 : 36} />
       <div className="leading-tight">
         <p className="text-lg font-extrabold tracking-tight text-brand-900">
-          Rxअन्वय
+          Rxanvaya
         </p>
         {withTagline && (
           <p className="text-[11px] font-medium text-slate-500">
@@ -265,17 +265,14 @@ export function ListenBtn({
   const { s, t, speechLang } = useI18n();
   const toast = useToast();
   const [speaking, setSpeaking] = useState(false);
-  useEffect(() => () => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
-  }, []);
+  const supported =
+    typeof window !== "undefined" && "speechSynthesis" in window;
+
+  useEffect(() => () => window.speechSynthesis?.cancel(), []);
 
   if (!s.voice) return null;
 
   const speak = () => {
-    const supported =
-      typeof window !== "undefined" && "speechSynthesis" in window;
     if (!supported) {
       toast("Voice is not supported on this device.", "info");
       return;
@@ -298,7 +295,7 @@ export function ListenBtn({
     setTimeout(() => setSpeaking(false), 60000);
   };
 
-  const Icon = Volume2;
+  const Icon = !supported ? VolumeX : speaking ? Volume2 : Volume2;
   return (
     <button
       type="button"

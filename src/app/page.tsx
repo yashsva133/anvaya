@@ -175,8 +175,8 @@ export default function LandingPage() {
             >
               <div className="card-lift relative overflow-hidden rounded-[2rem] border border-white bg-white">
                 <Image
-                  src="/images/hero-illustration.svg"
-                  alt="A patient holding a lab report while Rxअन्वय turns numbers into simple visual cards"
+                  src="/images/hero-illustration.png"
+                  alt="A patient holding a lab report while Rxanvaya turns numbers into simple visual cards"
                   width={1024}
                   height={1024}
                   className="h-auto w-full"
@@ -235,7 +235,7 @@ export default function LandingPage() {
                 Not another number-flagging portal.
               </h2>
               <p className="mx-auto mt-2 max-w-xl text-sm font-medium text-slate-500 md:text-base">
-                Rxअन्वय is built for understanding — from the lab slip to a
+                Rxanvaya is built for understanding — from the lab slip to a
                 conversation in your language.
               </p>
             </motion.div>
@@ -288,7 +288,7 @@ export default function LandingPage() {
                 className="card-lift relative overflow-hidden rounded-3xl border-2 border-mint-500 bg-gradient-to-br from-mint-50 to-white p-6"
               >
                 <p className="text-xs font-extrabold uppercase tracking-widest text-mint-700">
-                  Rxअन्वय
+                  Rxanvaya
                 </p>
                 <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[13px] font-extrabold text-mint-800">
                   {CHAIN.map((c, i) => (
@@ -353,7 +353,7 @@ export default function LandingPage() {
                   </h2>
                   <p className="mt-4 text-sm font-medium leading-relaxed text-brand-100 md:text-base">
                     If “HbA1c represents glycated hemoglobin” means nothing to
-                    you, Rxअन्वय shows this instead:
+                    you, Rxanvaya shows this instead:
                   </p>
                   <div className="mt-6 flex flex-wrap gap-3 text-xs font-bold text-brand-100">
                     <span className="rounded-full bg-white/10 px-3 py-1.5">
@@ -363,62 +363,67 @@ export default function LandingPage() {
                       Icon-first cards
                     </span>
                     <span className="rounded-full bg-white/10 px-3 py-1.5">
-                      Plain-language names
+                      Voice in every screen
                     </span>
                     <span className="rounded-full bg-white/10 px-3 py-1.5">
-                      Voice readout
+                      3 reading levels
                     </span>
                   </div>
                 </div>
-
-                <div className="card-lift rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
-                  <div className="flex items-center gap-3">
-                    <TestIcon testId="hba1c" size={44} />
+                <motion.div
+                  animate={{ y: [0, -8, 0] }}
+                  transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                  className="mx-auto w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl"
+                >
+                  <div className="flex items-center gap-4">
+                    <TestIcon testId="hba1c" size={58} />
                     <div>
-                      <p className="text-sm font-extrabold text-white">
-                        Average blood sugar · HbA1c
+                      <p className="text-lg font-extrabold text-slate-900">
+                        Average blood sugar
                       </p>
-                      <p className="text-xs font-semibold text-mint-300">
-                        Higher than usual (7.2%)
+                      <p className="tabular text-3xl font-extrabold text-brand-900">
+                        7.2%
                       </p>
                     </div>
                   </div>
-                  <p className="mt-4 text-sm font-medium leading-relaxed text-slate-200">
-                    Think of HbA1c as your blood sugar’s average memory over the
-                    past 3 months. When it is higher than usual, your doctor may
-                    check your diet, exercise, and blood sugar control.
+                  <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-bold text-rose-700">
+                    <ArrowRight className="h-4 w-4 rotate-45" strokeWidth={3} />
+                    Higher than usual
+                  </div>
+                  <p className="mt-3 text-[15px] font-medium leading-relaxed text-slate-600">
+                    This number tells us about your blood sugar over the past
+                    few months.
                   </p>
-                  <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4 text-xs font-bold text-mint-300">
-                    <span>Evidence: ADA Standards of Care</span>
-                    <span className="rounded-full bg-mint-400/20 px-2.5 py-1 text-mint-200">
-                      High confidence · 94%
+                  <div className="mt-4 flex items-center gap-2">
+                    <ListenBtn text="Average blood sugar is 7.2 percent. This is higher than usual. This number tells us about your blood sugar over the past few months." />
+                    <span className="text-xs font-bold text-slate-400">
+                      Tap — it reads aloud
                     </span>
                   </div>
-                </div>
+                </motion.div>
               </div>
             </motion.div>
           </section>
 
-          {/* ------------------------------- FINAL CTA ------------------------------- */}
-          <section className="mx-auto w-full max-w-6xl px-4 py-16 text-center md:px-6">
+          {/* --------------------------------- CTA BAND -------------------------------- */}
+          <section className="mx-auto w-full max-w-6xl px-4 pb-20 pt-4 md:px-6">
             <motion.div
               {...fadeUp}
-              className="card-lift relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-brand-900 via-brand-800 to-mint-900 p-8 text-white md:p-14"
+              className="card-lift flex flex-col items-center gap-6 rounded-[2rem] bg-gradient-to-br from-mint-600 to-brand-800 px-6 py-12 text-center text-white"
             >
-              <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-mint-400/10 blur-3xl" />
-              <h2 className="text-balance text-2xl font-extrabold tracking-tight md:text-5xl">
-                Ready to understand your lab report?
+              <Camera className="h-10 w-10 text-white/80" />
+              <h2 className="text-balance text-3xl font-extrabold md:text-5xl">
+                Know what your report is saying.
               </h2>
-              <p className="mx-auto mt-3 max-w-md text-sm font-medium text-brand-100 md:text-base">
-                Try the live prototype with fictional patient data or scan your
-                own test.
+              <p className="max-w-md text-sm font-semibold text-white/80 md:text-base">
+                Not just what the numbers are. Educational — never a diagnosis.
               </p>
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <div className="flex flex-wrap justify-center gap-3">
                 <Link
                   href="/welcome"
-                  className="inline-flex min-h-14 items-center gap-2 rounded-2xl bg-mint-500 px-7 text-base font-extrabold text-brand-950 shadow-lg shadow-mint-950/30 transition hover:bg-mint-400 active:scale-95"
+                  className="inline-flex min-h-14 items-center gap-2 rounded-2xl bg-white px-7 text-base font-extrabold text-brand-800 shadow-lg transition hover:-translate-y-0.5 active:scale-95"
                 >
-                  Understand my report
+                  Understand My Report
                   <ArrowRight className="h-5 w-5" />
                 </Link>
                 <Link
@@ -431,10 +436,10 @@ export default function LandingPage() {
             </motion.div>
 
             <p className="mt-8 text-center text-xs font-medium text-slate-400">
-              Rxअन्वय prototype · Smart India Hackathon 2026 · All patient data
+              Rxanvaya prototype · Smart India Hackathon 2026 · All patient data
               shown is fictional.
             </p>
           </section>
-    </div>
+        </div>
   );
 }
