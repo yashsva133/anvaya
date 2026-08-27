@@ -131,18 +131,18 @@ export default function LandingPage() {
                 className="mt-8 flex flex-wrap items-center gap-3"
               >
                 <Link
-                  href="/welcome"
+                  href="/login?mode=signup"
                   className="inline-flex min-h-14 items-center gap-2 rounded-2xl bg-brand-700 px-7 text-base font-extrabold text-white shadow-lg shadow-brand-900/25 transition hover:-translate-y-0.5 hover:bg-brand-600 active:scale-95"
                 >
-                  Understand My Report
+                  Get Started
                   <ArrowRight className="h-5 w-5" />
                 </Link>
                 <Link
-                  href="/dashboard"
+                  href="/login"
                   className="inline-flex min-h-14 items-center gap-2 rounded-2xl border-2 border-brand-200 bg-white px-7 text-base font-extrabold text-brand-800 transition hover:border-brand-400 active:scale-95"
                 >
                   <Play className="h-5 w-5" />
-                  See Demo
+                  Log In
                 </Link>
               </motion.div>
 
@@ -420,10 +420,10 @@ export default function LandingPage() {
               </p>
               <div className="flex flex-wrap justify-center gap-3">
                 <Link
-                  href="/welcome"
+                  href="/login?mode=signup"
                   className="inline-flex min-h-14 items-center gap-2 rounded-2xl bg-white px-7 text-base font-extrabold text-brand-800 shadow-lg transition hover:-translate-y-0.5 active:scale-95"
                 >
-                  Understand My Report
+                  Get Started
                   <ArrowRight className="h-5 w-5" />
                 </Link>
                 <Link
