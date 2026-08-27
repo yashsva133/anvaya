@@ -5,7 +5,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -14,6 +14,7 @@ import {
   FileText,
   GitCompareArrows,
   Home,
+  LogOut,
   LayoutGrid,
   LifeBuoy,
   MessageCircleHeart,
@@ -28,6 +29,8 @@ import { useI18n, pick } from "@/lib/i18n";
 import { Logo, Sheet } from "@/components/core";
 import { VoiceSheet } from "@/components/voice";
 import { PATIENT } from "@/lib/data";
+import { useAuth } from "@/lib/auth-context";
+import { signOut } from "@/lib/supabase-auth";
 
 /* ------------------------------ LANGUAGE SWITCH ----------------------------- */
 
@@ -86,13 +89,28 @@ const MORE = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { t, s } = useI18n();
+  const { status, session, profile } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [pathname]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    if (status === "authenticated" && profile?.onboarding_completed !== true && pathname !== "/onboarding") router.replace("/onboarding");
+  }, [status, profile, pathname, router]);
+
+  if (status === "loading") {
+    return <div className="flex min-h-dvh items-center justify-center bg-brand-50 text-sm font-extrabold text-brand-800">Preparing your ANVAYA experience...</div>;
+  }
+
+  if (status === "unconfigured" || status === "unauthenticated") {
+    return <div className="flex min-h-dvh items-center justify-center bg-brand-50 p-6 text-center"><div className="card-shadow max-w-md rounded-3xl bg-white p-6"><Logo /><p className="mt-4 text-sm font-bold text-slate-600">Please log in to continue. If you are setting up ANVAYA locally, add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.</p><Link href="/login" className="mt-5 inline-flex min-h-12 items-center rounded-2xl bg-brand-700 px-5 font-extrabold text-white">Go to login</Link></div></div>;
+  }
 
   const bottomItems = NAV.slice(0, 4); // overview, reports, trends, insights
   const askItem = NAV[4];
@@ -160,10 +178,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {pick(PATIENT.name, s.lang)}
               </p>
               <p className="text-xs font-semibold text-slate-500">
-                {PATIENT.age} · {pick(PATIENT.gender, s.lang)}
+                {session?.user.email ?? `${PATIENT.age} · ${pick(PATIENT.gender, s.lang)}`}
               </p>
             </div>
           </div>
+          <button onClick={() => void signOut(session).then(() => router.replace("/login"))} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-sm font-extrabold text-slate-600 transition hover:border-brand-300 hover:text-brand-800"><LogOut className="h-4 w-4" />Log out</button>
         </div>
       </aside>
 
@@ -174,6 +193,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Link>
         <div className="flex items-center gap-2">
           <QuickLang />
+          <button onClick={() => void signOut(session).then(() => router.replace("/login"))} aria-label="Log out" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"><LogOut className="h-5 w-5" /></button>
           <Link
             href="/settings"
             aria-label="Settings"
@@ -355,10 +375,16 @@ export function HomeNav({ solid = false }: { solid?: boolean }) {
             {s.lang === "hi" ? "EN" : "हिन्दी"}
           </button>
           <Link
-            href="/welcome"
+            href="/login"
+            className="hidden min-h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-extrabold text-brand-700 transition hover:border-brand-300 sm:inline-flex"
+          >
+            Log In
+          </Link>
+          <Link
+            href="/login?mode=signup"
             className="inline-flex min-h-10 items-center rounded-full bg-brand-700 px-4 text-sm font-extrabold text-white shadow-md shadow-brand-900/20 transition hover:bg-brand-600 active:scale-95"
           >
-            {s.lang === "hi" ? "डेमो देखें" : "Try demo"}
+            Get Started
           </Link>
         </div>
       </div>
