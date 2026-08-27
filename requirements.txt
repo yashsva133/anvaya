@@ -1,0 +1,15 @@
+# Core OCR & Deep Learning Framework
+paddleocr>=3.7.0
+# For GPU acceleration (use paddlepaddle without -gpu if running on CPU only):
+paddlepaddle-gpu>=3.3.0
+
+# Image & Document Processing
+opencv-python>=4.10.0
+pillow>=10.0.0
+pypdfium2>=5.0.0
+pdf2image>=1.17.0
+
+# Scientific & Data Utilities
+numpy>=1.26.0
+pandas>=2.0.0
+python-dateutil>=2.9.0

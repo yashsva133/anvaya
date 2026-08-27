@@ -1,0 +1,15 @@
+report_date,test_name,value,unit,ref_low,ref_high,status,ocr_confidence
+2023-01-12,Hemoglobin,15.0,g/dL,13.0,17.0,Normal,1.0
+2023-01-12,RBC Count,5.0,mill/cumm,4.5,5.5,Normal,0.999
+2023-01-12,Packed Cell Volume,36.0,%,40,50,Low,1.0
+2023-01-12,MCV,72.0,fL,83,101,Low,1.0
+2023-01-12,MCH,30.0,pg,27,32,Normal,1.0
+2023-01-12,MCHC,41.67,g/dL,31.5,34.5,High,1.0
+2023-01-12,RDW-CV,10.0,%,11.6,14.0,Low,0.981
+2023-01-12,WBC Count,5500.0,/cumm,4000,11000,Normal,1.0
+2023-01-12,Neutrophils,60.0,%,40,80,Normal,1.0
+2023-01-12,Lymphocytes,30.0,%,20,40,Normal,1.0
+2023-01-12,Eosinophils,5.0,%,1,6,Normal,1.0
+2023-01-12,Monocytes,5.0,%,2,10,Normal,1.0
+2023-01-12,Basophils,0.0,%,0,2,Normal,1.0
+2023-01-12,Platelet Count,15.5,lakh/cumm,1.5,4.5,High,1.0
