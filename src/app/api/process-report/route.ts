@@ -120,7 +120,7 @@ Your instructions:
       },
     });
 
-    const responseText = response.text();
+    const responseText = response.text;
     if (!responseText) {
       throw new Error("No response generated from Gemini");
     }
