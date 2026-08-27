@@ -12,6 +12,7 @@ under `src/` is untouched; it still runs entirely off the sample constants in
 |---|---|
 | `ANVAYA_DATABASE_SPEC.md` | The full specification: repository contract discovered, gap analysis, ER model, table-by-table spec, RLS model, storage model, migration ordering, validation checklist, integration notes. **Start here.** |
 | `anvaya_schema.sql` | Single-file build (4,606 lines). Paste into the Supabase SQL Editor and run. |
+| `sql_editor_parts/01…05_*.sql` | SQL Editor friendly build split into 5 ordered paste/run files for projects where the single file is too large. |
 | `migrations/0001…0021_*.sql` | The same content split into 21 ordered migrations, for migration tooling. |
 | `harness/` | Local verification only — not part of the migration set. |
 
@@ -25,7 +26,15 @@ builds and diffs the resulting schemas.
 
 **Option A — one paste.** Open the Supabase SQL Editor, paste `anvaya_schema.sql`, run.
 
-**Option B — ordered migrations.** Run the files in `migrations/` in filename order.
+**Option B — five smaller SQL Editor runs.** Run the files in `sql_editor_parts/` in filename order:
+
+1. `01_foundation_identity_access.sql`
+2. `02_catalog_reports_results_validation.sql`
+3. `03_ai_patterns_review_audit_functions.sql`
+4. `04_rls_policies.sql`
+5. `05_storage_views_seed.sql`
+
+**Option C — ordered migrations.** Run the files in `migrations/` in filename order.
 
 Either way:
 
