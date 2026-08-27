@@ -1,6 +1,7 @@
 "use client";
 
 // Screen — compare two reports side by side with plain-language summary.
+// Connected to dynamic Supabase & local report data.
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -21,19 +22,18 @@ import {
   TrendDirIcon,
 } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
-import { REPORTS, TESTS, fmtValue, type Status } from "@/lib/data";
+import { TESTS, fmtValue, type Status } from "@/lib/data";
+import { useReportData } from "@/context/ReportDataContext";
 
 type Verdict = "improved" | "worsened" | "stable";
 
 const HIGH_BAD = new Set(["hba1c", "ldl", "glucose", "triglycerides", "totalchol"]);
 
-function verdict(testId: string, from: number, to: number): Verdict {
+function verdict(testId: string, from: number, to: number, def: any): Verdict {
   const pct = Math.abs((to - from) / (from || 1));
   if (pct < 0.03) return "stable";
-  const def = TESTS[testId];
   if (HIGH_BAD.has(testId)) return to > from ? "worsened" : "improved";
   if (def.ref.low != null && def.ref.high != null) {
-    // both bounded: check movement toward range
     const wasOut = from < def.ref.low || from > def.ref.high;
     const nowOut = to < def.ref.low || to > def.ref.high;
     if (wasOut && !nowOut) return "improved";
@@ -47,22 +47,29 @@ function verdict(testId: string, from: number, to: number): Verdict {
 function CompareInner() {
   const params = useSearchParams();
   const { t, s } = useI18n();
+  const { reports, catalog } = useReportData();
   const hi = s.lang === "hi";
-  const [oldId, setOldId] = useState(params.get("old") ?? "apr26");
-  const [newId, setNewId] = useState(params.get("new") ?? "aug26");
 
-  const oldR = REPORTS.find((r) => r.id === oldId) ?? REPORTS[1];
-  const newR = REPORTS.find((r) => r.id === newId) ?? REPORTS[3];
+  const defaultOld = reports.length > 1 ? reports[0].id : "apr26";
+  const defaultNew = reports.length > 0 ? reports[reports.length - 1].id : "aug26";
 
-  const shared = newR.entries
+  const [oldId, setOldId] = useState(params.get("old") ?? defaultOld);
+  const [newId, setNewId] = useState(params.get("new") ?? defaultNew);
+
+  const oldR = reports.find((r) => r.id === oldId) ?? reports[0];
+  const newR = reports.find((r) => r.id === newId) ?? reports[reports.length - 1];
+
+  const shared = (newR?.entries || [])
     .map((e) => {
-      const prev = oldR.entries.find((x) => x.test === e.test);
+      const prev = oldR?.entries.find((x) => x.test === e.test);
       return prev ? { test: e.test, from: prev, to: e } : null;
     })
     .filter((x): x is NonNullable<typeof x> => !!x)
     .sort((a, b) => {
+      const defA = catalog[a.test] || TESTS[a.test] || TESTS.hemoglobin;
+      const defB = catalog[b.test] || TESTS[b.test] || TESTS.hemoglobin;
       const rank = (v: Verdict) => (v === "worsened" ? 0 : v === "improved" ? 1 : 2);
-      return rank(verdict(a.test, a.from.value, a.to.value)) - rank(verdict(b.test, b.from.value, b.to.value));
+      return rank(verdict(a.test, a.from.value, a.to.value, defA)) - rank(verdict(b.test, b.from.value, b.to.value, defB));
     });
 
   const statusBadge = (st: Verdict) =>
@@ -97,11 +104,11 @@ function CompareInner() {
               {t("compare.older")}
             </p>
             <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-extrabold text-brand-900">
-              {pick(oldR.date, s.lang)}
+              {oldR ? pick(oldR.date, s.lang) : "Previous"}
             </span>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2.5">
-            {REPORTS.map((r) => {
+            {reports.map((r) => {
               const isSelected = oldId === r.id;
               const isDisabled = newId === r.id;
               return (
@@ -136,11 +143,11 @@ function CompareInner() {
               {t("compare.newer")}
             </p>
             <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-extrabold text-brand-900">
-              {pick(newR.date, s.lang)}
+              {newR ? pick(newR.date, s.lang) : "Latest"}
             </span>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2.5">
-            {REPORTS.map((r) => {
+            {reports.map((r) => {
               const isSelected = newId === r.id;
               const isDisabled = oldId === r.id;
               return (
@@ -182,8 +189,8 @@ function CompareInner() {
         <SectionTitle icon={ArrowLeftRight} title={t("compare.whatChanged")} />
         <div className="space-y-2.5">
           {shared.map((row, i) => {
-            const def = TESTS[row.test];
-            const v = verdict(row.test, row.from.value, row.to.value);
+            const def = catalog[row.test] || TESTS[row.test] || TESTS.hemoglobin;
+            const v = verdict(row.test, row.from.value, row.to.value, def);
             const dir = row.to.value > row.from.value ? "up" : row.to.value < row.from.value ? "down" : "flat";
             return (
               <motion.div

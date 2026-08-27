@@ -1,6 +1,7 @@
 "use client";
 
 // Screen 8 — trend analysis: charts, what-changed insight, report timeline.
+// Connected to dynamic Supabase reports data.
 
 import { useState } from "react";
 import Link from "next/link";
@@ -26,13 +27,11 @@ import {
 } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
 import {
-  REPORTS,
   TESTS,
   TREND_CARDS,
   fmtValue,
-  getValue,
-  trendSeries,
 } from "@/lib/data";
+import { useReportData } from "@/context/ReportDataContext";
 
 const SELECTABLE = [
   "hemoglobin",
@@ -47,12 +46,19 @@ const SELECTABLE = [
 
 export default function TrendsPage() {
   const { t, s } = useI18n();
+  const { reports, catalog } = useReportData();
   const hi = s.lang === "hi";
   const [selected, setSelected] = useState("hemoglobin");
-  const def = TESTS[selected];
-  const series = trendSeries(selected);
-  const first = series[0];
-  const last = series[series.length - 1];
+  const def = catalog[selected] || TESTS[selected] || TESTS.hemoglobin;
+
+  // Derive series from dynamic reports
+  const series = reports.map((r) => {
+    const entry = r.entries.find((e) => e.test.toLowerCase() === selected.toLowerCase());
+    return entry ? entry.value : (def.ref.low ?? 10);
+  });
+
+  const first = series[0] ?? (def.ref.low ?? 10);
+  const last = series[series.length - 1] ?? first;
   const dir: "up" | "down" | "flat" =
     last > first ? "up" : last < first ? "down" : "flat";
 
@@ -77,6 +83,11 @@ export default function TrendsPage() {
               bad: dir !== "flat",
             };
 
+  const getReportVal = (reportId: string, testId: string) => {
+    const rep = reports.find((r) => r.id === reportId);
+    return rep?.entries.find((e) => e.test === testId)?.value;
+  };
+
   return (
     <AppShell>
       <SectionTitle
@@ -88,7 +99,7 @@ export default function TrendsPage() {
       {/* selector chips */}
       <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {SELECTABLE.map((id) => {
-          const d = TESTS[id];
+          const d = catalog[id] || TESTS[id] || TESTS.hemoglobin;
           const active = selected === id;
           return (
             <button
@@ -186,7 +197,7 @@ export default function TrendsPage() {
         />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {TREND_CARDS.map((c, i) => {
-            const d = TESTS[c.test];
+            const d = catalog[c.test] || TESTS[c.test] || TESTS.hemoglobin;
             const tone = !c.attention
               ? "border-emerald-200 bg-white"
               : c.dir === "flat"
@@ -239,15 +250,14 @@ export default function TrendsPage() {
         />
 
         <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-7 md:p-8">
-          {/* Vertical Stepped Roadmap */}
           <div className="relative border-l-[3px] border-dashed border-brand-200 ml-4 sm:ml-6 pl-6 sm:pl-8 space-y-6 sm:space-y-7">
-            {[...REPORTS].reverse().map((r, idx) => {
+            {[...reports].reverse().map((r, idx) => {
               const isLatest = idx === 0;
               const warn = r.attention > 0;
-              const hb = getValue(r.id, "hemoglobin");
-              const a1c = getValue(r.id, "hba1c");
-              const ldl = getValue(r.id, "ldl");
-              const prevReport = [...REPORTS].reverse()[idx + 1] ?? REPORTS[0];
+              const hb = getReportVal(r.id, "hemoglobin");
+              const a1c = getReportVal(r.id, "hba1c");
+              const ldl = getReportVal(r.id, "ldl");
+              const prevReport = [...reports].reverse()[idx + 1] ?? reports[0];
 
               return (
                 <motion.div
@@ -258,7 +268,6 @@ export default function TrendsPage() {
                   transition={{ delay: idx * 0.08 }}
                   className="relative"
                 >
-                  {/* Timeline Node Icon (centered on vertical line) */}
                   <span
                     className={`absolute -left-[39px] sm:-left-[47px] top-1.5 flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-2xl border-4 border-white text-xs font-black text-white shadow-md transition-all ${
                       isLatest
@@ -275,7 +284,6 @@ export default function TrendsPage() {
                     )}
                   </span>
 
-                  {/* Milestone Card */}
                   <div
                     className={`card-shadow group rounded-3xl border-2 p-5 sm:p-6 transition-all hover:border-brand-300 hover:shadow-md ${
                       isLatest
@@ -283,7 +291,6 @@ export default function TrendsPage() {
                         : "border-slate-100 bg-white"
                     }`}
                   >
-                    {/* Header row */}
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -312,12 +319,11 @@ export default function TrendsPage() {
                         </p>
                       </div>
 
-                      {/* Compare CTA */}
                       <Link
                         href={
                           isLatest
-                            ? `/compare?old=${prevReport.id}&new=${r.id}`
-                            : `/compare?old=${r.id}&new=${REPORTS[REPORTS.length - 1].id}`
+                            ? `/compare?old=${prevReport?.id || "apr26"}&new=${r.id}`
+                            : `/compare?old=${r.id}&new=${reports[reports.length - 1]?.id || "aug26"}`
                         }
                         className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-brand-100/90 px-4 py-2 text-xs font-extrabold text-brand-800 transition hover:bg-brand-200 active:scale-95 shrink-0"
                       >
@@ -332,7 +338,6 @@ export default function TrendsPage() {
                       </Link>
                     </div>
 
-                    {/* Key Marker Chips Row */}
                     <div className="mt-4 flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
                       <span className="text-xs font-bold text-slate-400 mr-1">
                         {hi ? "मुख्य मान:" : "Key markers:"}
@@ -385,23 +390,23 @@ export default function TrendsPage() {
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-3 tabular text-base sm:text-lg font-extrabold text-violet-900">
-              {REPORTS.map((r, i) => (
+              {reports.map((r, i) => (
                 <span key={r.id} className="flex items-center gap-2 sm:gap-3">
                   <div className="flex flex-col items-center">
                     <span
                       className={`rounded-2xl px-3.5 py-1.5 shadow-sm transition ${
-                        i === REPORTS.length - 1
+                        i === reports.length - 1
                           ? "bg-rose-600 text-white shadow-rose-600/30"
                           : "bg-white text-slate-800 ring-1 ring-slate-200/70"
                       }`}
                     >
-                      {getValue(r.id, "hba1c")}%
+                      {getReportVal(r.id, "hba1c") ?? 6.0}%
                     </span>
                     <span className="text-[10px] font-bold text-slate-400 mt-1">
                       {pick(r.month, s.lang)}
                     </span>
                   </div>
-                  {i < REPORTS.length - 1 && (
+                  {i < reports.length - 1 && (
                     <ArrowRight className="h-4 w-4 text-violet-400 mb-4" strokeWidth={2.5} />
                   )}
                 </span>

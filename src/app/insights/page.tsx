@@ -6,24 +6,18 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
-  ArrowDown,
   ArrowRight,
   ArrowUpRight,
   BookOpenCheck,
   BrainCircuit,
-  CalendarDays,
   CheckCircle2,
-  ChevronRight,
   History,
-  Plus,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
 } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import {
-  ConfBar,
   ListenBtn,
   SafetyNote,
   SectionTitle,
@@ -32,7 +26,7 @@ import {
   statusClasses,
 } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
-import { PATTERNS, SOURCES, STORY, TESTS, type Status } from "@/lib/data";
+import { PATTERNS, SOURCES, STORY, TESTS } from "@/lib/data";
 
 export default function InsightsPage() {
   const { t, s } = useI18n();
@@ -203,7 +197,7 @@ export default function InsightsPage() {
                             className="group inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs sm:text-sm font-extrabold text-slate-800 shadow-sm ring-1 ring-slate-200/70 transition hover:bg-brand-50 hover:ring-brand-300"
                           >
                             <TestIcon testId={n.test} size={26} />
-                            <span className="truncate max-w-[130px] sm:max-w-none">{pick(TESTS[n.test].name, s.lang)}</span>
+                            <span className="truncate max-w-[130px] sm:max-w-none">{pick(TESTS[n.test]?.name || { en: n.test, hi: n.test }, s.lang)}</span>
                             <span className={`rounded-md px-1.5 py-0.5 text-xs font-black ${
                               n.arrow === "up" ? "bg-rose-100 text-rose-700" : n.arrow === "down" ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600"
                             }`}>

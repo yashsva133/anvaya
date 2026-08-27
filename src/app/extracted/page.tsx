@@ -1,6 +1,7 @@
 "use client";
 
 // Screen 4 — extraction confirmation with trusted "did we read this right?" step.
+// Connected to Supabase save-report endpoint and active report state.
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -9,27 +10,43 @@ import { BadgeCheck, ChevronDown, Keyboard, PencilLine, ShieldQuestion } from "l
 import { FlowShell } from "@/components/shell";
 import { useI18n, pick } from "@/lib/i18n";
 import { Sheet, StatusPill, TestIcon, useToast } from "@/components/core";
-import { LATEST, TESTS, fmtValue, type ReportEntry } from "@/lib/data";
+import { LATEST, TESTS, fmtValue, type ReportEntry, type Status, type TestDef } from "@/lib/data";
+import { setStoredActiveReport } from "@/lib/report-store";
+import { useReportData } from "@/context/ReportDataContext";
 
 const HEADLINE = ["hemoglobin", "hba1c", "ldl", "hdl", "glucose", "creatinine"];
+
+function evaluateStatus(val: number, def: TestDef): Status {
+  if (def.ref.low != null && val < def.ref.low) {
+    if (def.ref.low - val > (def.ref.low * 0.4)) return "critical";
+    return "low";
+  }
+  if (def.ref.high != null && val > def.ref.high) {
+    if (val - def.ref.high > (def.ref.high * 0.5)) return "critical";
+    return "high";
+  }
+  return "normal";
+}
 
 export default function ExtractedPage() {
   const router = useRouter();
   const { t, s } = useI18n();
   const toast = useToast();
+  const { catalog, refresh } = useReportData();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [editEntry, setEditEntry] = useState<ReportEntry | null>(null);
   const [editVal, setEditVal] = useState("");
   const [fixed, setFixed] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    const id = setTimeout(() => setLoading(false), 900);
+    const id = setTimeout(() => setLoading(false), 800);
     return () => clearTimeout(id);
   }, []);
 
-  const entries = LATEST.entries;
-  const visible = showAll ? entries : entries.filter((e) => HEADLINE.includes(e.test));
+  const baseEntries = LATEST.entries;
+  const visible = showAll ? baseEntries : baseEntries.filter((e) => HEADLINE.includes(e.test));
 
   const valueOf = (e: ReportEntry) => fixed[e.test] ?? e.value;
 
@@ -62,7 +79,10 @@ export default function ExtractedPage() {
           {/* result cards */}
           <div className="mt-4 space-y-2.5">
             {visible.map((e, i) => {
-              const def = TESTS[e.test];
+              const val = valueOf(e);
+              const def = catalog[e.test] || TESTS[e.test] || TESTS.hemoglobin;
+              const currentStatus = fixed[e.test] != null ? evaluateStatus(val, def) : e.status;
+
               return (
                 <motion.div
                   key={e.test}
@@ -80,18 +100,18 @@ export default function ExtractedPage() {
                       {def.ref.text} · {t("common.perReport")}
                     </p>
                     <div className="mt-1.5">
-                      <StatusPill status={fixed[e.test] != null && fixed[e.test] !== e.value ? evolved(e) : e.status} size="sm" />
+                      <StatusPill status={currentStatus} size="sm" />
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="tabular text-2xl font-extrabold text-brand-900">
-                      {fmtValue(valueOf(e))}
+                      {fmtValue(val)}
                     </p>
                     <p className="text-[11px] font-bold text-slate-400">{def.unit}</p>
                     <button
                       onClick={() => {
                         setEditEntry(e);
-                        setEditVal(String(valueOf(e)));
+                        setEditVal(String(val));
                       }}
                       aria-label={t("extract.edit")}
                       className="mt-1.5 inline-flex min-h-9 items-center gap-1.5 rounded-full border border-slate-200 px-3 text-xs font-extrabold text-slate-500 transition hover:border-brand-300 hover:text-brand-700"
@@ -116,19 +136,75 @@ export default function ExtractedPage() {
           {/* actions */}
           <div className="sticky bottom-4 mt-6 flex gap-3">
             <button
-              onClick={() => {
-                toast(t("extract.correctToast"));
-                setTimeout(() => router.push("/dashboard"), 650);
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
+                const finalEntries: ReportEntry[] = baseEntries.map((e) => {
+                  const val = valueOf(e);
+                  const def = catalog[e.test] || TESTS[e.test] || TESTS.hemoglobin;
+                  return {
+                    ...e,
+                    value: val,
+                    status: evaluateStatus(val, def),
+                  };
+                });
+
+                const chartData = finalEntries.map((e) => {
+                  const def = catalog[e.test] || TESTS[e.test] || TESTS.hemoglobin;
+                  return {
+                    parameter: def.name.en,
+                    value: e.value,
+                    normal_min: def.ref.low ?? 0,
+                    normal_max: def.ref.high ?? 100,
+                    unit: def.unit,
+                    status: e.status,
+                  };
+                });
+
+                setStoredActiveReport({
+                  id: `report-${Date.now()}`,
+                  date: { en: "27 Aug 2026", hi: "27 अगस्त 2026" },
+                  month: { en: "Aug", hi: "अग." },
+                  entries: finalEntries,
+                });
+
+                try {
+                  const res = await fetch("/api/save-report", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      collected_on: new Date().toISOString().split("T")[0],
+                      lab_name: "City Diagnostics",
+                      chart_data: chartData,
+                    }),
+                  });
+                  const saveJson = await res.json().catch(() => ({}));
+                  if (!res.ok || saveJson.savedToDb === false) {
+                    console.warn("[EXTRACTED SAVE] DB Warning:", saveJson.error);
+                    toast(saveJson.error ? `DB: ${saveJson.error}` : t("extract.correctToast"), "info");
+                  } else {
+                    toast(t("extract.correctToast"));
+                    refresh();
+                  }
+                } catch (err: any) {
+                  console.warn("Save report request completed with local store fallback:", err);
+                  toast(t("extract.correctToast"));
+                }
+
+                setTimeout(() => {
+                  setSaving(false);
+                  router.push("/dashboard");
+                }, 500);
               }}
-              className="flex min-h-16 flex-1 items-center justify-center gap-2.5 rounded-3xl bg-mint-600 text-lg font-extrabold text-white shadow-lg shadow-mint-600/30 transition hover:bg-mint-500 active:scale-[0.98]"
+              className="flex min-h-16 flex-1 items-center justify-center gap-2.5 rounded-3xl bg-mint-600 text-lg font-extrabold text-white shadow-lg shadow-mint-600/30 transition hover:bg-mint-500 active:scale-[0.98] disabled:opacity-75"
             >
               <BadgeCheck className="h-6 w-6" />
               {t("extract.correct")}
             </button>
             <button
               onClick={() => {
-                setEditEntry(entries[0]);
-                setEditVal(String(entries[0].value));
+                setEditEntry(baseEntries[0]);
+                setEditVal(String(valueOf(baseEntries[0])));
               }}
               aria-label={t("extract.edit")}
               className="flex min-h-16 w-16 items-center justify-center rounded-3xl border-2 border-slate-200 bg-white text-slate-500 transition hover:border-brand-300 hover:text-brand-700 active:scale-[0.98]"
@@ -174,8 +250,4 @@ export default function ExtractedPage() {
       </Sheet>
     </FlowShell>
   );
-}
-
-function evolved(e: ReportEntry) {
-  return e.status === "normal" ? "borderline" : "normal";
 }
