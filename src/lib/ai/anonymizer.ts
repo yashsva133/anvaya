@@ -21,6 +21,7 @@ import {
   type LangCode,
   type Report,
 } from "@/lib/data";
+import { computeStatus, type ClientReport } from "./clientReport";
 import type { AnonymisedPayload, AnonymisedResult } from "./types";
 
 export const ANON_INPUT_VERSION = "anvaya-anon-v1";
@@ -86,6 +87,13 @@ function resultFor(
 /**
  * Build the de-identified payload for one report.
  *
+ * Two sources, in priority order:
+ *  - `report`: the user's OWN report, already validated by
+ *    parseClientReport() in clientReport.ts. Units, ranges and statuses come
+ *    from the catalogue and are computed here — this function re-derives
+ *    everything rather than trusting a label that arrived over HTTP.
+ *  - otherwise the seeded demo report the prototype ships with.
+ *
  * `pseudonym` is random per call by design: nothing downstream depends on its
  * value, only on its uniqueness, so rotating it costs nothing (see the comment
  * on anonymization_records.pseudonym).
@@ -94,16 +102,51 @@ export function buildAnonymisedPayload(opts: {
   lang: LangCode;
   reportId?: string;
   pseudonym?: string;
+  report?: ClientReport;
 }): AnonymisedPayload {
-  const { lang, reportId } = opts;
+  const { lang, reportId, report } = opts;
   const l2 = lang === "hi" ? "hi" : "en";
-  const report = pickReport(reportId);
-  const prev = previousReport(report);
 
   const results: AnonymisedResult[] = [];
-  for (const entry of report.entries) {
-    const r = resultFor(entry.test, entry.value, entry.status, lang, prev);
-    if (r) results.push(r);
+  let reportDate: string;
+  let band: string;
+  let sex: AnonymisedPayload["sex"];
+
+  if (report) {
+    // ---- the user's own report ------------------------------------------
+    const prevByTest = new Map(report.previous?.results.map((r) => [r.test, r.value]));
+    for (const entry of report.results) {
+      const def = TESTS[entry.test];
+      if (!def) continue;
+      const prevValue = prevByTest.get(entry.test);
+      results.push({
+        test: entry.test,
+        label: def.name[l2],
+        value: entry.value,
+        unit: def.unit,
+        ref_text: def.ref.text,
+        ref_low: def.ref.low,
+        ref_high: def.ref.high,
+        status: computeStatus(def, entry.value),
+        ...(prevValue !== undefined && prevValue !== entry.value
+          ? { previous_value: prevValue, previous_date: report.previous?.dateLabel ?? "" }
+          : {}),
+      });
+    }
+    reportDate = report.dateLabel ?? LATEST.date[l2];
+    band = report.ageBand ?? "unspecified";
+    sex = report.sex;
+  } else {
+    // ---- the seeded demo report ------------------------------------------
+    const demo = pickReport(reportId);
+    const prev = previousReport(demo);
+    for (const entry of demo.entries) {
+      const r = resultFor(entry.test, entry.value, entry.status, lang, prev);
+      if (r) results.push(r);
+    }
+    reportDate = demo.date[l2];
+    band = ageBand(PATIENT.age);
+    sex = normaliseSex(PATIENT.gender.en);
   }
 
   // Only patterns whose every member test is actually present in this report,
@@ -117,9 +160,9 @@ export function buildAnonymisedPayload(opts: {
 
   return {
     pseudonym: opts.pseudonym ?? randomUUID(),
-    age_band: ageBand(PATIENT.age),
-    sex: normaliseSex(PATIENT.gender.en),
-    report_date: report.date[l2],
+    age_band: band,
+    sex,
+    report_date: reportDate,
     results,
     patterns,
     removed_fields: [

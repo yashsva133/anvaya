@@ -32,7 +32,7 @@ export default function ExtractedPage() {
   const router = useRouter();
   const { t, s } = useI18n();
   const toast = useToast();
-  const { catalog, refresh } = useReportData();
+  const { catalog, activeReport, refresh } = useReportData();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAll, setShowAll] = useState(false);
