@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import os from "os";
+import fs from "fs/promises";
+import path from "path";
+import { exec } from "child_process";
+import util from "util";
+
+const execPromise = util.promisify(exec);
 
 // In-memory cache to prevent re-calling Gemini for duplicate reports (saves 100% quota)
 interface CacheEntry {
@@ -151,20 +158,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey === "your_gemini_api_key") {
-      return NextResponse.json(
-        { error: "GEMINI_API_KEY is not configured in .env.local" },
-        { status: 500 }
-      );
-    }
-
-    // 3. Convert uploaded file to base64 & calculate hash
+    // 3. Convert uploaded file to base64 & calculate hash (retained for caching)
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const base64Data = buffer.toString("base64");
-    const mimeType = file.type || "image/jpeg";
-
     const hash = crypto.createHash("sha256").update(buffer).digest("hex");
 
     // Check cache
@@ -176,149 +172,95 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Call Google Gemini 1.5 Flash via native REST API (Zero dependency issues)
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // 4. Call Local PaddleOCR
+    const tmpDir = os.tmpdir();
+    const tempInPath = path.join(tmpDir, `upload_${Date.now()}_${file.name}`);
+    const tempOutCsv = path.join(tmpDir, `output_${Date.now()}.csv`);
 
-    const geminiResponse = await fetch(geminiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64Data,
-                },
-              },
-              {
-                text: "Analyze this medical laboratory report image/document and extract all test parameters in strict JSON matching the schema.",
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          response_mime_type: "application/json",
-          response_schema: {
-            type: "OBJECT",
-            properties: {
-              patient_summary: {
-                type: "STRING",
-                description:
-                  "A simple 2-sentence patient summary written at a 5th-grade reading level.",
-              },
-              flagged_issues: {
-                type: "ARRAY",
-                items: { type: "STRING" },
-                description:
-                  "List of abnormal or attention-worthy health metrics.",
-              },
-              chart_data: {
-                type: "ARRAY",
-                items: {
-                  type: "OBJECT",
-                  properties: {
-                    parameter: {
-                      type: "STRING",
-                      description: "Name of the medical test or parameter",
-                    },
-                    value: {
-                      type: "NUMBER",
-                      description: "Measured numeric value",
-                    },
-                    normal_min: {
-                      type: "NUMBER",
-                      description: "Minimum normal reference range value",
-                    },
-                    normal_max: {
-                      type: "NUMBER",
-                      description: "Maximum normal reference range value",
-                    },
-                    unit: {
-                      type: "STRING",
-                      description: "Measurement unit (e.g. g/dL, mg/dL, %)",
-                    },
-                    status: {
-                      type: "STRING",
-                      enum: ["normal", "borderline", "high", "low", "critical"],
-                      description: "Clinical status of the parameter",
-                    },
-                  },
-                  required: [
-                    "parameter",
-                    "value",
-                    "normal_min",
-                    "normal_max",
-                    "unit",
-                    "status",
-                  ],
-                },
-                description:
-                  "Array of extracted lab parameters with numeric ranges and status.",
-              },
-              audio_script: {
-                type: "STRING",
-                description:
-                  "A clear, conversational audio script suitable for text-to-speech conversion.",
-              },
-            },
-            required: [
-              "patient_summary",
-              "flagged_issues",
-              "chart_data",
-              "audio_script",
-            ],
-          },
-        },
-        system_instruction: {
-          parts: [
-            {
-              text: `You are an expert clinical laboratory report analysis assistant.
-1. Extract medical test parameters, measured values, units, and normal reference ranges (normal_min and normal_max) from the provided medical report document.
+    await fs.writeFile(tempInPath, buffer);
+
+    try {
+      // Assuming lab_ocr_paddleocr.py is in the root (CWD is the project root when Next.js runs)
+      await execPromise(`python lab_ocr_paddleocr.py --image "${tempInPath}" --out "${tempOutCsv}"`);
+    } catch (err: any) {
+      // Clean up on failure
+      await fs.unlink(tempInPath).catch(() => {});
+      throw new Error("PaddleOCR failed to run. Please ensure Python, paddlepaddle, paddleocr, and opencv-python are installed. Details: " + err.message);
+    }
+
+    let csvData = "";
+    try {
+      csvData = await fs.readFile(tempOutCsv, "utf8");
+    } catch (err) {
+      throw new Error("Failed to read output CSV from PaddleOCR.");
+    }
+
+    // Clean up temporary files
+    await fs.unlink(tempInPath).catch(() => {});
+    await fs.unlink(tempOutCsv).catch(() => {});
+
+    // 5. Call Local MedGemma (via Ollama)
+    const ollamaUrl = process.env.AI_BASE_URL || "http://127.0.0.1:11434";
+    const ollamaModel = process.env.AI_MODEL || "medgemma:4b";
+
+    const promptText = `Analyze this clinical CSV data extracted from a lab report and output strict JSON matching the schema.
+CSV Data:
+${csvData}
+`;
+
+    const systemPrompt = `You are an expert clinical laboratory report analysis assistant.
+1. Extract medical test parameters, measured values, units, and normal reference ranges (normal_min and normal_max) from the provided CSV data.
 2. Compute the status for each parameter: 'normal', 'borderline', 'high', 'low', or 'critical'.
 3. Provide a simple 2-sentence patient summary written at a 5th-grade reading level, avoiding complex medical jargon.
 4. List all flagged issues that require attention.
-5. Provide a warm, conversational audio script suitable for text-to-speech conversion that explains the results clearly.`,
-            },
-          ],
-        },
+5. Provide a warm, conversational audio script suitable for text-to-speech conversion that explains the results clearly.
+Respond ONLY with a valid JSON object matching exactly this schema and nothing else:
+{
+  "patient_summary": "string",
+  "flagged_issues": ["string"],
+  "chart_data": [
+    {
+      "parameter": "string",
+      "value": number,
+      "normal_min": number,
+      "normal_max": number,
+      "unit": "string",
+      "status": "normal|borderline|high|low|critical"
+    }
+  ],
+  "audio_script": "string"
+}`;
+
+    const ollamaResponse = await fetch(`${ollamaUrl}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: ollamaModel,
+        prompt: promptText,
+        system: systemPrompt,
+        format: "json",
+        stream: false,
+        options: {
+          temperature: 0.2
+        }
       }),
     });
 
-    if (!geminiResponse.ok) {
-      const errBody = await geminiResponse.json().catch(() => ({}));
-      console.error("Gemini API error:", geminiResponse.status, errBody);
-
-      if (geminiResponse.status === 429) {
-        return NextResponse.json(
-          {
-            error:
-              "Gemini API rate limit reached. Please wait a minute before trying again.",
-            rateLimited: true,
-          },
-          { status: 429 }
-        );
-      }
-
-      throw new Error(
-        errBody?.error?.message || `Gemini API error: ${geminiResponse.statusText}`
-      );
+    if (!ollamaResponse.ok) {
+      const errBody = await ollamaResponse.text();
+      throw new Error(`Ollama API error: ${ollamaResponse.statusText} - ${errBody}`);
     }
 
-    const geminiJson = await geminiResponse.json();
-    const rawText =
-      geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const ollamaJson = await ollamaResponse.json();
+    const rawText = ollamaJson.response;
 
     if (!rawText) {
-      throw new Error("No response generated from Gemini");
+      throw new Error("No response generated from MedGemma");
     }
 
     const data = JSON.parse(rawText);
 
-    // Save to in-memory cache to prevent redundant API calls
+    // Save to in-memory cache to prevent redundant processing
     reportCache.set(hash, { data, timestamp: Date.now() });
 
     return NextResponse.json(data, { status: 200 });

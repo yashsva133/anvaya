@@ -45,7 +45,7 @@ export default function ExtractedPage() {
     return () => clearTimeout(id);
   }, []);
 
-  const baseEntries = LATEST.entries;
+  const baseEntries = activeReport?.entries?.length > 0 ? activeReport.entries : LATEST.entries;
   const visible = showAll ? baseEntries : baseEntries.filter((e) => HEADLINE.includes(e.test));
 
   const valueOf = (e: ReportEntry) => fixed[e.test] ?? e.value;

@@ -21,6 +21,7 @@ import {
 import { FlowShell, FlowMic } from "@/components/shell";
 import { useI18n } from "@/lib/i18n";
 import { Sheet, useToast } from "@/components/core";
+import { setStoredActiveReport, mapChartDataToEntries } from "@/lib/report-store";
 
 const TIP_ICONS = [SquareDashed, Sun, Contrast, ScanLine];
 
@@ -32,9 +33,53 @@ export default function UploadPage() {
   const [manualOpen, setManualOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
-  const readFile = () => {
-    toast(t("upload.scan") + "…", "info");
-    setTimeout(() => router.push("/processing"), 900);
+  const readFile = async (e?: React.ChangeEvent<HTMLInputElement> | any) => {
+    let file = null;
+    if (e && e.target && e.target.files) {
+      file = e.target.files[0];
+    } else if (fileRef.current && fileRef.current.files) {
+      file = fileRef.current.files[0];
+    }
+    
+    if (!file) {
+      // Fallback for drag and drop without file or clicking dummy buttons
+      toast(t("upload.scan") + "…", "info");
+      setTimeout(() => router.push("/processing"), 900);
+      return;
+    }
+
+    toast("Uploading and processing...", "info");
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/process-report", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast(err.error || "Failed to process report", "error");
+        return;
+      }
+
+      const data = await res.json();
+      
+      setStoredActiveReport({
+        id: `report-${Date.now()}`,
+        date: { en: "27 Aug 2026", hi: "27 अगस्त 2026" },
+        month: { en: "Aug", hi: "अग." },
+        patient_summary: data.patient_summary,
+        flagged_issues: data.flagged_issues,
+        audio_script: data.audio_script,
+        entries: mapChartDataToEntries(data.chart_data || []),
+      });
+
+      router.push("/processing");
+    } catch (err: any) {
+      toast("Error processing report", "error");
+    }
   };
 
   const tips = [t("upload.tip1"), t("upload.tip2"), t("upload.tip3"), t("upload.tip4")];
