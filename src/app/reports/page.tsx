@@ -1,6 +1,7 @@
 "use client";
 
 // Screen — report history with expandable detail and comparison entry point.
+// Connected to dynamic Supabase & local report data.
 
 import { useState } from "react";
 import Link from "next/link";
@@ -21,12 +22,14 @@ import {
   TestIcon,
 } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
-import { REPORTS, TESTS, fmtValue } from "@/lib/data";
+import { TESTS, fmtValue } from "@/lib/data";
+import { useReportData } from "@/context/ReportDataContext";
 
 export default function ReportsPage() {
   const { t, s } = useI18n();
-  const [open, setOpen] = useState<string | null>("aug26");
-  const latest = REPORTS[REPORTS.length - 1];
+  const { reports, catalog } = useReportData();
+  const [open, setOpen] = useState<string | null>(reports[reports.length - 1]?.id || "aug26");
+  const latest = reports[reports.length - 1] || reports[0];
   const hi = s.lang === "hi";
 
   return (
@@ -35,7 +38,7 @@ export default function ReportsPage() {
         <SectionTitle
           icon={FolderOpen}
           title={t("reports.title")}
-          sub={`${REPORTS.length} ${hi ? "रिपोर्ट्स" : "reports"} · 2026`}
+          sub={`${reports.length} ${hi ? "रिपोर्ट्स" : "reports"} · 2026`}
         />
         <div className="flex gap-2">
           <Link
@@ -56,8 +59,8 @@ export default function ReportsPage() {
       </div>
 
       <div className="mt-6 space-y-4">
-        {[...REPORTS].reverse().map((r, idx) => {
-          const isLatest = r.id === latest.id;
+        {[...reports].reverse().map((r, idx) => {
+          const isLatest = r.id === latest?.id;
           const warn = r.attention > 0;
           const expanded = open === r.id;
           return (
@@ -139,7 +142,7 @@ export default function ReportsPage() {
                 >
                   <div className="grid gap-2.5 sm:gap-3 grid-cols-1 md:grid-cols-2">
                     {r.entries.map((e) => {
-                      const def = TESTS[e.test];
+                      const def = catalog[e.test] || TESTS[e.test] || TESTS.hemoglobin;
                       const notNormal = e.status !== "normal";
                       return (
                         <Link
@@ -192,7 +195,7 @@ export default function ReportsPage() {
                         </Link>
                       ) : (
                         <Link
-                          href={`/compare?old=${r.id}&new=${latest.id}`}
+                          href={`/compare?old=${r.id}&new=${latest?.id || "aug26"}`}
                           className="inline-flex min-h-11 items-center gap-2 rounded-2xl border-2 border-brand-200 bg-white px-5 text-sm font-extrabold text-brand-700 transition hover:border-brand-400 active:scale-95"
                         >
                           <GitCompareArrows className="h-4 w-4" />

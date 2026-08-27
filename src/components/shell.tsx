@@ -162,7 +162,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     : "text-slate-500 hover:bg-slate-50 hover:text-brand-700"
                 }`}
               >
-                <Icon className="h-4.5 w-4.5 h-[18px] w-[18px]" />
+                <Icon className="h-[18px] w-[18px]" />
                 {t(x.key)}
               </Link>
             );
@@ -244,7 +244,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   active ? "text-brand-700" : "text-slate-400"
                 }`}
               >
-                <Icon className="h-5.5 w-5.5 h-[22px] w-[22px]" strokeWidth={active ? 2.6 : 2} />
+                <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.6 : 2} />
                 {t(item.key === "nav.overview" ? "nav.home" : item.key)}
               </Link>
             );
@@ -277,7 +277,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={m.href}
                 href={m.href}
                 onClick={() => setMoreOpen(false)}
-                className="flex min-h-13 min-h-[52px] items-center gap-3 rounded-2xl border border-slate-200 px-4 text-[15px] font-bold text-slate-700 transition hover:bg-brand-50 active:scale-[0.99]"
+                className="flex min-h-[52px] items-center gap-3 rounded-2xl border border-slate-200 px-4 text-[15px] font-bold text-slate-700 transition hover:bg-brand-50 active:scale-[0.99]"
               >
                 <Icon className="h-5 w-5 text-brand-600" />
                 {s.lang === "hi" ? m.hi : m.en}
@@ -412,5 +412,3 @@ export function FlowMic({ dark = false }: { dark?: boolean }) {
     </>
   );
 }
-
-

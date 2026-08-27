@@ -1,6 +1,7 @@
 "use client";
 
 // Screen 11 — doctor-friendly clinical summary (printable).
+// Connected to dynamic Supabase & local report data.
 
 import { motion } from "framer-motion";
 import {
@@ -14,19 +15,21 @@ import { AppShell } from "@/components/shell";
 import { SectionTitle, StatusPill, TrendDirIcon, useToast } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
 import {
-  LATEST,
-  PATIENT,
   SOURCES,
   TESTS,
   fmtValue,
-  getValue,
 } from "@/lib/data";
+import { useReportData } from "@/context/ReportDataContext";
 
 const ROWS = ["hemoglobin", "hba1c", "ldl", "hdl", "glucose", "triglycerides"];
 
 export default function DoctorPage() {
   const { t, s } = useI18n();
   const toast = useToast();
+  const { activeReport, patient, reports, catalog } = useReportData();
+
+  const report = activeReport;
+  const prevReport = reports.length > 1 ? reports[0] : null;
 
   return (
     <AppShell>
@@ -47,14 +50,14 @@ export default function DoctorPage() {
             <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-mint-300">
               Rxanvaya · {s.lang === "hi" ? "रोगी लैब सारांश" : "Patient lab summary"}
             </p>
-            <p className="mt-1 text-xl font-extrabold md:text-2xl">{PATIENT.nameShort}</p>
+            <p className="mt-1 text-xl font-extrabold md:text-2xl">{patient.nameShort}</p>
           </div>
           <div className="text-right text-sm font-bold text-white/80">
             <p>
-              {PATIENT.age} · {pick(PATIENT.gender, s.lang)}
+              {patient.age} · {pick(patient.gender, s.lang)}
             </p>
             <p>
-              {s.lang === "hi" ? "रिपोर्ट तिथि" : "Report date"}: {pick(LATEST.date, s.lang)}
+              {s.lang === "hi" ? "रिपोर्ट तिथि" : "Report date"}: {pick(report.date, s.lang)}
             </p>
           </div>
         </div>
@@ -77,10 +80,10 @@ export default function DoctorPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {ROWS.map((id) => {
-                  const def = TESTS[id];
-                  const e = LATEST.entries.find((x) => x.test === id);
+                  const def = catalog[id] || TESTS[id] || TESTS.hemoglobin;
+                  const e = report.entries.find((x) => x.test === id);
                   if (!e) return null;
-                  const prev = getValue("feb26", id);
+                  const prev = prevReport?.entries.find((x) => x.test === id)?.value;
                   const dir =
                     prev == null ? "flat" : e.value > prev ? "up" : e.value < prev ? "down" : "flat";
                   return (

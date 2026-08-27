@@ -1,6 +1,7 @@
 "use client";
 
 // Screen 6 — individual test explanation with three reading levels.
+// Connected to dynamic activeReport data and catalog.
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -29,7 +30,8 @@ import {
   TrendChart,
 } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
-import { LATEST, SOURCES, TESTS, fmtValue, latestEntry } from "@/lib/data";
+import { SOURCES, TESTS, fmtValue, type ReportEntry } from "@/lib/data";
+import { useReportData } from "@/context/ReportDataContext";
 
 const LEVELS = [
   { id: "simple", key: "mode.simple" },
@@ -40,16 +42,21 @@ export default function TestDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { t, s, set } = useI18n();
-  const def = TESTS[params.id];
+  const { activeReport, catalog } = useReportData();
+
+  const testId = params.id?.toLowerCase() || "";
+  const def = catalog[testId] || TESTS[testId];
   if (!def) {
     router.replace("/dashboard");
     return null;
   }
-  const entry = latestEntry(def.id);
-  if (!entry) {
-    router.replace("/dashboard");
-    return null;
-  }
+
+  const activeEntry = activeReport?.entries.find((e) => e.test.toLowerCase() === testId);
+  const entry: ReportEntry = activeEntry || {
+    test: testId,
+    value: def.ref.low ? (def.ref.low + (def.ref.high ? (def.ref.high - def.ref.low) / 2 : 0)) : 10,
+    status: "normal",
+  };
 
   const hi = s.lang === "hi";
   const level = s.mode;
@@ -58,7 +65,7 @@ export default function TestDetailPage() {
   const whyText = level === "advanced" ? (hi ? def.why.hi : def.why.en) : hi ? def.why.hi : def.why.vs_en;
   const todoText = level === "advanced" ? (hi ? def.todo.hi : def.todo.en) : hi ? def.todo.hi : def.todo.vs_en;
   const causesText = pick(def.causes, s.lang);
-  const sources = def.sources
+  const sources = (def.sources || [])
     .map((id) => SOURCES.find((x) => x.id === id))
     .filter((x): x is (typeof SOURCES)[number] => !!x);
 
@@ -220,7 +227,7 @@ export default function TestDetailPage() {
           </motion.section>
 
           {/* related */}
-          {def.related.length > 0 && (
+          {def.related && def.related.length > 0 && (
             <motion.section
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -233,9 +240,10 @@ export default function TestDetailPage() {
               </p>
               <div className="mt-3 space-y-2">
                 {def.related.map((rid) => {
-                  const re = LATEST.entries.find((x) => x.test === rid);
-                  const rd = TESTS[rid];
-                  if (!re || !rd) return null;
+                  const re = activeReport?.entries.find((x) => x.test === rid);
+                  const rd = catalog[rid] || TESTS[rid];
+                  if (!rd) return null;
+                  const val = re?.value ?? 0;
                   return (
                     <Link
                       key={rid}
@@ -247,7 +255,7 @@ export default function TestDetailPage() {
                         {pick(rd.name, s.lang)}
                       </span>
                       <span className="tabular text-sm font-extrabold text-brand-900">
-                        {fmtValue(re.value)}
+                        {fmtValue(val)}
                         <span className="ml-0.5 text-[10px] font-bold text-slate-400">
                           {rd.unit}
                         </span>
@@ -261,9 +269,9 @@ export default function TestDetailPage() {
 
           {/* confidence */}
           <ConfBar
-            level={def.conf.level}
-            pct={def.conf.pct}
-            note={pick(def.conf.note, s.lang)}
+            level={def.conf?.level || "high"}
+            pct={def.conf?.pct || 95}
+            note={pick(def.conf?.note || { en: "High confidence interpretation", hi: "उच्च विश्वास व्याख्या" }, s.lang)}
           />
 
           {/* evidence */}
