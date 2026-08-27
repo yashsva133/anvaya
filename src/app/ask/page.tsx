@@ -30,6 +30,7 @@ import {
 import { VoiceSheet } from "@/components/voice";
 import { useI18n } from "@/lib/i18n";
 import { useReportData } from "@/context/ReportDataContext";
+import { buildReportContext, conversationId } from "@/lib/ai/reportContext";
 
 interface Msg {
   role: "user" | "ai";
@@ -52,56 +53,9 @@ interface AnswerResponse {
   qa_message_id?: string | null;
 }
 
-/**
- * The personalized context sent with every question: the report the user is
- * actually looking at (their upload via /api/process-report, or the demo
- * fallback), reduced to de-identified values. Only test ids and numbers cross
- * the wire — the client deliberately does NOT send statuses, units or ranges
- * (the server re-derives those from its catalogue) and never sends a name.
- */
-function buildReportContext(args: {
-  activeReport: { id: string; date: { en: string; hi: string }; entries: { test: string; value: number }[] };
-  reports: { id: string; date: { en: string; hi: string }; entries: { test: string; value: number }[] }[];
-  patient: { age: number; gender: { en: string } };
-  hi: boolean;
-}) {
-  const { activeReport, reports, patient, hi } = args;
-  const idx = reports.findIndex((r) => r.id === activeReport.id);
-  const prev = idx > 0 ? reports[idx - 1] : undefined;
-  const values = (entries: { test: string; value: number }[]) =>
-    entries.map((e) => ({ test: e.test, value: e.value }));
-  return {
-    reportId: activeReport.id,
-    dateLabel: hi ? activeReport.date.hi : activeReport.date.en,
-    age: patient.age,
-    gender: patient.gender.en,
-    results: values(activeReport.entries),
-    ...(prev
-      ? {
-          previous: {
-            dateLabel: hi ? prev.date.hi : prev.date.en,
-            results: values(prev.entries),
-          },
-        }
-      : {}),
-  };
-}
-
-/** Stable per-browser conversation id, so multi-turn memory works server-side. */
-function chatSessionId(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    const key = "anvaya_chat_session_v1";
-    let v = window.localStorage.getItem(key);
-    if (!v || !/^[a-zA-Z0-9-]{8,64}$/.test(v)) {
-      v = crypto.randomUUID();
-      window.localStorage.setItem(key, v);
-    }
-    return v;
-  } catch {
-    return "";
-  }
-}
+// The report context and the session id are built by src/lib/ai/reportContext.ts,
+// which the voice agent uses too — one definition, so the two surfaces cannot
+// drift into sending different personalization payloads.
 
 const SUGGESTED: { en: string; hi: string }[] = [
   { en: "Why is my hemoglobin low?", hi: "मेरा हीमोग्लोबिन कम क्यों है?" },
@@ -117,7 +71,7 @@ export default function AskPage() {
   const { activeReport, patient, reports } = useReportData();
   // Lazy useState (not a ref write in render): computed once, never displayed,
   // so the SSR/client difference cannot cause a hydration mismatch.
-  const [sessionId] = useState(() => chatSessionId());
+  const [sessionId] = useState(() => conversationId("anvaya_chat_session_v1"));
   const hi = s.lang === "hi";
   const toast = useToast();
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -160,7 +114,7 @@ export default function AskPage() {
           lang: s.lang,
           reading: s.mode,
           ...(sessionId ? { session: sessionId } : {}),
-          report: buildReportContext({ activeReport, reports, patient, hi }),
+          report: buildReportContext({ activeReport, reports, patient, lang: s.lang }),
         }),
       });
       const data = (await res.json()) as AnswerResponse;

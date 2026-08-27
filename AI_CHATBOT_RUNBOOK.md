@@ -6,6 +6,13 @@ is still required to run it against a real model.
 **Scope:** the AI backend only. PaddleOCR / report ingestion is untouched, and
 `src/app/api/process-report/route.ts` was not modified.
 
+**Since this was written:** a multilingual voice agent was built on top of this
+pipeline — 14 answer languages, browser speech in/out, and the same
+`/api/answer` endpoint. See `AI_VOICE_AGENT_RUNBOOK.md`. The `/api/answer`
+contract below is unchanged; the new fields (`answerLang`, `channel` in,
+`answer_lang`, `language_note`, `channel` out) are additive, and the prompt
+version is now `2026-08-27.2`.
+
 ---
 
 ## 1. What is new

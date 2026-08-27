@@ -18,7 +18,9 @@ import { loadAiEnv, type AiEnv } from "./env";
 import { buildAnonymisedPayload } from "./anonymizer";
 import type { ClientReport } from "./clientReport";
 import { retrieve } from "./rag";
-import { buildPrompt, SAFE_REDIRECT } from "./prompts";
+import { buildPrompt, type Channel } from "./prompts";
+import { safeRedirect } from "./translations";
+import { hasRuleText, type AnswerLang } from "./languages";
 import {
   blockedGuardResult,
   guardInput,
@@ -51,6 +53,16 @@ export interface AskOptions {
   sessionId?: string;
   /** Reuse a caller-provided env (used by /api/ai/status and tests). */
   env?: AiEnv;
+  /**
+   * Language to ANSWER IN, which the voice agent sets from what the person
+   * spoke. Independent of `lang` (the UI language): a person can use the app in
+   * Hindi and ask a question in Tamil. Defaults to `lang`.
+   */
+  answerLang?: AnswerLang;
+  /** "voice" turns get spoken formatting and are recorded as voice_sessions. */
+  channel?: Channel;
+  /** Extra safety_flags to record on this turn, e.g. the input-guard coverage note. */
+  notes?: string[];
 }
 
 /**
@@ -116,6 +128,10 @@ function shapeAnswer(input: {
   answer: string;
   engine: AgentAnswer["engine"];
   lang: LangCode;
+  /** Language the answer text is actually written in. */
+  answerLang: AnswerLang;
+  /** Set when the requested language could not be honoured by the fallback. */
+  languageNote?: string;
   retrieval?: RetrievalResult;
   generation?: GenerationOutput;
   guard: AgentAnswer["guard"];
@@ -133,6 +149,8 @@ function shapeAnswer(input: {
     confidence: guard.confidence,
     engine: input.engine,
     language: input.lang,
+    answer_lang: input.answerLang,
+    language_note: input.languageNote,
     citations: (retrieval?.matches ?? []).map((m) => ({
       source_code: m.source_code,
       source_title: m.source_title,
@@ -163,6 +181,12 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
   const startedAt = Date.now();
   const env = opts.env ?? loadAiEnv();
   const lang: LangCode = opts.lang === "hi" ? "hi" : opts.lang === "bn" ? "bn" : "en";
+  // The answer language is separate from the UI language: the voice agent sets
+  // it from the language the person spoke, so a Hindi-chrome app can answer in
+  // Tamil. Defaults to the UI language, which keeps text callers unchanged.
+  const answerLang: AnswerLang = opts.answerLang ?? lang;
+  const channel: Channel = opts.channel === "voice" ? "voice" : "text";
+  const notes = opts.notes ?? [];
   const readingLevel = opts.readingLevel ?? "standard";
   const question = opts.question.trim();
   const sessionId = opts.sessionId ?? crypto.randomUUID();
@@ -177,17 +201,19 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
   const prompt = buildPrompt({
     question,
     lang,
+    answerLang,
+    channel,
     readingLevel,
     payload,
     matches: [],
   });
 
   // ---- 1. Input guard: an unsafe question never reaches the model ----------
-  const inputGuard = guardInput(question, lang);
+  const inputGuard = guardInput(question, answerLang);
   if (inputGuard.blocked) {
     const guard = blockedGuardResult(env.ai.trustFormula);
     guard.final_text = inputGuard.text;
-    guard.safety_flags = [`input_blocked:${inputGuard.reason}`];
+    guard.safety_flags = [`input_blocked:${inputGuard.reason}`, ...notes];
     remember(sessionId, "user", question);
     remember(sessionId, "assistant", inputGuard.text);
     return shapeAnswer({
@@ -195,6 +221,7 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
       answer: inputGuard.text,
       engine: "rules",
       lang,
+      answerLang,
       guard,
       payload,
       promptKey: prompt.prompt_key,
@@ -207,16 +234,20 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
   // ---- 2. Optional rules-first short circuit ------------------------------
   if (env.ai.rulesFirst) {
     const hit = matchRules(question);
-    if (hit) {
-      const text = lang === "hi" ? hit.a.hi : hit.a.en;
+    // The rule catalogue only exists in English and Hindi. Asking for a rule
+    // answer in Tamil would hand back text the person cannot read, so the
+    // short circuit is skipped and the turn goes to the model, which can.
+    if (hit && hasRuleText(answerLang)) {
+      const text = answerLang === "hi" ? hit.a.hi : hit.a.en;
       const guard = guardOutput({
         text,
-        lang,
+        lang: answerLang,
         payload,
         retrievalSimilarity: 1,
         trustFormula: env.ai.trustFormula,
         weights: parseWeights(env.ai.trustFormula),
       });
+      guard.safety_flags = [...guard.safety_flags, ...notes];
       remember(sessionId, "user", question);
       remember(sessionId, "assistant", guard.final_text);
       return shapeAnswer({
@@ -224,6 +255,7 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
         answer: guard.final_text,
         engine: "rules",
         lang,
+        answerLang,
         guard,
         payload,
         promptKey: prompt.prompt_key,
@@ -265,6 +297,8 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
   const fullPrompt = buildPrompt({
     question,
     lang,
+    answerLang,
+    channel,
     readingLevel,
     payload,
     matches: retrieval.matches,
@@ -277,7 +311,7 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
     matches: retrieval.matches,
     patterns: payload.patterns,
     question,
-    lang: lang === "hi" ? "hi" : "en",
+    lang: answerLang,
   });
 
   if (!provider) {
@@ -292,6 +326,9 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
       sessionId,
       startedAt,
       reason: "no_provider_configured",
+      answerLang,
+      channel,
+      notes,
     });
   }
 
@@ -319,19 +356,23 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
       startedAt,
       reason: generation.error_code ?? "empty_response",
       generation,
+      answerLang,
+      channel,
+      notes,
     });
   }
 
   // ---- 5. Guard -----------------------------------------------------------
   const guard = guardOutput({
     text: generation.text,
-    lang,
+    lang: answerLang,
     payload,
     retrievalSimilarity: retrieval.mean_score,
     modelConfidence: generation.model_confidence,
     trustFormula: env.ai.trustFormula,
     weights: parseWeights(env.ai.trustFormula),
   });
+  guard.safety_flags = [...guard.safety_flags, ...notes];
 
   remember(sessionId, "user", question);
   remember(sessionId, "assistant", guard.final_text);
@@ -341,6 +382,7 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
     answer: guard.final_text,
     engine: "medgemma",
     lang,
+    answerLang,
     retrieval,
     generation,
     guard,
@@ -355,6 +397,10 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
 interface FallbackInput {
   question: string;
   lang: LangCode;
+  /** Language the caller asked to be answered in. */
+  answerLang: AnswerLang;
+  channel: Channel;
+  notes: string[];
   payload: AgentAnswer["payload"];
   retrieval: RetrievalResult;
   prompt: { prompt_key: string; prompt_version: string; system_prompt_sha256: string };
@@ -372,14 +418,23 @@ interface FallbackInput {
  * looking like the model answered.
  */
 function rulesFallback(input: FallbackInput): AgentAnswer {
-  const { question, lang, payload, retrieval, prompt, env, sessionId, startedAt } = input;
+  const { question, lang, answerLang, payload, retrieval, prompt, env, sessionId, startedAt } =
+    input;
   const hit = matchRules(question);
-  const l2 = lang === "hi" ? "hi" : "en";
-  const text = hit ? (lang === "hi" ? hit.a.hi : hit.a.en) : SAFE_REDIRECT[l2];
+
+  // The rule answers exist only in English and Hindi. A fallback for any other
+  // language therefore cannot be delivered in that language, and pretending
+  // otherwise would be worse than saying so: the closest reviewed text is used
+  // and the substitution is recorded in safety_flags AND surfaced to the client
+  // as `language_note`, so the UI can tell the person the answer came back in
+  // English and offer the model-backed path.
+  const ruleLang: "en" | "hi" = hasRuleText(answerLang) ? (answerLang as "en" | "hi") : "en";
+  const substituted = ruleLang !== answerLang;
+  const text = hit ? (ruleLang === "hi" ? hit.a.hi : hit.a.en) : safeRedirect(ruleLang);
 
   const guard = guardOutput({
     text,
-    lang,
+    lang: ruleLang,
     payload,
     // Retrieval did run, but the answer did not come from the model, so the
     // trust score should not claim model agreement.
@@ -387,7 +442,12 @@ function rulesFallback(input: FallbackInput): AgentAnswer {
     trustFormula: env.ai.trustFormula,
     weights: parseWeights(env.ai.trustFormula),
   });
-  guard.safety_flags = [...guard.safety_flags, `fallback:${input.reason}`];
+  guard.safety_flags = [
+    ...guard.safety_flags,
+    `fallback:${input.reason}`,
+    ...(substituted ? [`language_substituted:${answerLang}->${ruleLang}`] : []),
+    ...input.notes,
+  ];
   // A fallback is never presented as a high-confidence model answer.
   guard.confidence = "moderate";
 
@@ -399,6 +459,10 @@ function rulesFallback(input: FallbackInput): AgentAnswer {
     answer: guard.final_text,
     engine: hit ? "rules" : "fallback",
     lang,
+    answerLang: ruleLang,
+    languageNote: substituted
+      ? `rule_answers_only_in_en_hi;requested_${answerLang}`
+      : undefined,
     retrieval,
     generation: input.generation,
     guard,

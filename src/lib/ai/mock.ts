@@ -13,6 +13,8 @@
 
 import type { AnonymisedPattern, AnonymisedPayload, GenerationOutput, RetrievedChunk } from "./types";
 import type { ChatMessage, GenerateOptions, Provider } from "./providers";
+import type { AnswerLang } from "./languages";
+import { mockPhrases } from "./mock-phrases";
 
 export interface MockContext {
   payload: AnonymisedPayload;
@@ -20,7 +22,8 @@ export interface MockContext {
   /** Patterns with their member tests, so only a relevant one is attached. */
   patterns: AnonymisedPattern[];
   question: string;
-  lang: "en" | "hi";
+  /** Language to compose in. Every supported language has a phrasebook entry. */
+  lang: AnswerLang;
 }
 
 /**
@@ -30,7 +33,7 @@ export interface MockContext {
  */
 export function composeMockAnswer(ctx: MockContext): string {
   const { payload, matches, lang } = ctx;
-  const hi = lang === "hi";
+  const p = mockPhrases(lang);
 
   // Pick the results the retrieved passages are about; fall back to the
   // abnormal ones, which is what a patient is usually asking about.
@@ -46,24 +49,20 @@ export function composeMockAnswer(ctx: MockContext): string {
   if (focus.length === 0) focus = payload.results.slice(0, 2);
 
   const lines: string[] = [];
-  lines.push(
-    hi
-      ? `आपकी **${payload.report_date}** की रिपोर्ट से, इन परिणामों के बारे में:`
-      : `From your report dated **${payload.report_date}**, about these results:`
-  );
+  lines.push(p.intro(payload.report_date));
   for (const r of focus.slice(0, 3)) {
-    const rel =
-      r.status === "normal"
-        ? hi
-          ? "सामान्य सीमा के भीतर"
-          : "within its printed range"
-        : hi
-          ? `सामान्य सीमा (${r.ref_text}) से बाहर`
-          : `outside its printed range (${r.ref_text})`;
+    const rel = r.status === "normal" ? p.within : p.outside(r.ref_text);
     lines.push(`- **${r.label}** ${r.value} ${r.unit} — ${rel}.`);
   }
 
-  if (matches.length > 0) {
+  // The guideline excerpts and the pattern summaries in src/lib/data.ts exist
+  // only in English and Hindi. Quoting one into, say, a Tamil answer would
+  // splice a paragraph of a different language into the middle of it, so for
+  // the other languages the mock keeps to its own phrasebook. A real model
+  // translates the passage instead; that difference is a property of the mock.
+  const bilingual = lang === "en" || lang === "hi";
+
+  if (bilingual && matches.length > 0) {
     lines.push("");
     lines.push(matches[0].content);
   }
@@ -72,18 +71,16 @@ export function composeMockAnswer(ctx: MockContext): string {
   // payload.patterns[0] unconditionally attaches, e.g., the lipid pattern to a
   // hemoglobin question, which reads as a contradiction next to the result.
   const focusCodes = new Set(focus.map((f) => f.test));
-  const relevant = ctx.patterns.find((p) => p.tests.some((t) => focusCodes.has(t)));
+  const relevant = bilingual
+    ? ctx.patterns.find((pat) => pat.tests.some((t) => focusCodes.has(t)))
+    : undefined;
   if (relevant) {
     lines.push("");
     lines.push(relevant.summary);
   }
 
   lines.push("");
-  lines.push(
-    hi
-      ? "यह निदान नहीं है — कृपया इन परिणामों पर अपने डॉक्टर से चर्चा करें।"
-      : "This is not a diagnosis — please discuss these results with your doctor."
-  );
+  lines.push(p.disclaimer);
   return lines.join("\n");
 }
 

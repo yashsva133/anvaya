@@ -71,6 +71,9 @@ const NAV = [
   { href: "/trends", key: "nav.trends", icon: TrendingUp },
   { href: "/insights", key: "nav.insights", icon: BrainCircuit },
   { href: "/ask", key: "nav.ask", icon: MessageCircleHeart },
+  // Inserted at index 5 on purpose: the mobile bottom nav reads NAV.slice(0, 4)
+  // and NAV[4], so anything before those would reshuffle the tab bar.
+  { href: "/voice", key: "nav.voice", icon: Mic },
   { href: "/doctor", key: "nav.doctor", icon: Stethoscope },
   { href: "/settings", key: "nav.settings", icon: Settings },
 ];
@@ -246,6 +249,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mt-2 grid gap-2">
           {[
             { href: "/insights", icon: BrainCircuit, en: t("nav.insights"), hi: t("nav.insights") },
+            { href: "/voice", icon: Mic, en: t("nav.voice"), hi: t("nav.voice") },
             { href: "/doctor", icon: Stethoscope, en: t("nav.doctor"), hi: t("nav.doctor") },
             { href: "/settings", icon: Settings, en: t("nav.settings"), hi: t("nav.settings") },
             { href: "/settings#sources", icon: BookOpen, en: t("nav.sources"), hi: t("nav.sources") },

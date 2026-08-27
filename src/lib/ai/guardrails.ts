@@ -17,11 +17,20 @@
 import type { LangCode } from "@/lib/data";
 import type { AnonymisedPayload, ConfidenceLevel, GuardResult } from "./types";
 import { allowedNumbers } from "./anonymizer";
-import { SAFE_REDIRECT } from "./prompts";
+import { safeRedirect, emergencyText } from "./translations";
+import { isAnswerLang, type AnswerLang } from "./languages";
 
 /**
  * Questions we refuse before spending a model call.
  * Bilingual: a Hindi-only user must be refused in Hindi, not answered in English.
+ *
+ * COVERAGE LIMIT, stated plainly: these patterns were written for English and
+ * Hindi. A diagnosis request phrased in Tamil or Marathi will not be caught
+ * here and will instead rely on the model plus guardOutput(). To keep that
+ * gap from being invisible, guardInput() tags the turn with
+ * `input_guard_language_uncovered:<lang>` when it screens a language it has no
+ * patterns for, so ai_generations shows exactly which turns were screened by
+ * the weaker path.
  */
 const DIAGNOSIS_REQUESTS: RegExp[] = [
   /\bdo i have\b/i,
@@ -62,10 +71,36 @@ const EMERGENCY_REQUESTS: RegExp[] = [
   /बेहोश/,
 ];
 
-const EMERGENCY_TEXT = {
-  en: "This sounds urgent. Please seek emergency medical care now — call your local emergency number or go to the nearest hospital.\n\nI can only explain results on a laboratory report.",
-  hi: "यह स्थिति तत्काल ध्यान देने योग्य लगती है। कृपया अभी आपातकालीन चिकित्सा सहायता लें — अपने स्थानीय आपातकालीन नंबर पर कॉल करें या निकटतम अस्पताल जाएँ।\n\nमैं केवल लैब रिपोर्ट के परिणाम समझा सकता हूँ।",
-} as const;
+/**
+ * Emergency keywords in the other supported languages.
+ *
+ * WHY THESE EXIST: the input guard is the only thing that escalates a
+ * "I can't breathe" turn to "go to a hospital now" without a model in the loop.
+ * If it only matched English and Hindi, a Tamil-speaking person describing
+ * chest pain would get a polite answer instead of an escalation — a worse
+ * failure than a false positive.
+ *
+ * THEY ARE KEYWORDS, NOT A CLASSIFIER. They deliberately use the specific
+ * multi-word forms a person actually says ("chest pain", "cannot breathe"),
+ * not bare body-part words, so that "why am I tired?" in the same script does
+ * not trigger an ambulance message. A miss is still possible; the model and
+ * guardOutput() remain the backstop, and the coverage flag below records which
+ * path screened the turn.
+ */
+const EMERGENCY_REQUESTS_MULTILINGUAL: RegExp[] = [
+  /বুকের ব্যথা|বুকে ব্যথা|শ্বাস নিতে পারছি না|অজ্ঞান|বিষ খেয়ে/, // Bengali
+  /நெஞ்சு வலி|மார்பு வலி|மூச்சு விட முடியவில்லை|சுயநினைவு இல்ல|விஷம்/, // Tamil
+  /ఛాతీ నొప్పి|ఊపిరి ఆడటం లేదు|స్పృహ కోల్పో|విషం/, // Telugu
+  /छातीत दुखणे|छातीतील वेदना|श्वास घेता येत नाही|बेशुद्ध|विष/, // Marathi
+  /છાતીમાં દુખાવો|શ્વાસ લેવામાં તકલીફ|બેભાન|ઝેર/, // Gujarati
+  /ಎದೆ ನೋವು|ಉಸಿರಾಡಲು ಆಗುತ್ತಿಲ್ಲ|ಪ್ರಜ್ಞಾಹೀನ|ವಿಷ/, // Kannada
+  /നെഞ്ചുവേദന|ശ്വാസം മുട്ടൽ|ബോധം കെട്ട്|വിഷം/, // Malayalam
+  /ਛਾਤੀ ਵਿੱਚ ਦਰਦ|ਸਾਹ ਲੈਣ ਵਿੱਚ ਦਿੱਕਤ|ਬੇਹੋਸ਼|ਜ਼ਹਿਰ/, // Punjabi
+  /سینے میں درد|سانس لینے میں دشواری|بے ہوش|زہر/, // Urdu
+  /ଛାତି ଯନ୍ତ୍ରଣା|ଶ୍ୱାସ ନେବାରେ କଷ୍ଟ|ଅଚେତନ|ବିଷ/, // Odia
+  /বুকৰ ব্যথা|উশাহ লব নোৱাৰি|সংজ্ঞাহীন|বিষ/, // Assamese
+  /छातीमा दुखाइ|सास फेर्न गाह्रो|बेहोस|विष/, // Nepali
+];
 
 /** Patterns that indicate the model produced a diagnosis or dose advice. */
 const DIAGNOSIS_OUTPUT: RegExp[] = [
@@ -100,22 +135,37 @@ function test(question: string, patterns: RegExp[]): boolean {
 }
 
 export type InputGuard =
-  | { blocked: false }
+  | { blocked: false; note?: string }
   | { blocked: true; reason: "emergency" | "diagnosis" | "dosing"; text: string };
 
-/** Screen the question before any model call. */
-export function guardInput(question: string, lang: LangCode): InputGuard {
-  const l2 = lang === "hi" ? "hi" : "en";
-  if (test(question, EMERGENCY_REQUESTS)) {
-    return { blocked: true, reason: "emergency", text: EMERGENCY_TEXT[l2] };
+/**
+ * Screen the question before any model call.
+ *
+ * `lang` is the language the ANSWER will be written in, which is also the
+ * language the refusal text is returned in — a refusal in a language the person
+ * does not read is not a refusal. Accepts any AnswerLang; the older LangCode
+ * values are a subset, so existing callers are unaffected.
+ */
+export function guardInput(question: string, lang: LangCode | AnswerLang): InputGuard {
+  const answerLang: AnswerLang = isAnswerLang(lang) ? lang : "en";
+  if (test(question, EMERGENCY_REQUESTS) || test(question, EMERGENCY_REQUESTS_MULTILINGUAL)) {
+    return { blocked: true, reason: "emergency", text: emergencyText(answerLang) };
   }
   if (test(question, DOSING_REQUESTS)) {
-    return { blocked: true, reason: "dosing", text: SAFE_REDIRECT[l2] };
+    return { blocked: true, reason: "dosing", text: safeRedirect(answerLang) };
   }
   if (test(question, DIAGNOSIS_REQUESTS)) {
-    return { blocked: true, reason: "diagnosis", text: SAFE_REDIRECT[l2] };
+    return { blocked: true, reason: "diagnosis", text: safeRedirect(answerLang) };
   }
-  return { blocked: false };
+  if (inputGuardCovers(answerLang)) return { blocked: false };
+  // Not blocked — but recorded, because this language was screened by the
+  // multilingual keyword list only, not by the reviewed en/hi pattern set.
+  return { blocked: false, note: `input_guard_language_uncovered:${answerLang}` };
+}
+
+/** True when the reviewed English/Hindi pattern set applies to this language. */
+function inputGuardCovers(lang: AnswerLang): boolean {
+  return lang === "en" || lang === "hi";
 }
 
 /**
@@ -187,7 +237,8 @@ export function ungroundedNumbers(text: string, payload: AnonymisedPayload): str
 
 export interface OutputGuardOptions {
   text: string;
-  lang: LangCode;
+  /** Language the answer is written in; decides the replacement text. */
+  lang: LangCode | AnswerLang;
   payload: AnonymisedPayload;
   retrievalSimilarity: number;
   modelConfidence?: number;
@@ -204,7 +255,7 @@ export interface OutputGuardOptions {
  */
 export function guardOutput(opts: OutputGuardOptions): GuardResult {
   const { text, lang, payload } = opts;
-  const l2 = lang === "hi" ? "hi" : "en";
+  const answerLang: AnswerLang = isAnswerLang(lang) ? lang : "en";
   const flags: string[] = [];
   let refusal = false;
 
@@ -232,12 +283,19 @@ export function guardOutput(opts: OutputGuardOptions): GuardResult {
     flags.push(`ungrounded_numbers:${ungrounded.join(",")}`);
   }
 
+  // The diagnosis/dosing output patterns are English + Hindi. Numeric grounding
+  // and the refusal check are language-independent, so the score is still
+  // meaningful, but the phrase screening is weaker in another script — say so.
+  if (!inputGuardCovers(answerLang)) {
+    flags.push(`output_guard_language_uncovered:${answerLang}`);
+  }
+
   // Any unsafe output is replaced wholesale. Partial redaction of a medical
   // sentence is more likely to produce a wrong statement than a clean redirect.
-  // The replacement text is NOT re-screened: SAFE_REDIRECT is authored to avoid
-  // every pattern above, and re-screening it would overwrite the real reason
-  // with a misleading `model_refusal`.
-  const finalText = refusal ? SAFE_REDIRECT[l2] : body;
+  // The replacement text is NOT re-screened: it is authored to avoid every
+  // pattern above, and re-screening it would overwrite the real reason with a
+  // misleading `model_refusal`.
+  const finalText = refusal ? safeRedirect(answerLang) : body;
   if (refusal) flags.push("output_replaced");
 
   // ---- trust score --------------------------------------------------------
