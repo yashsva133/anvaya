@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-// Screen 9 — "Ask About My Report" chat with suggested questions, typing
+// Screen 9 ΓÇö "Ask About My Report" chat with suggested questions, typing
 // state, citations, confidence, listen + feedback. Answers via /api/answer.
 
 import { useEffect, useRef, useState } from "react";
@@ -54,16 +54,16 @@ interface AnswerResponse {
 }
 
 // The report context and the session id are built by src/lib/ai/reportContext.ts,
-// which the voice agent uses too — one definition, so the two surfaces cannot
+// which the voice agent uses too ΓÇö one definition, so the two surfaces cannot
 // drift into sending different personalization payloads.
 
 const SUGGESTED: { en: string; hi: string }[] = [
-  { en: "Why is my hemoglobin low?", hi: "मेरा हीमोग्लोबिन कम क्यों है?" },
-  { en: "What does HbA1c mean?", hi: "HbA1c का क्या मतलब है?" },
-  { en: "Which results changed the most?", hi: "कौन से परिणाम सबसे ज़्यादा बदले?" },
-  { en: "Is my cholesterol pattern concerning?", hi: "क्या मेरा कोलेस्ट्रॉल पैटर्न चिंताजनक है?" },
-  { en: "Explain this like I'm 10.", hi: "इसे बहुत आसान भाषा में समझाएँ।" },
-  { en: "Explain this in Hindi.", hi: "मुझे हिन्दी में समझाएँ।" },
+  { en: "Why is my hemoglobin low?", hi: "αñ«αÑçαñ░αñ╛ αñ╣αÑÇαñ«αÑïαñùαÑìαñ▓αÑïαñ¼αñ┐αñ¿ αñòαñ« αñòαÑìαñ»αÑïαñé αñ╣αÑê?" },
+  { en: "What does HbA1c mean?", hi: "HbA1c αñòαñ╛ αñòαÑìαñ»αñ╛ αñ«αññαñ▓αñ¼ αñ╣αÑê?" },
+  { en: "Which results changed the most?", hi: "αñòαÑîαñ¿ αñ╕αÑç αñ¬αñ░αñ┐αñúαñ╛αñ« αñ╕αñ¼αñ╕αÑç αñ£αñ╝αÑìαñ»αñ╛αñªαñ╛ αñ¼αñªαñ▓αÑç?" },
+  { en: "Is my cholesterol pattern concerning?", hi: "αñòαÑìαñ»αñ╛ αñ«αÑçαñ░αñ╛ αñòαÑïαñ▓αÑçαñ╕αÑìαñƒαÑìαñ░αÑëαñ▓ αñ¬αÑêαñƒαñ░αÑìαñ¿ αñÜαñ┐αñéαññαñ╛αñ£αñ¿αñò αñ╣αÑê?" },
+  { en: "Explain this like I'm 10.", hi: "αñçαñ╕αÑç αñ¼αñ╣αÑüαññ αñåαñ╕αñ╛αñ¿ αñ¡αñ╛αñ╖αñ╛ αñ«αÑçαñé αñ╕αñ«αñ¥αñ╛αñÅαñüαÑñ" },
+  { en: "Explain this in Hindi.", hi: "αñ«αÑüαñ¥αÑç αñ╣αñ┐αñ¿αÑìαñªαÑÇ αñ«αÑçαñé αñ╕αñ«αñ¥αñ╛αñÅαñüαÑñ" },
 ];
 
 export default function AskPage() {
@@ -88,8 +88,8 @@ export default function AskPage() {
       {
         role: "ai",
         text: hi
-          ? `नमस्ते! मैंने आपकी **${reportDate}** की रिपोर्ट पढ़ ली है। आप अपने परिणामों के बारे में कुछ भी पूछ सकते हैं — सरल भाषा में, या बोलकर।`
-          : `Hello! I've read your **${reportDate}** report. Ask anything about your results — in simple words, or by voice.`,
+          ? `αñ¿αñ«αñ╕αÑìαññαÑç! αñ«αÑêαñéαñ¿αÑç αñåαñ¬αñòαÑÇ **${reportDate}** αñòαÑÇ αñ░αñ┐αñ¬αÑïαñ░αÑìαñƒ αñ¬αñóαñ╝ αñ▓αÑÇ αñ╣αÑêαÑñ αñåαñ¬ αñàαñ¬αñ¿αÑç αñ¬αñ░αñ┐αñúαñ╛αñ«αÑïαñé αñòαÑç αñ¼αñ╛αñ░αÑç αñ«αÑçαñé αñòαÑüαñ¢ αñ¡αÑÇ αñ¬αÑéαñ¢ αñ╕αñòαññαÑç αñ╣αÑêαñé ΓÇö αñ╕αñ░αñ▓ αñ¡αñ╛αñ╖αñ╛ αñ«αÑçαñé, αñ»αñ╛ αñ¼αÑïαñ▓αñòαñ░αÑñ`
+          : `Hello! I've read your **${reportDate}** report. Ask anything about your results ΓÇö in simple words, or by voice.`,
         sources: 0,
       },
     ]);
@@ -138,7 +138,7 @@ export default function AskPage() {
         {
           role: "ai",
           text: hi
-            ? "अभी उत्तर उपलब्ध नहीं है। कृपया फिर प्रयास करें।"
+            ? "αñàαñ¡αÑÇ αñëαññαÑìαññαñ░ αñëαñ¬αñ▓αñ¼αÑìαñº αñ¿αñ╣αÑÇαñé αñ╣αÑêαÑñ αñòαÑâαñ¬αñ»αñ╛ αñ½αñ┐αñ░ αñ¬αÑìαñ░αñ»αñ╛αñ╕ αñòαñ░αÑçαñéαÑñ"
             : "I could not answer right now. Please try again.",
         },
       ]);
@@ -157,7 +157,7 @@ export default function AskPage() {
         body: JSON.stringify({
           helpful: dir === "up",
           qa_message_id: msgs[i]?.qaMessageId ?? undefined,
-          // Without the patient id the vote cannot be filed — answer_feedback
+          // Without the patient id the vote cannot be filed ΓÇö answer_feedback
           // is unique per (message, patient) so it knows who voted.
           ...patientRef(patient),
           ...(sessionId ? { session: sessionId } : {}),
@@ -182,7 +182,7 @@ export default function AskPage() {
           className="card-shadow mb-4 flex min-h-14 w-full items-center justify-center gap-2.5 rounded-3xl border-2 border-mint-600 bg-mint-600 px-4 text-base font-extrabold text-white shadow-mint-600/25 transition hover:bg-mint-500 active:scale-[0.99]"
         >
           <Mic className="h-5 w-5" />
-          {t("ask.tapMic")} — {hi ? "हिन्दी में बोलें" : "speak in Hindi"}
+          {t("ask.tapMic")} ΓÇö {hi ? "αñ╣αñ┐αñ¿αÑìαñªαÑÇ αñ«αÑçαñé αñ¼αÑïαñ▓αÑçαñé" : "speak in Hindi"}
         </button>
 
         {/* messages */}
@@ -224,13 +224,13 @@ export default function AskPage() {
                         >
                           <Sparkles className="h-3.5 w-3.5" />
                           {m.engine === "medgemma"
-                            ? `MedGemma · ${m.model ?? "local"}`
+                            ? `MedGemma ┬╖ ${m.model ?? "local"}`
                             : m.engine === "rules"
                               ? hi
-                                ? "सुरक्षित उत्तर"
+                                ? "αñ╕αÑüαñ░αñòαÑìαñ╖αñ┐αññ αñëαññαÑìαññαñ░"
                                 : "Saved answer"
                               : hi
-                                ? "डेमो उत्तर"
+                                ? "αñíαÑçαñ«αÑï αñëαññαÑìαññαñ░"
                                 : "Demo answer"}
                         </span>
                       )}
@@ -258,7 +258,7 @@ export default function AskPage() {
                       )}
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-extrabold text-slate-500">
                         <Languages className="h-3.5 w-3.5" />
-                        {/[\u0900-\u097F]/.test(m.text) ? "हिन्दी" : "English"}
+                        {/[\u0900-\u097F]/.test(m.text) ? "αñ╣αñ┐αñ¿αÑìαñªαÑÇ" : "English"}
                       </span>
                       <ListenBtn compact text={m.text} />
                       <span className="ml-auto flex items-center gap-1">

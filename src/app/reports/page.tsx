@@ -116,10 +116,13 @@ export default function ReportsPage() {
                     isLatest ? "border-brand-300" : "border-slate-100"
                   }`}
                 >
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setOpen(expanded ? null : r.id)}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen(expanded ? null : r.id)}
                     aria-expanded={expanded}
-                    className="flex w-full flex-wrap items-center gap-4 p-5 text-left transition hover:bg-slate-50/60"
+                    className="flex w-full flex-wrap items-center gap-4 p-5 text-left transition hover:bg-slate-50/60 cursor-pointer"
                   >
                     <span
                       className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
@@ -155,9 +158,9 @@ export default function ReportsPage() {
                     {/* mini status dots & action buttons */}
                     <div className="flex items-center gap-2.5 sm:gap-3">
                       <span className="hidden items-center gap-1.5 sm:flex">
-                        {r.entries.slice(0, 8).map((e) => (
+                        {r.entries.slice(0, 8).map((e, i) => (
                           <span
-                            key={e.test}
+                            key={`${e.test}-${i}`}
                             className={`h-2.5 w-2.5 rounded-full ${
                               e.status === "normal"
                                 ? "bg-emerald-400"
@@ -183,7 +186,7 @@ export default function ReportsPage() {
                         />
                       </div>
                     </div>
-                  </button>
+                  </div>
 
                   {expanded && (
                     <motion.div
@@ -192,12 +195,12 @@ export default function ReportsPage() {
                       className="border-t border-dashed border-slate-200 bg-slate-50/40 p-4 sm:p-6"
                     >
                       <div className="grid gap-2.5 sm:gap-3 grid-cols-1 md:grid-cols-2">
-                        {r.entries.map((e) => {
+                        {r.entries.map((e, i) => {
                           const def = catalog[e.test] || TESTS[e.test] || TESTS.hemoglobin;
                           const notNormal = e.status !== "normal";
                           return (
                             <Link
-                              key={e.test}
+                              key={`${e.test}-${i}`}
                               href={`/test/${e.test}`}
                               className={`group flex items-center justify-between gap-3 rounded-2xl border p-3 sm:p-3.5 transition-all hover:-translate-y-0.5 hover:shadow-md ${
                                 notNormal

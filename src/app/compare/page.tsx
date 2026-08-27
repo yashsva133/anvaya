@@ -194,7 +194,7 @@ function CompareInner() {
             const dir = row.to.value > row.from.value ? "up" : row.to.value < row.from.value ? "down" : "flat";
             return (
               <motion.div
-                key={row.test}
+                key={`${row.test}-${i}`}
                 initial={{ opacity: 0, y: 8 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}

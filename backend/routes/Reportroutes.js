@@ -1,102 +1,70 @@
 /**
  * src/routes/reportRoutes.js
- *
- * WHY a separate route file?
- * Routes are just a wiring layer — HTTP verb + path → controller.
- * Keeping validation rules here (next to the path) makes it easy
- * to see at a glance what each endpoint accepts without opening the controller.
  */
 
 import { Router } from "express";
 import { body, param } from "express-validator";
+import { reportLimiter } from "../middleware/ateLimiter.js";
 import {
-  createReportHandler,
+  listReportsHandler,
   getReportHandler,
+  getResultsHandler,
+  correctResultHandler,
+  createReportHandler,
   confirmReportHandler,
-  editResultHandler,
-} from "../Reportcontroller.js";
+} from "../controllers/Reportcontroller.js";
 
 const router = Router();
 
-// ─── Shared validators ───────────────────────────────────────────────────────
+const uuid = (name) => param(name).isUUID(4).withMessage(`${name} must be a valid UUID`);
 
-const uuidParam = (name) =>
-  param(name).isUUID(4).withMessage(`${name} must be a valid UUIDv4`);
+// ── Patient reports list (My Reports screen) ──────────────────────────────────
+// GET /api/patients/:patientId/reports
+router.get("/patients/:patientId/reports", [uuid("patientId")], listReportsHandler);
 
-// ─── Routes ──────────────────────────────────────────────────────────────────
+// ── Single report (also accepts legacy_code like "aug26") ────────────────────
+// GET /api/reports/:idOrCode
+router.get("/reports/:idOrCode", getReportHandler);
 
-/**
- * POST /api/reports
- * Create a report (and optionally its extracted results in one request).
- */
-router.post(
-  "/",
+// ── Extracted results for a report ───────────────────────────────────────────
+// GET /api/reports/:reportId/results
+router.get("/reports/:reportId/results", [uuid("reportId")], getResultsHandler);
+
+// ── Edit result value (goes through anvaya.submit_value_correction) ───────────
+// PATCH /api/reports/:reportId/results/:resultId/correct
+router.patch(
+  "/reports/:reportId/results/:resultId/correct",
   [
-    body("language")
+    uuid("reportId"),
+    uuid("resultId"),
+    body("value").isNumeric().withMessage("value must be numeric"),
+    body("reason").notEmpty().withMessage("reason is required"),
+  ],
+  correctResultHandler
+);
+
+// ── Confirm report ("Looks correct" button) ────────────────────────────────────
+// PATCH /api/reports/:reportId/confirm
+router.patch("/reports/:reportId/confirm", [uuid("reportId")], confirmReportHandler);
+
+// ── Create new report (pipeline entry point after OCR/parsing) ─────────────────
+// POST /api/reports
+router.post(
+  "/reports",
+  reportLimiter,
+  [
+    body("patient_id").isUUID(4).withMessage("patient_id must be a UUID"),
+    body("collected_on").isISO8601().withMessage("collected_on must be an ISO date"),
+    body("upload_channel")
       .optional()
-      .isIn(["en", "hi"])
-      .withMessage("language must be 'en' or 'hi'"),
-    body("results")
-      .optional()
-      .isArray({ min: 1 })
-      .withMessage("results must be a non-empty array"),
-    body("results.*.name")
-      .if(body("results").exists())
-      .notEmpty()
-      .withMessage("Each result must have a name"),
-    body("results.*.value")
-      .if(body("results").exists())
-      .isNumeric()
-      .withMessage("Each result.value must be numeric"),
-    body("results.*.unit")
-      .if(body("results").exists())
-      .notEmpty()
-      .withMessage("Each result must have a unit"),
-    body("results.*.status")
-      .if(body("results").exists())
-      .isIn(["normal", "low", "high"])
-      .withMessage("Each result.status must be 'normal', 'low', or 'high'"),
-    body("results.*.range_label")
-      .if(body("results").exists())
-      .notEmpty()
-      .withMessage("Each result must have a range_label"),
+      .isIn(["camera", "file", "manual", "sample"])
+      .withMessage("upload_channel must be camera|file|manual|sample"),
+    body("results").optional().isArray(),
+    body("results.*.raw_name").if(body("results").exists()).notEmpty(),
+    body("results.*.value").if(body("results").exists()).isNumeric(),
+    body("results.*.unit").if(body("results").exists()).notEmpty(),
   ],
   createReportHandler
-);
-
-/**
- * GET /api/reports/:reportId
- * Fetch a report + all its results — drives the results confirmation page.
- */
-router.get("/:reportId", [uuidParam("reportId")], getReportHandler);
-
-/**
- * PATCH /api/reports/:reportId/confirm
- * "Looks correct" — mark a report as user-confirmed.
- */
-router.patch(
-  "/:reportId/confirm",
-  [uuidParam("reportId")],
-  confirmReportHandler
-);
-
-/**
- * PATCH /api/reports/:reportId/results/:resultId
- * "Edit result" — user corrects one extracted lab value.
- */
-router.patch(
-  "/:reportId/results/:resultId",
-  [
-    uuidParam("reportId"),
-    uuidParam("resultId"),
-    body("value").optional().isNumeric().withMessage("value must be numeric"),
-    body("unit").optional().notEmpty().withMessage("unit cannot be blank"),
-    body("status")
-      .optional()
-      .isIn(["normal", "low", "high"])
-      .withMessage("status must be 'normal', 'low', or 'high'"),
-  ],
-  editResultHandler
 );
 
 export default router;
