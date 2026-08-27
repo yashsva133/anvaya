@@ -45,7 +45,7 @@ export default function DoctorPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-brand-900 px-6 py-5 text-white md:px-8">
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-mint-300">
-              Rxanvaya · {s.lang === "hi" ? "रोगी लैब सारांश" : "Patient lab summary"}
+              Rxअन्वय · {s.lang === "hi" ? "रोगी लैब सारांश" : "Patient lab summary"}
             </p>
             <p className="mt-1 text-xl font-extrabold md:text-2xl">{PATIENT.nameShort}</p>
           </div>

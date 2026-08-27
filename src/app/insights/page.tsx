@@ -227,8 +227,8 @@ export default function InsightsPage() {
         <p className="mt-4 flex items-start gap-2 text-sm font-semibold text-slate-500">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
           {s.lang === "hi"
-            ? "इन्हीं संबंधों की वजह से Rxanvaya पैटर्न पा सकता है — एक संख्या पूरी कहानी नहीं होती।"
-            : "These connections let Rxanvaya find patterns — one number never tells the whole story."}
+            ? "इन्हीं संबंधों की वजह से Rxअन्वय पैटर्न पा सकता है — एक संख्या पूरी कहानी नहीं होती।"
+            : "These connections let Rxअन्वय find patterns — one number never tells the whole story."}
         </p>
       </section>
 
