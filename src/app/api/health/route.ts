@@ -5,6 +5,8 @@
 import { NextResponse } from "next/server";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { describeConfig, loadAiEnv } from "@/lib/ai/env";
+import { loadVoiceEnv } from "@/lib/ai/voiceEnv";
+import { ANSWER_LANGS } from "@/lib/ai/languages";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,14 @@ export async function GET() {
       model: config.model,
       // Ping the model at /api/ai/status — kept off this path so health stays cheap.
       detail: "use GET /api/ai/status to check model reachability",
+    },
+    // Booleans only: whether the optional server-side speech providers are
+    // configured. The browser's own speech APIs need no configuration and are
+    // detected client-side, so they are not reported here.
+    voice: {
+      languages: ANSWER_LANGS.length,
+      server_stt: loadVoiceEnv().sttConfigured,
+      server_tts: loadVoiceEnv().ttsConfigured,
     },
   });
 }

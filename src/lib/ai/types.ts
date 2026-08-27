@@ -10,6 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import type { LangCode, Status } from "@/lib/data";
+import type { AnswerLang } from "./languages";
 
 /**
  * Reading level for an answer.
@@ -165,7 +166,17 @@ export interface AgentAnswer {
   confidence: ConfidenceLevel;
   /** Additive: which path produced the answer. The current UI ignores it. */
   engine: "medgemma" | "rules" | "fallback";
+  /** The UI language the turn was made in. */
   language: LangCode;
+  /**
+   * The language the answer text is ACTUALLY written in. Equal to `language`
+   * for every text turn; may differ for a voice turn when the rule fallback had
+   * to substitute (rules.ts ships English + Hindi only), which is also recorded
+   * in language_note.
+   */
+  answer_lang: AnswerLang;
+  /** Set when the requested answer language could not be honoured. */
+  language_note?: string;
   citations: {
     source_code: string;
     source_title: string;
