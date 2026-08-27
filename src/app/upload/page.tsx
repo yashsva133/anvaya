@@ -5,7 +5,7 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Camera,
   CloudUpload,
@@ -17,6 +17,7 @@ import {
   SquareDashed,
   Sun,
   FileImage,
+  Check,
 } from "lucide-react";
 import { FlowShell, FlowMic } from "@/components/shell";
 import { useI18n } from "@/lib/i18n";
@@ -25,13 +26,24 @@ import { setStoredActiveReport, mapChartDataToEntries } from "@/lib/report-store
 
 const TIP_ICONS = [SquareDashed, Sun, Contrast, ScanLine];
 
+const ANALYZE_STEPS = [
+  { en: "Reading report", hi: "रिपोर्ट पढ़ी जा रही है" },
+  { en: "Finding test values", hi: "परीक्षण मान ढूँढे जा रहे हैं" },
+  { en: "Detecting reference ranges", hi: "सामान्य सीमा पहचानी जा रही है" },
+  { en: "Understanding test names", hi: "परीक्षण नाम समझे जा रहे हैं" },
+  { en: "Checking related results", hi: "संबंधित परिणाम जाँचे जा रहे हैं" },
+];
+
 export default function UploadPage() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { s, t } = useI18n();
+  const hi = s.lang === "hi";
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [analyzeStep, setAnalyzeStep] = useState(0);
 
   const readFile = async (e?: React.ChangeEvent<HTMLInputElement> | any) => {
     let file = null;
@@ -48,7 +60,15 @@ export default function UploadPage() {
       return;
     }
 
-    toast("Uploading and processing...", "info");
+    setIsUploading(true);
+    setAnalyzeStep(0);
+    
+    // Start fake progression up to the second-to-last step
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    ANALYZE_STEPS.slice(0, -1).forEach((_, i) => {
+      timers.push(setTimeout(() => setAnalyzeStep((prev) => Math.max(prev, i + 1)), 1500 + i * 2000));
+    });
+
     const formData = new FormData();
     formData.append("file", file);
 
@@ -58,11 +78,18 @@ export default function UploadPage() {
         body: formData,
       });
 
+      // Clear the fake progression timers
+      timers.forEach(clearTimeout);
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         toast(err.error || "Failed to process report", "error");
+        setIsUploading(false);
         return;
       }
+
+      // Complete the final step!
+      setAnalyzeStep(ANALYZE_STEPS.length);
 
       const data = await res.json();
       
@@ -76,8 +103,11 @@ export default function UploadPage() {
         entries: mapChartDataToEntries(data.chart_data || []),
       });
 
-      router.push("/processing");
+      // Wait a tiny bit for the user to see the final checkmark before redirecting
+      setTimeout(() => router.push("/processing"), 600);
     } catch (err: any) {
+      timers.forEach(clearTimeout);
+      setIsUploading(false);
       toast("Error processing report", "error");
     }
   };
@@ -233,6 +263,63 @@ export default function UploadPage() {
         />
       </Sheet>
       <FlowMic />
+      
+      {/* ------------------------------ Uploading overlay ------------------------------ */}
+      <AnimatePresence>
+        {isUploading && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-brand-950/85 p-6 backdrop-blur-sm"
+          >
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 260, damping: 16 }}
+              className="flex h-20 w-20 items-center justify-center rounded-full bg-mint-500 text-white shadow-lg shadow-mint-500/40"
+            >
+              <Check className="h-10 w-10" strokeWidth={3} />
+            </motion.span>
+            <p className="mt-4 text-center text-lg font-extrabold text-white">
+              {t("scan.success")}
+            </p>
+            <p className="mt-1 text-sm font-semibold text-white/60">
+              {hi ? "आपकी रिपोर्ट समझी जा रही है…" : "Analyzing your report…"}
+            </p>
+
+            <ul className="mt-6 w-full max-w-xs space-y-2.5">
+              {ANALYZE_STEPS.map((st, i) => {
+                const done = analyzeStep > i;
+                return (
+                  <motion.li
+                    key={st.en}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.2 + i * 0.12 }}
+                    className="flex items-center gap-3 text-sm font-bold"
+                  >
+                    <span
+                      className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
+                        done ? "bg-mint-500 text-white" : "bg-white/15 text-white/40"
+                      }`}
+                    >
+                      {done ? (
+                        <Check className="h-3.5 w-3.5" strokeWidth={3.5} />
+                      ) : (
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                      )}
+                    </span>
+                    <span className={done ? "text-white" : "text-white/45"}>
+                      {hi ? st.hi : st.en}
+                    </span>
+                  </motion.li>
+                );
+              })}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </FlowShell>
   );
 }

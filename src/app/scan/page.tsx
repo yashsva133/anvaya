@@ -3,12 +3,14 @@
 // Screen — simulated camera document-scanning experience.
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
+
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Check, ScanSearch, Sun, ZoomIn } from "lucide-react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
+import { useToast } from "@/components/core";
+import { setStoredActiveReport, mapChartDataToEntries } from "@/lib/report-store";
 
 type Stage = { icon: "zoom" | "scan" | "sun"; en: string; hi: string };
 const STAGES: Stage[] = [
@@ -33,22 +35,100 @@ export default function ScanPage() {
   const [captured, setCaptured] = useState(false);
   const [analyzeStep, setAnalyzeStep] = useState(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const toast = useToast();
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+  };
 
   useEffect(() => {
     const cyc = setInterval(() => setIdx((i) => (i + 1) % STAGES.length), 1800);
-    return () => clearInterval(cyc);
-  }, []);
+    
+    // Start camera
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      .then((stream) => {
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      })
+      .catch((err) => {
+        console.error("Camera access denied or unavailable", err);
+        toast("Camera access denied or unavailable", "error");
+      });
+
+    return () => {
+      clearInterval(cyc);
+      stopCamera();
+    };
+  }, [toast]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  const capture = () => {
+  const capture = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    
+    // Draw current video frame to canvas
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    }
+    
     setCaptured(true);
+    
+    // Start visual animation timers
     ANALYZE_STEPS.forEach((_, i) => {
       timers.current.push(setTimeout(() => setAnalyzeStep(i + 1), 700 + i * 620));
     });
-    timers.current.push(
-      setTimeout(() => router.push("/processing"), 700 + ANALYZE_STEPS.length * 620 + 400)
-    );
+
+    // Extract blob and process API
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      
+      const formData = new FormData();
+      formData.append("file", blob, "scan.jpg");
+      
+      try {
+        const res = await fetch("/api/process-report", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          toast(err.error || "Failed to process report", "error");
+          setCaptured(false);
+          return;
+        }
+
+        const data = await res.json();
+        setStoredActiveReport({
+          id: `report-${Date.now()}`,
+          date: { en: "27 Aug 2026", hi: "27 अगस्त 2026" },
+          month: { en: "Aug", hi: "अग." },
+          patient_summary: data.patient_summary,
+          flagged_issues: data.flagged_issues,
+          audio_script: data.audio_script,
+          entries: mapChartDataToEntries(data.chart_data || []),
+        });
+        
+        router.push("/processing");
+      } catch (err) {
+        toast("Error processing report", "error");
+        setCaptured(false);
+      }
+    }, "image/jpeg", 0.9);
   };
 
   const stage = STAGES[idx];
@@ -73,14 +153,20 @@ export default function ScanPage() {
       {/* viewfinder */}
       <div className="relative mx-auto w-full max-w-md flex-1 px-4 pb-4">
         <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-[2rem] border border-white/15 bg-black">
-          <Image
-            src="/images/sample-report.svg"
-            alt="Camera preview of a laboratory report"
-            fill
-            priority
-            className={`object-cover transition-all duration-700 ${
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`absolute inset-0 h-full w-full object-cover transition-all duration-700 ${
               detected ? "scale-105 opacity-90" : "scale-100 opacity-60 blur-[1.5px]"
-            } ${captured ? "opacity-30" : ""}`}
+            } ${captured ? "opacity-0" : "opacity-100"}`}
+          />
+          <canvas
+            ref={canvasRef}
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
+              captured ? "opacity-30" : "opacity-0 pointer-events-none"
+            }`}
           />
 
           {/* scanner frame */}

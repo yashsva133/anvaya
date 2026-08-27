@@ -180,8 +180,12 @@ export async function POST(req: NextRequest) {
     await fs.writeFile(tempInPath, buffer);
 
     try {
-      // Assuming lab_ocr_paddleocr.py is in the root (CWD is the project root when Next.js runs)
-      await execPromise(`python lab_ocr_paddleocr.py --image "${tempInPath}" --out "${tempOutCsv}"`);
+      // Force use of the virtual environment python executable to avoid path resolution issues
+      const pythonExe = process.platform === "win32"
+        ? path.join(process.cwd(), "venv", "Scripts", "python.exe")
+        : path.join(process.cwd(), "venv", "bin", "python");
+        
+      await execPromise(`"${pythonExe}" lab_ocr_paddleocr.py --image "${tempInPath}" --out "${tempOutCsv}"`);
     } catch (err: any) {
       // Clean up on failure
       await fs.unlink(tempInPath).catch(() => {});

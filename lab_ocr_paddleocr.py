@@ -25,6 +25,9 @@ Requires:
 """
 
 import os
+os.environ["FLAGS_enable_pir_api"] = "0"
+os.environ["FLAGS_use_mkldnn"] = "0"
+os.environ["PADDLE_DISABLE_MKLDNN"] = "1"
 import sys
 import re
 import csv
