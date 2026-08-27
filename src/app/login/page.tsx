@@ -12,10 +12,14 @@ import { useAuth } from "@/lib/auth-context";
 type Mode = "login" | "signup";
 
 function friendlyError(mode: Mode, err: unknown) {
-  const msg = err instanceof Error ? err.message.toLowerCase() : "";
+  const originalMsg = err instanceof Error ? err.message : String(err || "");
+  const msg = originalMsg.toLowerCase();
   if (msg.includes("not configured")) return "ANVAYA sign-in is not configured yet. Please add the Supabase environment variables.";
-  if (msg.includes("password")) return mode === "login" ? "Unable to sign in. Please check your email and password." : "Please choose a stronger password of at least 6 characters.";
-  if (msg.includes("already")) return "An account already exists for this email. Please log in instead.";
+  if (msg.includes("already registered") || msg.includes("already exists")) return "An account already exists for this email. Please log in instead.";
+  if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) return "Invalid email or password. Please try again.";
+  if (originalMsg && originalMsg.length > 3 && !originalMsg.includes("object Object")) {
+    return originalMsg;
+  }
   return mode === "login" ? "Unable to sign in. Please check your details and try again." : "Something went wrong while creating your account. Please try again.";
 }
 
@@ -31,11 +35,8 @@ function LoginInner() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (status === "authenticated" && session) {
-      router.replace(profile?.onboarding_completed ? "/dashboard" : "/onboarding");
-    }
-  }, [status, profile, session, router]);
+  // Do not auto-redirect away so the user can actually use the login/signup form or log out
+
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(""); setNotice("");
@@ -45,8 +46,12 @@ function LoginInner() {
     setLoading(true);
     try {
       const authSession = mode === "login" ? await signInWithPassword(email, password) : await signUpWithPassword(email, password);
-      if (authSession.access_token) await setSession(authSession);
-      else setNotice("Please check your email to verify your account before logging in.");
+      if (authSession.access_token) {
+        await setSession(authSession);
+        router.push(mode === "signup" ? "/onboarding" : "/dashboard");
+      } else {
+        setNotice("Please check your email to verify your account before logging in.");
+      }
     } catch (err) { setError(friendlyError(mode, err)); }
     finally { setLoading(false); }
   };
@@ -69,6 +74,34 @@ function LoginInner() {
             <h1 className="mt-4 text-2xl font-extrabold text-brand-950">Welcome to ANVAYA</h1>
             <p className="mt-2 text-sm font-semibold text-slate-500">Sign in to keep your health insights private and personalized.</p>
           </div>
+
+          {status === "authenticated" && session && (
+            <div className="mt-5 rounded-2xl bg-brand-50 p-4 text-left border border-brand-200">
+              <p className="text-xs font-bold text-brand-700 uppercase tracking-wider">Active Session</p>
+              <p className="mt-1 text-sm font-extrabold text-brand-950">{session.user?.email}</p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const { signOut } = await import("@/lib/supabase-auth");
+                    await signOut(session);
+                    await setSession(null);
+                    setNotice("Logged out successfully. You can now test signing up or logging in.");
+                  }}
+                  className="rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-extrabold text-white transition hover:bg-rose-700"
+                >
+                  Log Out
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(profile?.onboarding_completed ? "/dashboard" : "/onboarding")}
+                  className="rounded-xl bg-brand-700 px-3 py-1.5 text-xs font-extrabold text-white transition hover:bg-brand-800"
+                >
+                  Go to Dashboard →
+                </button>
+              </div>
+            </div>
+          )}
           <div className="mt-6 grid grid-cols-2 rounded-full border border-slate-200 bg-slate-50 p-1" role="tablist">
             {(["login", "signup"] as Mode[]).map((m) => <button key={m} onClick={() => setMode(m)} className={`min-h-11 rounded-full text-sm font-extrabold ${mode===m ? "bg-brand-700 text-white shadow" : "text-slate-500"}`}>{m === "login" ? "Log In" : "Sign Up"}</button>)}
           </div>

@@ -83,9 +83,7 @@ function label(v: unknown): string | undefined {
 
 function finiteValue(v: unknown): number | undefined {
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
-  // Allow 0: it is a legitimate lab value for several CBC components (e.g.
-  // basophils 0%, eosinophils 0%). Negative and absurdly large values still fail.
-  if (!Number.isFinite(n) || n < 0 || n > 1_000_000) return undefined;
+  if (!Number.isFinite(n) || n <= 0 || n > 1_000_000) return undefined;
   return Math.round(n * 100) / 100;
 }
 

@@ -28,7 +28,7 @@ import {
 import { useI18n, pick } from "@/lib/i18n";
 import { Logo, Sheet } from "@/components/core";
 import { VoiceSheet } from "@/components/voice";
-import { PATIENT } from "@/lib/data";
+import { useReportData } from "@/context/ReportDataContext";
 import { useAuth } from "@/lib/auth-context";
 import { signOut } from "@/lib/supabase-auth";
 
@@ -95,24 +95,36 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { t, s } = useI18n();
   const { status, session, profile } = useAuth();
+  const { patient } = useReportData();
   const [moreOpen, setMoreOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+
+  // Derive display name: auth profile > patient context > email > fallback
+  const displayName =
+    profile?.full_name ||
+    patient?.nameShort ||
+    pick(patient?.name, s.lang) ||
+    session?.user?.email?.split("@")[0] ||
+    "User";
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w: string) => w[0]?.toUpperCase())
+    .join("") || "U";
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [pathname]);
 
   useEffect(() => {
-    if (status === "unauthenticated") router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-    if (status === "authenticated" && profile?.onboarding_completed !== true && pathname !== "/onboarding") router.replace("/onboarding");
+    if (status === "authenticated" && profile && profile.onboarding_completed === false && pathname !== "/onboarding") {
+      router.replace("/onboarding");
+    }
   }, [status, profile, pathname, router]);
 
   if (status === "loading") {
     return <div className="flex min-h-dvh items-center justify-center bg-brand-50 text-sm font-extrabold text-brand-800">Preparing your ANVAYA experience...</div>;
-  }
-
-  if (status === "unconfigured" || status === "unauthenticated") {
-    return <div className="flex min-h-dvh items-center justify-center bg-brand-50 p-6 text-center"><div className="card-shadow max-w-md rounded-3xl bg-white p-6"><Logo /><p className="mt-4 text-sm font-bold text-slate-600">Please log in to continue. If you are setting up ANVAYA locally, add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.</p><Link href="/login" className="mt-5 inline-flex min-h-12 items-center rounded-2xl bg-brand-700 px-5 font-extrabold text-white">Go to login</Link></div></div>;
   }
 
   const bottomItems = NAV.slice(0, 4); // overview, reports, trends, insights
@@ -174,18 +186,22 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="border-t border-slate-100 p-4">
           <div className="flex items-center gap-3 rounded-2xl bg-brand-50 p-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-700 text-sm font-extrabold text-white">
-              RS
+              {initials}
             </span>
             <div className="leading-tight">
               <p className="text-sm font-extrabold text-brand-900">
-                {pick(PATIENT.name, s.lang)}
+                {displayName}
               </p>
               <p className="text-xs font-semibold text-slate-500">
-                {session?.user.email ?? `${PATIENT.age} · ${pick(PATIENT.gender, s.lang)}`}
+                {session?.user.email ?? `${patient.age} · ${pick(patient.gender, s.lang)}`}
               </p>
             </div>
           </div>
-          <button onClick={() => void signOut(session).then(() => router.replace("/login"))} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-sm font-extrabold text-slate-600 transition hover:border-brand-300 hover:text-brand-800"><LogOut className="h-4 w-4" />Log out</button>
+          {session ? (
+            <button onClick={() => void signOut(session).then(() => router.replace("/login"))} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-sm font-extrabold text-slate-600 transition hover:border-brand-300 hover:text-brand-800"><LogOut className="h-4 w-4" />Log out</button>
+          ) : (
+            <Link href="/login" className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-brand-200 bg-white text-sm font-extrabold text-brand-700 transition hover:bg-brand-50">Sign In</Link>
+          )}
         </div>
       </aside>
 
@@ -196,7 +212,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Link>
         <div className="flex items-center gap-2">
           <QuickLang />
-          <button onClick={() => void signOut(session).then(() => router.replace("/login"))} aria-label="Log out" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"><LogOut className="h-5 w-5" /></button>
+          {session ? (
+            <button onClick={() => void signOut(session).then(() => router.replace("/login"))} aria-label="Log out" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"><LogOut className="h-5 w-5" /></button>
+          ) : (
+            <Link href="/login" className="inline-flex min-h-9 items-center rounded-full border border-brand-200 bg-white px-3 text-xs font-bold text-brand-700">Sign In</Link>
+          )}
           <Link
             href="/settings"
             aria-label="Settings"
@@ -216,7 +236,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {t("disclaimer.banner")}
           </p>
           <p className="mt-1 text-center text-[11px] text-slate-300 md:text-left">
-            Rxanvaya prototype · SIH 2026 · {pick(PATIENT.fictionalNote, s.lang)}
+            Rxanvaya prototype · SIH 2026
           </p>
         </footer>
       </main>
