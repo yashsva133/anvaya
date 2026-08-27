@@ -124,7 +124,7 @@ export default function UploadPage() {
           <div className="flex items-center gap-4 p-4">
             <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-lg border border-slate-200 shadow-sm">
               <Image
-                src="/images/sample-report.svg"
+                src="/images/sample-report.png"
                 alt="Sample laboratory report"
                 fill
                 className="object-cover object-top"

@@ -12,6 +12,7 @@ import {
   ChevronRight,
   CircleAlert,
   GitCommitVertical,
+  Sparkles,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
@@ -231,100 +232,183 @@ export default function TrendsPage() {
 
       {/* report timeline compare */}
       <section className="mt-10">
-        <SectionTitle icon={CalendarDays} title={t("trends.timeline")} />
-        <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-6 md:p-8">
-          <div className="relative">
-            <div className="absolute bottom-5 left-[22px] top-2 w-1 rounded-full bg-gradient-to-b from-mint-200 via-brand-200 to-rose-200 md:left-1/2" />
-            <div className="space-y-6">
-              {[...REPORTS].reverse().map((r, idx) => {
-                const warn = r.attention > 0;
-                const hb = getValue(r.id, "hemoglobin");
-                const a1c = getValue(r.id, "hba1c");
-                return (
-                  <motion.div
-                    key={r.id}
-                    initial={{ opacity: 0, y: 12 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: idx * 0.08 }}
-                    className={`relative flex gap-4 md:w-1/2 ${
-                      idx % 2 === 1
-                        ? "md:ml-auto md:pl-10"
-                        : "md:pr-10 md:text-right md:flex-row-reverse"
+        <SectionTitle
+          icon={CalendarDays}
+          title={t("trends.timeline")}
+          sub={hi ? "समय के साथ आपकी सभी रिपोर्ट्स का विस्तृत तुलनात्मक सफ़रनामा" : "Your chronological journey across all laboratory reports"}
+        />
+
+        <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-7 md:p-8">
+          {/* Vertical Stepped Roadmap */}
+          <div className="relative border-l-[3px] border-dashed border-brand-200 ml-4 sm:ml-6 pl-6 sm:pl-8 space-y-6 sm:space-y-7">
+            {[...REPORTS].reverse().map((r, idx) => {
+              const isLatest = idx === 0;
+              const warn = r.attention > 0;
+              const hb = getValue(r.id, "hemoglobin");
+              const a1c = getValue(r.id, "hba1c");
+              const ldl = getValue(r.id, "ldl");
+              const prevReport = [...REPORTS].reverse()[idx + 1] ?? REPORTS[0];
+
+              return (
+                <motion.div
+                  key={r.id}
+                  initial={{ opacity: 0, x: -12 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.08 }}
+                  className="relative"
+                >
+                  {/* Timeline Node Icon (centered on vertical line) */}
+                  <span
+                    className={`absolute -left-[39px] sm:-left-[47px] top-1.5 flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-2xl border-4 border-white text-xs font-black text-white shadow-md transition-all ${
+                      isLatest
+                        ? "bg-brand-700 ring-4 ring-brand-100"
+                        : warn
+                          ? "bg-amber-500 ring-2 ring-amber-100"
+                          : "bg-emerald-500 ring-2 ring-emerald-100"
                     }`}
                   >
-                    <span
-                      className={`relative z-10 mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-md md:absolute md:left-1/2 md:-translate-x-1/2 ${
-                        idx === 0 ? "bg-brand-700" : warn ? "bg-amber-500" : "bg-mint-500"
-                      }`}
-                    >
-                      <GitCommitVertical className="h-5 w-5" />
-                    </span>
-                    <div
-                      className={`card-shadow flex-1 rounded-3xl border p-4 ${
-                        idx === 0 ? "border-brand-300 bg-brand-50/50" : "border-slate-100 bg-white"
-                      }`}
-                    >
-                      <div className={`flex flex-wrap items-center gap-2 ${idx % 2 === 1 ? "" : "md:justify-end"}`}>
-                        <p className="text-base font-extrabold text-brand-950">
-                          {pick(r.date, s.lang)}
+                    {isLatest ? (
+                      <Sparkles className="h-4 w-4" />
+                    ) : (
+                      <GitCommitVertical className="h-4 w-4" />
+                    )}
+                  </span>
+
+                  {/* Milestone Card */}
+                  <div
+                    className={`card-shadow group rounded-3xl border-2 p-5 sm:p-6 transition-all hover:border-brand-300 hover:shadow-md ${
+                      isLatest
+                        ? "border-brand-200 bg-gradient-to-br from-brand-50/50 via-white to-white"
+                        : "border-slate-100 bg-white"
+                    }`}
+                  >
+                    {/* Header row */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base sm:text-lg font-extrabold text-brand-950">
+                            {pick(r.date, s.lang)}
+                          </h3>
+                          {isLatest && (
+                            <span className="rounded-full bg-brand-700 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-sm">
+                              {t("reports.latest")}
+                            </span>
+                          )}
+                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500">
+                            {r.testsCount} {t("reports.tests")}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-500">
+                          {warn ? (
+                            <span className="text-amber-700 font-extrabold">
+                              ⚠ {r.attention} {t("reports.needAttention")}
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-extrabold">
+                              ✓ {t("reports.allWithin")}
+                            </span>
+                          )}
                         </p>
-                        {idx === 0 && (
-                          <span className="rounded-full bg-brand-700 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white">
-                            {t("reports.latest")}
-                          </span>
-                        )}
                       </div>
-                      <p className="text-xs font-bold text-slate-400">
-                        {r.testsCount} {t("reports.tests")} ·{" "}
-                        {warn ? (
-                          <span className="text-amber-600">
-                            {r.attention} {t("reports.needAttention")}
-                          </span>
-                        ) : (
-                          <span className="text-emerald-600">{t("reports.allWithin")}</span>
-                        )}
-                      </p>
-                      <div className={`mt-2.5 flex flex-wrap gap-2 tabular text-xs font-extrabold text-slate-600 ${idx % 2 === 1 ? "" : "md:justify-end"}`}>
-                        <span className="rounded-lg bg-slate-100 px-2 py-1">
-                          Hb {hb}
-                        </span>
-                        <span className="rounded-lg bg-slate-100 px-2 py-1">
-                          HbA1c {a1c}%
-                        </span>
-                        <Link
-                          href={`/compare?old=${[...REPORTS].reverse()[idx + 1]?.id ?? REPORTS[0].id}&new=${r.id}`}
-                          className="inline-flex items-center gap-1 rounded-lg bg-brand-100 px-2 py-1 text-brand-800 transition hover:bg-brand-200"
-                        >
-                          {t("reports.compare")}
-                          <ChevronRight className="h-3 w-3" />
-                        </Link>
-                      </div>
+
+                      {/* Compare CTA */}
+                      <Link
+                        href={
+                          isLatest
+                            ? `/compare?old=${prevReport.id}&new=${r.id}`
+                            : `/compare?old=${r.id}&new=${REPORTS[REPORTS.length - 1].id}`
+                        }
+                        className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-brand-100/90 px-4 py-2 text-xs font-extrabold text-brand-800 transition hover:bg-brand-200 active:scale-95 shrink-0"
+                      >
+                        {isLatest
+                          ? hi
+                            ? "पिछली रिपोर्ट से तुलना"
+                            : "Compare with previous"
+                          : hi
+                            ? "नवीनतम से तुलना"
+                            : "Compare with latest"}
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </Link>
                     </div>
-                  </motion.div>
-                );
-              })}
-            </div>
+
+                    {/* Key Marker Chips Row */}
+                    <div className="mt-4 flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
+                      <span className="text-xs font-bold text-slate-400 mr-1">
+                        {hi ? "मुख्य मान:" : "Key markers:"}
+                      </span>
+                      {hb != null && (
+                        <span className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold shadow-sm ring-1 ring-slate-100 ${
+                          hb < 12.0 ? "bg-rose-50 text-rose-800" : "bg-slate-50 text-slate-700"
+                        }`}>
+                          <TestIcon testId="hemoglobin" size={18} />
+                          Hb: <span className="tabular">{hb}</span> g/dL
+                        </span>
+                      )}
+                      {a1c != null && (
+                        <span className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold shadow-sm ring-1 ring-slate-100 ${
+                          a1c >= 6.5 ? "bg-rose-50 text-rose-800" : a1c >= 5.7 ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-700"
+                        }`}>
+                          <TestIcon testId="hba1c" size={18} />
+                          HbA1c: <span className="tabular">{a1c}%</span>
+                        </span>
+                      )}
+                      {ldl != null && (
+                        <span className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold shadow-sm ring-1 ring-slate-100 ${
+                          ldl > 130 ? "bg-rose-50 text-rose-800" : "bg-slate-50 text-slate-700"
+                        }`}>
+                          <TestIcon testId="ldl" size={18} />
+                          LDL: <span className="tabular">{ldl}</span> mg/dL
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
 
-          {/* HbA1c steady climb line */}
-          <div className="mt-8 rounded-2xl border border-violet-200 bg-violet-50 p-5">
-            <p className="text-sm font-extrabold text-violet-800">HbA1c</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2 tabular text-lg font-extrabold text-violet-900">
+          {/* HbA1c Long-term Trajectory Highlight */}
+          <div className="mt-8 rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-violet-50/70 via-white to-white p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm">
+                  <TrendingUp className="h-4 w-4" />
+                </span>
+                <p className="text-sm font-extrabold text-violet-950">
+                  {hi ? "दीर्घकालिक रुझान: HbA1c (ब्लड शुगर औसत)" : "Long-term Trajectory: HbA1c (Average Sugar)"}
+                </p>
+              </div>
+              <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-rose-700">
+                +1.3% in 6 mo
+              </span>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-3 tabular text-base sm:text-lg font-extrabold text-violet-900">
               {REPORTS.map((r, i) => (
-                <span key={r.id} className="flex items-center gap-2">
-                  <span
-                    className={`rounded-xl px-3 py-1.5 ${
-                      i === REPORTS.length - 1 ? "bg-rose-600 text-white" : "bg-white shadow-sm"
-                    }`}
-                  >
-                    {getValue(r.id, "hba1c")}
-                  </span>
-                  {i < REPORTS.length - 1 && <ArrowRight className="h-4 w-4 text-violet-400" />}
+                <span key={r.id} className="flex items-center gap-2 sm:gap-3">
+                  <div className="flex flex-col items-center">
+                    <span
+                      className={`rounded-2xl px-3.5 py-1.5 shadow-sm transition ${
+                        i === REPORTS.length - 1
+                          ? "bg-rose-600 text-white shadow-rose-600/30"
+                          : "bg-white text-slate-800 ring-1 ring-slate-200/70"
+                      }`}
+                    >
+                      {getValue(r.id, "hba1c")}%
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400 mt-1">
+                      {pick(r.month, s.lang)}
+                    </span>
+                  </div>
+                  {i < REPORTS.length - 1 && (
+                    <ArrowRight className="h-4 w-4 text-violet-400 mb-4" strokeWidth={2.5} />
+                  )}
                 </span>
               ))}
             </div>
-            <p className="mt-3 text-sm font-bold text-violet-800">
+
+            <p className="mt-3 text-xs sm:text-sm font-semibold leading-relaxed text-slate-600">
               {t("trends.hba1cLine")}
             </p>
           </div>
