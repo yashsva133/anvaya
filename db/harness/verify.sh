@@ -41,6 +41,9 @@ export PGOPTIONS="-c client_min_messages=warning"
 # are supposed to be byte-for-byte equivalent.
 echo "== schema / migration equivalence =="
 python3 "$HERE/resplice_schema.py" --check
+# Same guarantee for the paste-and-run build: every sql_editor_part must be an
+# exact concatenation of the migrations its header lists.
+python3 "$HERE/resplice_parts.py" --check
 
 "$PSQL" -d postgres -q \
   -c "drop database if exists $DB;" \
@@ -123,6 +126,33 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# The SQL-Editor parts build: exactly what an operator does with
+# db/sql_editor_parts — five pastes, one at a time, in order, as the SQL
+# Editor role. This is the documented operator path, so it is applied and
+# schema-diffed here just like the single-file build.
+# ---------------------------------------------------------------------------
+PARTS_DB="${PARTS_DB:-anvaya_sql_editor_parts}"
+echo "== parts build: five pastes of sql_editor_parts as '$EDITOR_ROLE' =="
+"$PSQL" -d postgres -q \
+  -c "drop database if exists $PARTS_DB;" \
+  -c "create database $PARTS_DB;"
+PGDATABASE="$PARTS_DB" "$PSQL" -v ON_ERROR_STOP=1 -q -f "$HERE/00_supabase_stubs.sql"
+"$PSQL" -d postgres -q -c "alter database $PARTS_DB owner to $EDITOR_ROLE;"
+for f in "$ROOT"/db/sql_editor_parts/0*.sql; do
+  printf '  %-52s' "$(basename "$f")"
+  if out=$(PGDATABASE="$PARTS_DB" "$PSQL" -U "$EDITOR_ROLE" -v ON_ERROR_STOP=1 -q -f "$f" 2>&1); then
+    echo "OK"
+  else
+    echo "FAILED"; echo "$out" | head -20; exit 1
+  fi
+done
+if [ "$(dump_migrations "$DB")" = "$(dump_migrations "$PARTS_DB")" ]; then
+  echo "  parts build produced the same $(dump_migrations "$PARTS_DB" | wc -l) relations as the migrations"
+else
+  echo "  DIVERGENCE between migrations/ and sql_editor_parts/"; exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # The same read-only verification an operator runs in the Supabase SQL Editor.
 # Run against the migrations build (policies present) and the single-file build
 # (policies deliberately absent), so both a full PASS and the expected
@@ -133,3 +163,31 @@ echo "== post-apply verification: migrations build (expect 11 PASS) =="
 
 echo "== post-apply verification: single-file build (expect check 6 FAIL until the dashboard step) =="
 "$PSQL" -d "$SINGLE_DB"  -U "$EDITOR_ROLE" -v ON_ERROR_STOP=1 -f "$HERE/99_verify_supabase.sql"
+
+echo "== post-apply verification: parts build (expect check 6 FAIL until the dashboard step) =="
+"$PSQL" -d "$PARTS_DB"   -U "$EDITOR_ROLE" -v ON_ERROR_STOP=1 -f "$HERE/99_verify_supabase.sql"
+
+# ---------------------------------------------------------------------------
+# The dangling-reference diagnostic must run clean on a build that only ever
+# contained Anvaya objects: catalog scans, the live probe, and the
+# "nothing found" verdict. If Anvaya's own SQL ever grows a reference to a
+# relation it does not create, this catches it.
+# ---------------------------------------------------------------------------
+echo "== dangling-reference diagnostic on the finished build (expect 0 findings) =="
+# (verify.sh exports client_min_messages=warning; the diagnostic reports through
+#  NOTICEs, so re-enable them for these two runs.)
+out=$(PGOPTIONS="-c client_min_messages=notice" "$PSQL" -d "$DB" -U "$EDITOR_ROLE" -v ON_ERROR_STOP=1 -f "$HERE/90_diagnose_dangling_references.sql" 2>&1)
+echo "$out" | grep -E 'diag: (NOTHING|[0-9]+ finding)' || { echo "  diagnostic produced no verdict"; exit 1; }
+echo "$out" | grep -q 'diag: NOTHING' || { echo "  UNEXPECTED findings:"; echo "$out" | grep 'diag \[' | head -20; exit 1; }
+
+# The self-test: plant the one carrier class that survives a table drop (a
+# PL/pgSQL body — bodies are free text with no dependency tracking, and the
+# body text mentions "structured" although no such table exists), confirm the
+# diagnostic names it, then remove it.
+echo "== diagnostic self-test: planted stale function body must be found =="
+PGDATABASE="$DB" "$PSQL" -U "$EDITOR_ROLE" -q -c \
+  "create function public.__diag_selftest_fn() returns int language plpgsql
+     as \$\$ begin perform 1 from structured; return 0; end \$\$;"
+out=$(PGOPTIONS="-c client_min_messages=notice" "$PSQL" -d "$DB" -U "$EDITOR_ROLE" -v ON_ERROR_STOP=1 -f "$HERE/90_diagnose_dangling_references.sql" 2>&1)
+echo "$out" | grep -q '__diag_selftest_fn' && echo "  planted stale body was found: OK" || { echo "  diagnostic MISSED the planted stale body"; exit 1; }
+PGDATABASE="$DB" "$PSQL" -U "$EDITOR_ROLE" -q -c "drop function public.__diag_selftest_fn();"

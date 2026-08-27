@@ -18,8 +18,10 @@ under `src/` is untouched; it still runs entirely off the sample constants in
 
 `anvaya_schema.sql` and `migrations/` are byte-for-byte equivalent: the
 single file *is* the migrations, spliced together by
-`harness/resplice_schema.py`. `verify.sh` runs `resplice_schema.py --check`
-first and refuses to continue if they have drifted, and it then applies both
+`harness/resplice_schema.py`. The five `sql_editor_parts/` files are checked
+the same way by `harness/resplice_parts.py`: each part must be an exact
+concatenation of the migrations its header lists. `verify.sh` runs both checks
+first and refuses to continue if anything has drifted, then applies all three
 builds and diffs the resulting schemas.
 
 ## Applying it
@@ -82,6 +84,14 @@ into the SQL Editor. It is a single read-only `SELECT` that reports 11 checks:
 `supabase_storage_admin` with RLS on, all 15 policies present, nothing granted to
 `anon`, and no blanket `true` predicate.
 
+If the SQL Editor reports `ERROR: 42P01: relation "X" does not exist` for a name
+that appears in **no** Anvaya file, paste `harness/90_diagnose_dangling_references.sql`
+(set `v_needle` at the top) into a fresh tab. It scans every place a dropped
+relation's name can survive — PL/pgSQL function bodies, event triggers, trigger
+definitions, views, RLS policy expressions, defaults, constraints — live-probes
+every table and view, and prints the exact `DROP`/`ALTER` for each finding. See
+the troubleshooting section in `sql_editor_parts/README.md`.
+
 ## Verifying locally
 
 ```bash
@@ -102,11 +112,14 @@ then failed in the SQL Editor with `42501`.
 The run applies all 21 migrations **three times** as that role, exercises both
 sides of `0019`'s capability probe, performs the dashboard step as the platform
 admin and re-runs `0019`, runs the 31 behavioural tests, applies
-`anvaya_schema.sql` as one single paste to a second database and diffs the
-result, then runs `99_verify_supabase.sql` against both.
+`anvaya_schema.sql` as one single paste to a second database, applies the five
+`sql_editor_parts` as five pastes to a third database, diffs all three builds,
+then runs `99_verify_supabase.sql` against each — and finishes by running the
+dangling-reference diagnostic against the clean build (expect 0 findings) plus a
+self-test in which a planted stale PL/pgSQL body must be found.
 
-Last run: exit 0, 63 migration applications OK, 0 failures,
-`ALL BEHAVIOUR TESTS PASSED`, both builds → 39 base tables + 6 views.
+Last run: exit 0, all builds OK, 0 failures,
+`ALL BEHAVIOUR TESTS PASSED`, all builds → 39 base tables + 6 views.
 
 The harness never touches a real Supabase project and needs no credentials.
 
