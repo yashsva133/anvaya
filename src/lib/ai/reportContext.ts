@@ -23,8 +23,28 @@ export interface ContextReport {
 }
 
 export interface ContextPatient {
+  /** The patients.id uuid, when the profile came from Supabase. */
+  id?: string;
   age: number;
   gender: { en: string };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The `patientId` field the AI endpoints accept, present only when the id is a
+ * real `patients` uuid.
+ *
+ * The conversation tables (voice_sessions, qa_messages, answer_feedback) are
+ * keyed to a patient, so without this the server had nothing to file a turn
+ * against and skipped those writes entirely. The seeded demo profile has no id,
+ * and inventing one would attach AI rows to a person who does not exist — so in
+ * demo mode this deliberately sends nothing and persistence stays off.
+ *
+ * Spread it into the request body:  { q, ...patientRef(patient), report }
+ */
+export function patientRef(patient: { id?: string }): { patientId?: string } {
+  return patient.id && UUID_RE.test(patient.id) ? { patientId: patient.id } : {};
 }
 
 /** The exact JSON body field `report` that /api/answer accepts. */

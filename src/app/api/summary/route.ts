@@ -15,6 +15,7 @@
 import { NextResponse } from "next/server";
 import { parseClientReport } from "@/lib/ai/clientReport";
 import { loadAiEnv } from "@/lib/ai/env";
+import { persistSummary } from "@/lib/ai/persistence";
 import { generateOverviewSummary } from "@/lib/ai/summary";
 import type { LangCode } from "@/lib/data";
 import type { ReadingLevel } from "@/lib/ai/types";
@@ -52,6 +53,22 @@ export async function POST(req: Request) {
     env,
   });
 
+  // Best-effort provenance: the generation, its anonymisation record, the
+  // retrieval + matches, and the summary text itself as a versioned
+  // ai_explanations row against this report. Never blocks the response.
+  let persisted: Awaited<ReturnType<typeof persistSummary>> | undefined;
+  if (env.persistence) {
+    persisted = await persistSummary({
+      db: env.db,
+      summary,
+      labReportId: report?.reportId,
+      readingLevel: reading,
+      temperature: env.ai.temperature,
+      maxTokens: env.ai.maxTokens,
+      provider: env.ai.provider,
+    });
+  }
+
   return NextResponse.json({
     headline: summary.headline,
     body: summary.body,
@@ -73,6 +90,9 @@ export async function POST(req: Request) {
     prompt_key: summary.prompt_key,
     prompt_version: summary.prompt_version,
     latency_ms: summary.latency_ms,
+    generation_id: persisted?.generation_id ?? null,
+    explanation_id: persisted?.explanation_id ?? null,
+    persisted: persisted ? (persisted.errors?.length ? "partial" : "ok") : "off",
     mode: env.live ? "live" : "demo",
   });
 }

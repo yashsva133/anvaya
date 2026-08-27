@@ -15,6 +15,7 @@ import { NextResponse } from "next/server";
 import { parseClientReport } from "@/lib/ai/clientReport";
 import { loadAiEnv } from "@/lib/ai/env";
 import { generateInsights } from "@/lib/ai/insights";
+import { persistInsights } from "@/lib/ai/persistence";
 import type { LangCode } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,23 @@ export async function POST(req: Request) {
     maxPatterns: max,
   });
 
+  // Best-effort: one ai_generations row per card, the findings themselves as
+  // report_patterns + report_pattern_members (linked to this report's actual
+  // test_results), and each narrative as an ai_explanations row against the
+  // finding. Never blocks the response.
+  let persisted: Awaited<ReturnType<typeof persistInsights>> | undefined;
+  if (env.persistence) {
+    persisted = await persistInsights({
+      db: env.db,
+      insights: result,
+      labReportId: report?.reportId,
+      readingLevel: simple ? "simple" : "advanced",
+      temperature: env.ai.temperature,
+      maxTokens: env.ai.maxTokens,
+      provider: env.ai.provider,
+    });
+  }
+
   return NextResponse.json({
     patterns: result.patterns.map((p) => ({
       id: p.id,
@@ -77,6 +95,8 @@ export async function POST(req: Request) {
     prompt_key: result.prompt_key,
     prompt_version: result.prompt_version,
     latency_ms: result.latency_ms,
+    pattern_ids: persisted?.pattern_ids ?? null,
+    persisted: persisted ? (persisted.errors?.length ? "partial" : "ok") : "off",
     mode: env.live ? "live" : "demo",
   });
 }

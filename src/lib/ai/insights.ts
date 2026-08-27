@@ -26,7 +26,13 @@ import { MockProvider } from "./mock";
 import { detectPatterns, seededCopy, type DetectedPattern } from "./patterns";
 import { createProvider, type ChatMessage, type Provider } from "./providers";
 import { renderChunksForPrompt, retrieve } from "./rag";
-import type { AnonymisedPayload, AnonymisedTrend, RetrievedChunk } from "./types";
+import type {
+  AnonymisedPayload,
+  AnonymisedTrend,
+  GenerationOutput,
+  RetrievalResult,
+  RetrievedChunk,
+} from "./types";
 
 export const INSIGHT_PROMPT_KEY = "pattern_insight";
 export const INSIGHT_PROMPT_VERSION = "2026-08-27.1";
@@ -236,6 +242,16 @@ export interface InsightPattern extends DetectedPattern {
   /** Set when the seeded copy was used instead of a generation. */
   fallback_reason?: string;
   safety_flags: string[];
+  /**
+   * Per-card provenance. Each connection gets its OWN retrieval and its own
+   * model call, so the audit trail has to be per card too — this is what
+   * persistInsights writes into rag_retrievals, ai_generations and
+   * explanation_citations for each finding. Absent only when no model ran.
+   */
+  retrieval?: RetrievalResult;
+  generation?: GenerationOutput;
+  trust_score?: number;
+  trust_formula?: string;
 }
 
 export interface InsightsResult {
@@ -426,7 +442,11 @@ export async function generateInsights(opts: InsightsOptions): Promise<InsightsR
       });
 
       if (generation.error_code || !generation.text.trim()) {
-        return fallbackCard(p, generation.error_code ?? "empty_response");
+        return {
+          ...fallbackCard(p, generation.error_code ?? "empty_response"),
+          retrieval,
+          generation,
+        };
       }
 
       const guard = guardOutput({
@@ -445,7 +465,7 @@ export async function generateInsights(opts: InsightsOptions): Promise<InsightsR
       if (guard.refusal_detected) {
         const card = fallbackCard(p, "guard_replaced");
         card.safety_flags = guard.safety_flags;
-        return card;
+        return { ...card, retrieval, generation, trust_score: guard.trust_score };
       }
 
       const { expl, risk } = splitParagraphs(guard.final_text);
@@ -458,6 +478,10 @@ export async function generateInsights(opts: InsightsOptions): Promise<InsightsR
         engine: "medgemma",
         model: generation.model,
         safety_flags: guard.safety_flags,
+        retrieval,
+        generation,
+        trust_score: guard.trust_score,
+        trust_formula: guard.trust_formula,
       };
     })
   );

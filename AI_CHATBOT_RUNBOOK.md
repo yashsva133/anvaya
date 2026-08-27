@@ -353,29 +353,96 @@ the assembled prompt, and the exact age appears only as the band `40-49`.
 ## 6. Database writes
 
 `persistence.ts` writes over Supabase's PostgREST REST API (`/rest/v1`), so no
-driver dependency was added. Writes are best-effort: a persistence failure
-never turns a correct answer into a failed request; it is reported in the
-response's `persist_errors` instead.
+driver dependency was added. Writes are best-effort: a persistence failure never
+turns a correct answer into a failed request; the response carries
+`persisted: "ok" | "partial" | "off"` and the failing table names come back in
+the `errors` list of the internal result.
 
-**Two things are required before rows land:**
+Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (schema applied per
+`db/README.md`) and every AI surface files its own audit trail:
 
-1. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set. The schema is applied per
-   `db/README.md`.
-2. **A `patient_id`.** `voice_sessions.patient_id` is `NOT NULL`, and
-   `answer_feedback.patient_id` is too. There is no auth in this repository yet,
-   so no identity can be resolved. Rather than guess one, persistence skips those
-   two tables and reports `patient_id_missing`. Wiring auth (`auth.uid()` →
-   `patients.id`) is the remaining step; `persistTurn()` already accepts
-   `patientId` and `labReportId` arguments.
+| Surface | Tables written |
+| --- | --- |
+| `POST /api/summary` | `rag_retrievals` + `rag_retrieval_matches`, `anonymization_records`, `ai_generations` (`report_summary`), `ai_explanations` (subject = the report), `explanation_citations` |
+| `POST /api/insights` | the above per card (`pattern_insight`), plus `pattern_templates`, `report_patterns`, `report_pattern_members`, and one `ai_explanations` row per finding |
+| `POST /api/answer` | `rag_retrievals` + matches, `anonymization_records`, `ai_generations` (`qa_answer`), `voice_sessions`, `qa_messages` ×2 |
+| `POST /api/feedback` | `answer_feedback` |
 
-Until then, `ai_generations`, `rag_retrievals` and `rag_retrieval_matches` are
-the tables that can be written without an identity, and they are.
+### The corpus is seeded on first write
+
+`rag_retrieval_matches.rag_chunk_id` and `explanation_citations.rag_chunk_id`
+are foreign keys to `rag_chunks`, and retrieval runs in-process over the
+constants in `src/lib/ai/rag.ts`. Those two facts used to be irreconcilable: the
+writer sent the local chunk id (`"cdc-a1c#excerpt"`) into a uuid column, so
+every match insert failed silently and no citation chain existed in the
+database at all.
+
+`ensureCorpus()` now upserts `rag_sources` → `rag_documents` (version =
+`RAG_INDEX_VERSION`) → `rag_chunks` once per process, storing the local id in
+`rag_chunks.external_vector_id` — the same column a FAISS index would key on
+(§7) — and keeps an in-memory map from it to the uuid. Citations resolve, and
+the chain `ai_explanations → explanation_citations → rag_chunks → rag_documents
+→ rag_sources` answers "what did this sentence stand on?" from SQL alone.
+
+### Identity
+
+The client sends `patientId` only when the profile came from Supabase
+(`patientRef()` in `src/lib/ai/reportContext.ts`) and `report.reportId` is used
+as `lab_report_id` only when it is a real uuid. In demo mode both are absent, so
+the conversation and pattern tables are skipped with `patient_id_missing` /
+`lab_report_id_missing` rather than being filled with invented keys — the
+generation rows are still written, because they contain no identity.
+
+### Explanations are versioned, not overwritten
+
+`ai_explanations` is unique per (subject, language, reading level) with one
+`is_current` row, so a regenerated summary retires the previous row and inserts
+`version + 1`. Chat turns deliberately do **not** write an explanation: their
+subject would be the report, so every question asked would retire that report's
+summary. A turn's text lives in `qa_messages`, and its evidence is still
+reachable through `qa_messages.generation_id → ai_generations.retrieval_id →
+rag_retrieval_matches`.
+
+### Still no PHI
+
+`ai_generations.input_snapshot` receives the anonymised payload only (results,
+trends, patterns, age band, sex, pseudonym). The link back to a person is
+`anonymization_id` — one `anonymization_records` row per generation, carrying
+the removed/retained field lists, a keyed `subject_digest` and the payload hash.
+That record needs a real `lab_report_id`, since asserting "this report was
+de-identified" is meaningless without the report.
+
+### Reading level
+
+Migration `0023_reading_level_advanced.sql` adds `'advanced'` to
+`anvaya_reading_level`, which the UI has been sending since the Simple/Advanced
+picker landed. On a deployment that has not run 0023, the writer catches the
+enum error and retries as `standard` rather than dropping the row.
 
 The `anvaya` schema is deliberately not in `pgrst.db_schemas`
 (`ANVAYA_DATABASE_SPEC.md` §10.3), so the SQL functions —
 `has_active_consent()`, `set_review_status()`, `release_report()` — still need a
 direct connection. Nothing in the AI backend calls them yet; the consent gate
 (`has_active_consent(patient_id, 'ai_explanation')`) belongs with the auth work.
+
+### Seeing the writes without a Supabase project
+
+`scripts/fake-supabase.mjs` is a ~150-line stand-in for PostgREST (same idea as
+`fake-ollama.mjs`): POST returns the row with a generated uuid, GET filters on
+`eq`, `on_conflict` upserts merge, and everything is dumped on request.
+
+```bash
+node scripts/fake-supabase.mjs &
+SUPABASE_URL=http://127.0.0.1:54999 SUPABASE_SERVICE_ROLE_KEY=fake \
+  AI_PROVIDER=mock npm run dev
+
+curl -s localhost:3000/api/summary -H 'content-type: application/json' -d @report.json
+curl -s localhost:54999/__counts            # rows per table
+curl -s localhost:54999/__dump | jq '.ai_generations[0]'
+```
+
+It enforces no constraints and no types — it shows what the app *sends*; what
+must be true of the schema still lives in `db/migrations`.
 
 ---
 
@@ -413,6 +480,11 @@ and everything downstream stay identical.
 | `/api/ask` page | `curl /ask` | HTTP 200, renders |
 | `/api/feedback` | vote without Supabase | `{"ok":true,"persisted":false,"mode":"demo"}` |
 | Lint (touched files) | `npx eslint src/lib/ai src/app/api src/app/ask/page.tsx` | clean |
+| **Every AI table written** | `scripts/fake-supabase.mjs` + `/api/summary`, `/api/insights`, `/api/answer`, `/api/feedback` | 17 tables populated: 5 `rag_sources`, 5 `rag_documents`, 43 `rag_chunks`, 5 `rag_retrievals`, 15 `rag_retrieval_matches`, 3 `anonymization_records`, 5 `ai_generations`, 4 `ai_explanations`, 12 `explanation_citations`, 3 `pattern_templates`, 3 `report_patterns`, 8 `report_pattern_members`, `voice_sessions`, 2 `qa_messages`, `answer_feedback` |
+| Column coverage | dump of `ai_generations` | only `model_confidence` and the two error columns null — the mock provider returns no confidence and nothing failed |
+| No PHI in `input_snapshot` | same dump | pseudonym, age band, sex, dates, results only; the identity link is `anonymization_id` |
+| Idempotency | ran `/api/summary` and `/api/insights` twice | corpus, templates, patterns and members unchanged; the summary explanation became v2 `is_current`, v1 retired |
+| Demo mode (no uuids) | same call without `patientId` / with `reportId: "r1"` | `persisted: "partial"`, generation written, conversation + pattern tables skipped by design |
 
 The pipeline assertions cover: PHI absence, age-banding, retrieval correctness
 in both scripts, prompt hashing, input and output guardrails, renderer

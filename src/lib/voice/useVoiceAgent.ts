@@ -32,6 +32,7 @@ import {
 import {
   buildReportContext,
   conversationId,
+  patientRef,
   type ContextPatient,
   type ContextReport,
 } from "@/lib/ai/reportContext";
@@ -395,6 +396,7 @@ export function useVoiceAgent(opts: UseVoiceAgentOptions): VoiceAgent {
         channel: "voice",
         reading,
         ...(sessionIdRef.current ? { session: sessionIdRef.current } : {}),
+        ...patientRef(patient),
         report: buildReportContext({ activeReport, reports, patient, lang: uiLang }),
       };
 
