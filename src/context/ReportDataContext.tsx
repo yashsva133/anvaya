@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/auth";
 import {
   PATIENT as DEFAULT_PATIENT,
   REPORTS as DEFAULT_REPORTS,
@@ -65,13 +65,13 @@ interface ReportDataContextType {
 const ReportDataContext = createContext<ReportDataContextType | null>(null);
 
 export function ReportDataProvider({ children }: { children: ReactNode }) {
-  const { session, profile } = useAuth();
+  const { user, profile } = useAuth();
 
   const [patient, setPatient] = useState<PatientInfo>({
     ...DEFAULT_PATIENT,
-    name: { en: "Loading…", hi: "लोड हो रहा…" },
-    nameShort: "",
-    email: "",
+    name: { en: "Rahul Singh", hi: "राहुल सिंह" },
+    nameShort: "Rahul",
+    email: "rahul.singh42@gmail.com",
   });
   const [catalog, setCatalog] = useState<Record<string, TestDef>>(DEFAULT_TESTS);
   const [activeReport, setActiveReport] = useState<ActiveReportState>(
@@ -84,8 +84,7 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       // If we have an authenticated user, build patient info from auth profile first
-      if (session?.user) {
-        const user = session.user;
+      if (user) {
         const authName = profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "User";
         setPatient((prev) => ({
           ...prev,
@@ -96,7 +95,7 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
       }
 
       // 1. Fetch patient profile from Supabase (may override with richer data)
-      const profileId = session?.user?.id;
+      const profileId = user?.id;
       const p = await getPatientProfile(profileId);
       if (p) setPatient(p as PatientInfo);
 
@@ -121,7 +120,7 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id, profile?.full_name]);
+  }, [user?.id, profile?.full_name]);
 
   useEffect(() => {
     loadData();

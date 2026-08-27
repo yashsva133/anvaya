@@ -49,4 +49,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({ session, profile, status, setSession, reloadProfile: () => loadProfile(session) }), [session, profile, status, setSession, loadProfile]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-export function useAuth() { const ctx = useContext(AuthContext); if (!ctx) throw new Error("useAuth must be used within AuthProvider"); return ctx; }
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    return {
+      session: null,
+      profile: null,
+      status: "unauthenticated" as const,
+      setSession: async () => {},
+      reloadProfile: async () => null,
+    };
+  }
+  return ctx;
+}

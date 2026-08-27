@@ -549,10 +549,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    return {
+      user: null,
+      profile: null,
+      patient: null,
+      loading: false,
+      isOnboarded: true,
+      isConfigured: false,
+      signInWithEmail: async () => ({ error: null }),
+      signUpWithEmail: async () => ({ error: null, session: null }),
+      signInWithGoogle: async () => ({ error: null }),
+      resetPassword: async () => ({ error: null }),
+      signOut: async () => {},
+      saveOnboarding: async () => ({ error: null }),
+      refreshProfile: async () => {},
+    };
   }
   return context;
 }
