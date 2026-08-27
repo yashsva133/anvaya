@@ -182,6 +182,14 @@ export interface RetrieveOptions {
   lang: LangCode;
   topK: number;
   minScore: number;
+  /**
+   * Personalization hook: topics derived from the user's own report, used
+   * ONLY when the question itself names no test ("explain my report",
+   * "what should I discuss with my doctor"). A question that does name a test
+   * is always answered from what it asked about, never from what the report
+   * happens to contain.
+   */
+  extraTopics?: string[];
 }
 
 /**
@@ -191,7 +199,10 @@ export interface RetrieveOptions {
 export function retrieve(opts: RetrieveOptions): RetrievalResult {
   const started = Date.now();
   const { query, lang, topK, minScore } = opts;
-  const topics = matchTopics(query);
+  let topics = matchTopics(query);
+  if (topics.length === 0 && opts.extraTopics && opts.extraTopics.length > 0) {
+    topics = [...new Set(opts.extraTopics)].slice(0, 4);
+  }
   const l2 = lang === "hi" ? "hi" : "en";
 
   const scored = CHUNKS.map((c) => ({ chunk: c, score: scoreChunk(c, query, topics) }))

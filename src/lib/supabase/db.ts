@@ -125,9 +125,13 @@ export async function getLabTestCatalog(): Promise<Record<string, TestDef>> {
               vs_en: item.description_very_simple_en || fallback.what.vs_en,
               vs_hi: item.description_very_simple_hi || fallback.what.vs_hi,
             },
+            icon: fallback.icon,
+            tint: fallback.tint,
+            ink: fallback.ink,
             why: fallback.why,
             causes: fallback.causes,
             todo: fallback.todo,
+            conf: fallback.conf,
             sources: fallback.sources,
             related: fallback.related,
           };
