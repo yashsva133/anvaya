@@ -1,7 +1,28 @@
+# Virtual Environments
+myenv/
 .venv/
+venv/
+env/
+ENV/
+
+# Python cache and bytecode
 __pycache__/
+*.py[cod]
+*$py.class
 *.pyc
+
+# Web / Node
 node_modules/
 .next/
 .env.local
 .env*.local
+
+# Paddle / Model cache
+.paddlex/
+official_models/
+
+# OS / IDE artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
