@@ -11,10 +11,13 @@ import { ReportDataProvider } from "@/context/ReportDataContext";
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <I18nProvider>
-      <ToastProvider><AuthProvider>{children}</AuthProvider></ToastProvider>
-      <ReportDataProvider>
-        <ToastProvider>{children}</ToastProvider>
-      </ReportDataProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <ReportDataProvider>
+            {children}
+          </ReportDataProvider>
+        </AuthProvider>
+      </ToastProvider>
     </I18nProvider>
   );
 }
