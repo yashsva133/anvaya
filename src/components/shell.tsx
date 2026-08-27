@@ -28,7 +28,7 @@ import {
 import { useI18n, pick } from "@/lib/i18n";
 import { Logo, Sheet } from "@/components/core";
 import { VoiceSheet } from "@/components/voice";
-import { PATIENT } from "@/lib/data";
+import { useReportData } from "@/context/ReportDataContext";
 import { useAuth } from "@/lib/auth-context";
 import { signOut } from "@/lib/supabase-auth";
 
@@ -95,8 +95,23 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { t, s } = useI18n();
   const { status, session, profile } = useAuth();
+  const { patient } = useReportData();
   const [moreOpen, setMoreOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+
+  // Derive display name: auth profile > patient context > email > fallback
+  const displayName =
+    profile?.full_name ||
+    patient?.nameShort ||
+    pick(patient?.name, s.lang) ||
+    session?.user?.email?.split("@")[0] ||
+    "User";
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w: string) => w[0]?.toUpperCase())
+    .join("") || "U";
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
@@ -171,14 +186,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="border-t border-slate-100 p-4">
           <div className="flex items-center gap-3 rounded-2xl bg-brand-50 p-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-700 text-sm font-extrabold text-white">
-              RS
+              {initials}
             </span>
             <div className="leading-tight">
               <p className="text-sm font-extrabold text-brand-900">
-                {pick(PATIENT.name, s.lang)}
+                {displayName}
               </p>
               <p className="text-xs font-semibold text-slate-500">
-                {session?.user.email ?? `${PATIENT.age} · ${pick(PATIENT.gender, s.lang)}`}
+                {session?.user.email ?? `${patient.age} · ${pick(patient.gender, s.lang)}`}
               </p>
             </div>
           </div>
@@ -221,7 +236,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {t("disclaimer.banner")}
           </p>
           <p className="mt-1 text-center text-[11px] text-slate-300 md:text-left">
-            Rxanvaya prototype · SIH 2026 · {pick(PATIENT.fictionalNote, s.lang)}
+            Rxanvaya prototype · SIH 2026
           </p>
         </footer>
       </main>
