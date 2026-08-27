@@ -23,6 +23,7 @@ import {
 import {
   getStoredActiveReport,
   getStoredReportsHistory,
+  deleteStoredReport,
   type ActiveReportState,
 } from "@/lib/report-store";
 import {
@@ -51,6 +52,7 @@ interface ReportDataContextType {
   getEntry: (testId: string) => ReportEntry | undefined;
   getTestDef: (testId: string) => TestDef;
   refresh: () => Promise<void>;
+  deleteReport: (reportId: string) => Promise<boolean>;
 }
 
 const ReportDataContext = createContext<ReportDataContextType | null>(null);
@@ -129,6 +131,35 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
     [catalog]
   );
 
+  const deleteReport = useCallback(
+    async (reportId: string): Promise<boolean> => {
+      // 1. Optimistically update local context state
+      setReports((prev) => prev.filter((r) => r.id !== reportId));
+
+      // 2. Delete from localStorage
+      deleteStoredReport(reportId);
+      setActiveReport(getStoredActiveReport());
+
+      // 3. Delete from Supabase backend if connected
+      try {
+        const res = await fetch("/api/delete-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reportId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+          console.warn("[DELETE REPORT] DB deletion note:", data.error);
+        }
+      } catch (e) {
+        console.warn("[DELETE REPORT] Fallback local delete only:", e);
+      }
+
+      return true;
+    },
+    []
+  );
+
   return (
     <ReportDataContext.Provider
       value={{
@@ -142,6 +173,7 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
         getEntry,
         getTestDef,
         refresh: loadData,
+        deleteReport,
       }}
     >
       {children}

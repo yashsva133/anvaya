@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0014
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0014
 -- Doctor review workflow, report versions, translations, releases
 -- ----------------------------------------------------------------------------
 -- Purpose   : The DOCTOR REVIEW -> FINAL REPORT -> PATIENT stages as a real

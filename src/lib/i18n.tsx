@@ -1,6 +1,6 @@
 "use client";
 
-// Rxanvaya — language + accessibility context (EN / हिन्दी / বাংলা-ish subset)
+// RxAnvaya — language + accessibility context (EN / हिन्दी / বাংলা-ish subset)
 
 import {
   createContext,
@@ -38,7 +38,7 @@ type Dict = Record<string, string>;
 const EN: Dict = {
   "app.tagline": "Understand your health report. In simple language.",
   "app.taglineShort": "Your report, explained simply.",
-  "app.name": "Rxanvaya",
+  "app.name": "RxAnvaya",
 
   "nav.overview": "Overview",
   "nav.reports": "My Reports",
@@ -47,12 +47,13 @@ const EN: Dict = {
   "nav.ask": "Ask AI",
   "nav.voice": "Voice Assistant",
   "nav.sources": "Sources",
-  "nav.doctor": "Doctor Summary",
+  "nav.doctor": "Patient Lab Summary",
+  "nav.compare": "Compare Reports",
   "nav.settings": "Settings",
   "nav.home": "Home",
   "nav.more": "More",
   "nav.how": "How it works",
-  "nav.why": "Why Rxanvaya",
+  "nav.why": "Why RxAnvaya",
 
   "common.continue": "Continue",
   "common.back": "Back",
@@ -89,7 +90,7 @@ const EN: Dict = {
   "footer.line2": "Not just what the numbers are.",
   "footer.sub": "AI-assisted laboratory interpretation for patient education — not a diagnosis.",
   "footer.cta1": "Understand Another Report",
-  "footer.cta2": "Generate Doctor Summary",
+  "footer.cta2": "Generate Patient Lab Summary",
 
   "welcome.title": "Understand Your Lab Report",
   "welcome.subtitle":
@@ -144,6 +145,13 @@ const EN: Dict = {
   "dash.borderline": "Needs attention",
   "dash.out": "Outside range",
   "dash.matters": "What matters most?",
+  "dash.mattersMost": "What matters most?",
+  "dash.mattersSub": "Results outside reference range requiring attention or follow-up.",
+  "dash.patternTitle": "AI found a pattern",
+  "dash.patternSub": "Related laboratory tests evaluated together rather than isolated numbers.",
+  "dash.testsConnected": "Tests connected",
+  "dash.allTitle": "Other Tests in This Report",
+  "dash.allSub": "Laboratory indicators within normal or expected reference boundaries.",
   "dash.allResults": "All results",
   "dash.closeToLimit": "Results close to the limit",
   "dash.closeNote":
@@ -224,7 +232,7 @@ const EN: Dict = {
   "ask.notHelpful": "Not helpful",
   "ask.thanks": "Thank you — your feedback improves explanations.",
   "ask.tapMic": "Ask by speaking",
-  "ask.typing": "Rxanvaya is thinking…",
+  "ask.typing": "RxAnvaya is thinking…",
 
   "voice.title": "Voice Assistant",
   "voice.sub": "Ask by voice, in your language. Answers come from your own report.",
@@ -316,7 +324,7 @@ const EN: Dict = {
 const HI: Dict = {
   "app.tagline": "अपनी हेल्थ रिपोर्ट समझें। आसान भाषा में।",
   "app.taglineShort": "आपकी रिपोर्ट, सरल भाषा में।",
-  "app.name": "Rxanvaya",
+  "app.name": "RxAnvaya",
 
   "nav.overview": "मुख्य सारांश",
   "nav.reports": "मेरी रिपोर्ट्स",
@@ -325,12 +333,13 @@ const HI: Dict = {
   "nav.ask": "AI से पूछें",
   "nav.voice": "आवाज़ सहायक",
   "nav.sources": "स्रोत",
-  "nav.doctor": "डॉक्टर सारांश",
+  "nav.doctor": "रोगी लैब सारांश",
+  "nav.compare": "रिपोर्ट तुलना",
   "nav.settings": "सेटिंग्स",
   "nav.home": "होम",
   "nav.more": "और",
   "nav.how": "यह कैसे काम करता है",
-  "nav.why": "Rxanvaya क्यों",
+  "nav.why": "RxAnvaya क्यों",
 
   "common.continue": "आगे बढ़ें",
   "common.back": "वापस",
@@ -367,7 +376,7 @@ const HI: Dict = {
   "footer.line2": "सिर्फ़ संख्याएँ नहीं — इनका मतलब।",
   "footer.sub": "रोगी शिक्षा हेतु AI-सहायता प्राप्त लैब व्याख्या — निदान नहीं।",
   "footer.cta1": "एक और रिपोर्ट समझें",
-  "footer.cta2": "डॉक्टर सारांश बनाएँ",
+  "footer.cta2": "रोगी लैब सारांश बनाएँ",
 
   "welcome.title": "अपनी लैब रिपोर्ट समझें",
   "welcome.subtitle": "अपनी रिपोर्ट अपलोड करें — हम परिणाम सरल भाषा में समझाएँगे।",
@@ -421,6 +430,13 @@ const HI: Dict = {
   "dash.borderline": "ध्यान दें",
   "dash.out": "सीमा से बाहर",
   "dash.matters": "सबसे ज़रूरी क्या है?",
+  "dash.mattersMost": "सबसे ज़रूरी क्या है?",
+  "dash.mattersSub": "वे परिणाम जो सामान्य सीमा से बाहर हैं और जिन पर ध्यान देना चाहिए।",
+  "dash.patternTitle": "AI ने एक पैटर्न पाया",
+  "dash.patternSub": "आपस में जुड़े टेस्ट्स का एक साथ समग्र विश्लेषण।",
+  "dash.testsConnected": "जुड़े हुए टेस्ट",
+  "dash.allTitle": "इस रिपोर्ट के अन्य टेस्ट",
+  "dash.allSub": "वे संकेतक जो सामान्य या अपेक्षित सीमा के भीतर हैं।",
   "dash.allResults": "सभी परिणाम",
   "dash.closeToLimit": "सीमा के पास परिणाम",
   "dash.closeNote": "डॉक्टर एक संख्या के बजाय आपके पूरे स्वास्थ्य को देखते हैं।",
@@ -499,7 +515,7 @@ const HI: Dict = {
   "ask.notHelpful": "उपयोगी नहीं",
   "ask.thanks": "धन्यवाद — आपकी प्रतिक्रिया व्याख्या बेहतर बनाती है।",
   "ask.tapMic": "बोलकर पूछें",
-  "ask.typing": "Rxanvaya सोच रहा है…",
+  "ask.typing": "RxAnvaya सोच रहा है…",
 
   "voice.title": "आवाज़ सहायक",
   "voice.sub": "अपनी भाषा में बोलकर पूछें। उत्तर आपकी ही रिपोर्ट से आते हैं।",
@@ -597,7 +613,8 @@ const BN: Dict = {
   "nav.ask": "AI-কে জিজ্ঞেস করুন",
   "nav.voice": "ভয়েস সহকারী",
   "nav.sources": "সূত্র",
-  "nav.doctor": "ডাক্তার সারাংশ",
+  "nav.doctor": "রোগীর ল্যাব সারাংশ",
+  "nav.compare": "রিপোর্ট তুলনা",
   "nav.settings": "সেটিংস",
   "nav.home": "হোম",
   "nav.more": "আরও",
@@ -612,6 +629,13 @@ const BN: Dict = {
   "status.low": "স্বাভাবিকের চেয়ে কম",
   "dash.title": "আপনার রিপোর্ট",
   "dash.someAttention": "কিছু ফলাফলে মনোযোগ দরকার।",
+  "dash.mattersMost": "সবচেয়ে গুরুত্বপূর্ণ কি?",
+  "dash.mattersSub": "যে ফলাফলগুলি স্বাভাবিক সীমার বাইরে এবং যেগুলিতে নজর দেওয়া দরকার।",
+  "dash.patternTitle": "AI একটি প্যাটার্ন খুঁজে পেয়েছে",
+  "dash.patternSub": "সম্পর্কিত ল্যাব টেস্ট একসাথে মূল্যায়ন করা হয়েছে।",
+  "dash.testsConnected": "সংযুক্ত টেস্ট",
+  "dash.allTitle": "এই রিপোর্টের অন্যান্য টেস্ট",
+  "dash.allSub": "যে সূচকগুলি স্বাভাবিক সীমার মধ্যে রয়েছে।",
   "mode.simple": "সহজ",
   "mode.advanced": "উন্নত",
   "voice.title": "ভয়েস সহকারী",

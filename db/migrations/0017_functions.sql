@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0017
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0017
 -- Privileged functions: identity helpers, audit writer, corrections,
 -- review transitions, release, erasure
 -- ----------------------------------------------------------------------------

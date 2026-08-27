@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-// Rxanvaya — shared UI atoms: brand, status system, voice, charts, overlays.
+// RxAnvaya — shared UI atoms: brand, status system, voice, charts, overlays.
 
 import {
   createContext,
@@ -20,32 +20,39 @@ import {
   ArrowDownCircle,
   ArrowUp,
   ArrowUpCircle,
-  Banana,
-  Bean,
+  Atom,
   BookOpen,
-  Candy,
   Check,
   CheckCircle2,
   ChevronRight,
   Circle,
-  CircleDashed,
-  Donut,
+  CircleDot,
+  Droplet,
   Droplets,
   Flame,
+  FlaskConical,
   Heart,
   HeartPulse,
   Info,
   Layers,
   Mic,
+  Microscope,
   Minus,
+  Percent,
+  PieChart,
+  Pill,
+  Scale,
   ShieldAlert,
   ShieldCheck,
   ShieldPlus,
   Sigma,
   Siren,
+  Sparkles,
+  TestTube2,
   Volume2,
   VolumeX,
   X,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -114,7 +121,7 @@ export function Logo({ withTagline = true }: { withTagline?: boolean }) {
       <LogoMark size={withTagline ? 42 : 36} />
       <div className="leading-tight">
         <p className="text-lg font-extrabold tracking-tight text-brand-900">
-          Rxanvaya
+          RxAnvaya
         </p>
         {withTagline && (
           <p className="text-[11px] font-medium text-slate-500">
@@ -209,19 +216,32 @@ export function StatusPill({
 
 const ICONS: Record<string, LucideIcon> = {
   droplets: Droplets,
+  droplet: Droplet,
   activity: Activity,
   heart: Heart,
   heartpulse: HeartPulse,
-  candy: Candy,
+  sparkles: Sparkles,
+  candy: Sparkles,
+  piechart: PieChart,
   flame: Flame,
-  bean: Bean,
+  flask: FlaskConical,
+  bean: FlaskConical,
   layers: Layers,
+  shield: ShieldCheck,
   shieldplus: ShieldPlus,
-  circledashed: CircleDashed,
-  circle: Circle,
-  donut: Donut,
-  sigma: Sigma,
-  banana: Banana,
+  microscope: Microscope,
+  testtube: TestTube2,
+  scale: Scale,
+  atom: Atom,
+  pill: Pill,
+  circledot: Microscope,
+  circledashed: Microscope,
+  circle: Droplet,
+  percent: TestTube2,
+  donut: TestTube2,
+  sigma: Scale,
+  zap: Atom,
+  banana: Atom,
 };
 
 export function TestIcon({

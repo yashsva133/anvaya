@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0003
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0003
 -- Identity: profiles, patients, doctors
 -- ----------------------------------------------------------------------------
 -- Purpose   : Separate the *auth-facing* row (profiles) from the two

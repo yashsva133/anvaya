@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0009
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0009
 -- validation_results — deterministic rule-engine output (SOURCE OF TRUTH)
 -- ----------------------------------------------------------------------------
 -- Purpose   : The DETERMINISTIC VALIDATION stage. Low / Normal / High /

@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0018
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0018
 -- Row Level Security
 -- ----------------------------------------------------------------------------
 -- Purpose   : Deny-by-default access control for every table, expressed as

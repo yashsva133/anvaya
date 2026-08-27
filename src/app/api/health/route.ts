@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const supabase = getSupabaseBrowserClient();
-  const configured = isSupabaseConfigured;
+  const configured = isSupabaseConfigured();
 
   let dbOk = false;
   if (configured && supabase) {

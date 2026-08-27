@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — post-apply verification
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — post-apply verification
 -- ----------------------------------------------------------------------------
 -- Paste this into the Supabase SQL Editor after applying anvaya_schema.sql (or
 -- the migrations) and after creating the 15 storage policies in the dashboard.

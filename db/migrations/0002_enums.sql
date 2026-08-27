@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0002
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0002
 -- Enum types
 -- ----------------------------------------------------------------------------
 -- Purpose   : Every closed vocabulary used by the application, defined once.

@@ -1,4 +1,4 @@
-# Anvaya / Rxanvaya — Supabase Database Specification
+﻿# Anvaya / RxAnvaya — Supabase Database Specification
 
 **Scope:** database/schema design and implementation analysis only. No application code was modified.
 **Repository inspected at:** commit `21fd2c4` on branch `arena/01a04056-anvaya` (34 tracked files, 7,981 lines under `src/`).

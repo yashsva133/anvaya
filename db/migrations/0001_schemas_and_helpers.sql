@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0001
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0001
 -- Schemas, shared helper functions, updated_at / immutability triggers
 -- ----------------------------------------------------------------------------
 -- Purpose   : Create the `anvaya` schema for privileged (non-PostgREST-exposed)

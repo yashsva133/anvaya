@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0011
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0011
 -- RAG metadata: sources, documents, chunks, retrievals, matches
 -- ----------------------------------------------------------------------------
 -- Purpose   : Persist enough metadata to answer "what source supported this

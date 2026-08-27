@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0016
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0016
 -- Audit trail, deletion requests, persisted errors
 -- ----------------------------------------------------------------------------
 -- Purpose   : Append-only, hash-chained audit records; an explicit erasure

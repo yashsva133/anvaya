@@ -168,6 +168,10 @@ export default function ExtractedPage() {
                   entries: finalEntries,
                 });
 
+                if (typeof window !== "undefined") {
+                  localStorage.setItem("rxanvaya_has_reports", "true");
+                }
+
                 try {
                   const res = await fetch("/api/save-report", {
                     method: "POST",

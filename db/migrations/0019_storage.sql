@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0019
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0019
 -- Supabase Storage buckets, the access predicate, and the object policies
 -- ----------------------------------------------------------------------------
 -- Purpose   : Keep every byte of medical data in PRIVATE buckets, addressed by

@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0013
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0013
 -- Multi-test patterns (the clinical knowledge graph findings)
 -- ----------------------------------------------------------------------------
 -- Purpose   : Model the "Multi-test reasoning" pipeline stage: related results

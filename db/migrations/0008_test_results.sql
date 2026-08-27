@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0008
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0008
 -- test_results — parsed / structured laboratory results
 -- ----------------------------------------------------------------------------
 -- Purpose   : One row per (report, test). Holds the parsed value, its unit, the

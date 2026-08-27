@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0020
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0020
 -- Read models (views) for the app's actual query patterns
 -- ----------------------------------------------------------------------------
 -- Purpose   : Give the UI stable, RLS-respecting read shapes that mirror the
