@@ -429,6 +429,7 @@ export default function LandingPage() {
                 >
                   How it works
                 </Link>
+              </div>
               <div className="mt-4 flex items-center gap-2">
                 <ListenBtn text="Average blood sugar is 7.2 percent. This is higher than usual. This number tells us about your blood sugar over the past few months." />
                 <span className="text-xs font-bold text-slate-400">
