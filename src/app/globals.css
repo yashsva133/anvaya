@@ -71,6 +71,34 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Ensure pointer cursor on all buttons and interactive elements */
+button,
+[role="button"],
+[role="tab"],
+[role="switch"],
+[role="checkbox"],
+[role="radio"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+input[type="file"],
+input[type="checkbox"],
+input[type="radio"],
+select,
+summary,
+a,
+label[for],
+.cursor-pointer {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"],
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
 .tabular {
   font-variant-numeric: tabular-nums;
 }
