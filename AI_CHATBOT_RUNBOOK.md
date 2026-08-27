@@ -138,6 +138,60 @@ values that are actually flagged.
 
 ---
 
+## 2.6 The Overview summary — `POST /api/summary`
+
+The first box on **Overview** (`/dashboard`) is no longer two hard-coded
+sentences. It is a MedGemma briefing that answers the question a person
+actually opens the app with: *where do I stand today, and which way am I
+heading?*
+
+```
+ReportDataContext (activeReport + every earlier report + patient)
+  → buildReportContext()          reportContext.ts — now also sends `history[]`
+  → POST /api/summary { lang, reading, report }
+  → parseClientReport()           clientReport.ts — same trust boundary as chat
+  → buildAnonymisedPayload()      anonymizer.ts — + buildTrends()
+  → retrieve()                    rag.ts — seeded with the flagged/worsening tests
+  → buildSummaryPrompt()          summary.ts — prompt_key "report_overview"
+  → MedGemma → guardOutput()      unsafe output is discarded, not shown
+  → deterministicSummary()        the fallback, from the same numbers
+```
+
+Three properties are worth knowing before changing it:
+
+1. **Trends are computed in code, never by the model.** `buildTrends()` in
+   `anonymizer.ts` produces the direction, the delta and — importantly —
+   whether a value moved *towards* or *away from* its reference range, because
+   a rising value can be an improvement (a low haemoglobin recovering). The
+   model is handed the finished verdicts in a `TREND HISTORY` block and told to
+   explain them, matching the §10.4 rule that the LLM is never the source of
+   truth for a status. Those historical values are added to the guardrail's
+   allowed-number set, so a correct "up 1.3 since February" is not penalised as
+   an invented figure.
+2. **The box is never empty and never misattributed.** With no provider, a
+   model error, a timeout, or a generation the guardrails reject, the response
+   is the deterministic summary composed from the same payload — returned with
+   `engine: "rules"` and a `fallback_reason`, and the card's footer says the
+   text came from the report data rather than from MedGemma. The chat can show
+   a "please ask your doctor" redirect in place of an unsafe answer; an opening
+   summary cannot, so it falls back instead of refusing.
+3. **It regenerates on the inputs that change it** — report, language, reading
+   level — and only on those: an object-identity change from a context
+   re-render must not spend a model call.
+
+Response fields: `headline`, `body` (the markdown bullets), `text`, `speech`
+(markdown stripped, for the Listen button), `engine`, `model`, `confidence`,
+`fallback_reason`, `counts`, `trends[]` (the chips), `reports_compared`,
+`citations[]`.
+
+```bash
+curl -sX POST localhost:3000/api/summary -H 'content-type: application/json' \
+  -d '{"lang":"en","report":{"results":[{"test":"hba1c","value":7.2}],
+       "history":[{"dateLabel":"12 Feb 2026","results":[{"test":"hba1c","value":5.9}]}]}}'
+```
+
+---
+
 ## 3. Running it
 
 ### 3.1 Without a model (works today)
