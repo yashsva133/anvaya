@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 110" width="100%" height="100%" fill="none">
+  <defs>
+    <!-- Brand Gradient -->
+    <linearGradient id="rxGrad" x1="0" y1="0" x2="80" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#0B2A4A" />
+      <stop offset="100%" stopColor="#0F766E" />
+    </linearGradient>
+
+    <!-- Subtle Drop Shadow -->
+    <filter id="logoShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0B2A4A" flood-opacity="0.15" />
+    </filter>
+  </defs>
+
+  <!-- Group: Logo Mark (80x80) -->
+  <g transform="translate(15, 15)" filter="url(#logoShadow)">
+    <!-- Base Rounded Square -->
+    <rect width="80" height="80" rx="24" fill="url(#rxGrad)" />
+
+    <!-- Human-First Medical Cross -->
+    <path
+      d="M34 16 h12 a2.5 2.5 0 0 1 2.5 2.5 v11.5 h11.5 a2.5 2.5 0 0 1 2.5 2.5 v12 a2.5 2.5 0 0 1 -2.5 2.5 H48.5 v11.5 a2.5 2.5 0 0 1 -2.5 2.5 h-12 a2.5 2.5 0 0 1 -2.5 -2.5 V47 H20 a2.5 2.5 0 0 1 -2.5 -2.5 v-12 a2.5 2.5 0 0 1 2.5 -2.5 h11.5 V18.5 A2.5 2.5 0 0 1 34 16 Z"
+      fill="#FFFFFF"
+      opacity="0.96"
+    />
+
+    <!-- Anvaya ("Connection") Neural Nodes -->
+    <path
+      d="M30 61 L22 69 M30 61 L38 69"
+      stroke="#87E0D2"
+      stroke-width="2.8"
+      stroke-linecap="round"
+      opacity="0.95"
+    />
+    <circle cx="30" cy="61" r="3.8" fill="#FFFFFF" />
+    <circle cx="22" cy="69" r="5" fill="#5EEAD4" />
+    <circle cx="38" cy="69" r="5" fill="#5EEAD4" />
+  </g>
+
+  <!-- Group: Brand Typography -->
+  <g transform="translate(112, 0)">
+    <!-- Main Brand Name: Rxअन्वय -->
+    <text
+      x="0"
+      y="62"
+      font-family="'Inter', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+      font-size="44"
+      font-weight="900"
+      letter-spacing="-0.5px"
+    >
+      <tspan fill="#0F766E">Rx</tspan><tspan fill="#0B2A4A">अन्वय</tspan>
+    </text>
+
+    <!-- Tagline: Subtext -->
+    <text
+      x="2"
+      y="88"
+      font-family="'Inter', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+      font-size="14"
+      font-weight="600"
+      fill="#64748B"
+      letter-spacing="0.2px"
+    >
+      Your report, explained simply · अपनी रिपोर्ट समझें
+    </text>
+  </g>
+</svg>

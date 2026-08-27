@@ -788,7 +788,7 @@ export const REPORTS: Report[] = [
   },
   {
     id: "aug26",
-    date: { en: "20 Aug 2026", hi: "20 अगस्त 2026" },
+    date: { en: "22 Aug 2026", hi: "22 अगस्त 2026" },
     month: { en: "Aug", hi: "अग." },
     testsCount: 14,
     attention: 4,

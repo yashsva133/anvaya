@@ -79,7 +79,7 @@ const NAV = [
 const MORE = [
   { href: "/compare", icon: GitCompareArrows, en: "Compare Reports", hi: "रिपोर्ट तुलना" },
   { href: "/how", icon: Workflow, en: "How it works", hi: "यह कैसे काम करता है" },
-  { href: "/why", icon: LifeBuoy, en: "Why Rxanvaya", hi: "Rxanvaya क्यों" },
+  { href: "/why", icon: LifeBuoy, en: "Why Rxअन्वय", hi: "Rxअन्वय क्यों" },
   { href: "/", icon: ArrowLeft, en: "Back to home", hi: "होम पर वापस" },
 ];
 
@@ -103,7 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ------------------------------ Sidebar (desktop) ----------------------------- */}
       <aside className="print:hidden sticky top-0 hidden h-dvh w-72 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
         <div className="px-5 pb-4 pt-6">
-          <Link href="/" aria-label="Rxanvaya home">
+          <Link href="/" aria-label="Rxअन्वय home">
             <Logo />
           </Link>
         </div>
@@ -155,19 +155,44 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="border-t border-slate-100 p-4">
-          <div className="flex items-center gap-3 rounded-2xl bg-brand-50 p-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-700 text-sm font-extrabold text-white">
-              RS
-            </span>
-            <div className="leading-tight">
-              <p className="text-sm font-extrabold text-brand-900">
+          <Link
+            href="/settings"
+            className="flex items-center gap-3 rounded-2xl bg-brand-50 p-3 transition hover:bg-brand-100/70"
+          >
+            <div className="relative">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-700 text-sm font-extrabold text-white">
+                RS
+              </span>
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white shadow ring-1 ring-slate-100">
+                <svg className="h-2.5 w-2.5" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17Z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24Z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15Z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98Z"
+                  />
+                </svg>
+              </span>
+            </div>
+            <div className="min-w-0 flex-1 leading-tight">
+              <p className="truncate text-sm font-extrabold text-brand-900">
                 {pick(PATIENT.name, s.lang)}
               </p>
-              <p className="text-xs font-semibold text-slate-500">
+              <p className="truncate text-xs font-semibold text-slate-500">
                 {PATIENT.age} · {pick(PATIENT.gender, s.lang)}
               </p>
             </div>
-          </div>
+          </Link>
         </div>
       </aside>
 
@@ -197,7 +222,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {t("disclaimer.banner")}
           </p>
           <p className="mt-1 text-center text-[11px] text-slate-300 md:text-left">
-            Rxanvaya prototype · SIH 2026 · {pick(PATIENT.fictionalNote, s.lang)}
+            Rxअन्वय prototype · SIH 2026 · {pick(PATIENT.fictionalNote, s.lang)}
           </p>
         </footer>
       </main>
@@ -302,7 +327,7 @@ export function FlowShell({
               <ArrowLeft className="h-5 w-5" />
             </Link>
           )}
-          <Link href="/" aria-label="Rxanvaya">
+          <Link href="/" aria-label="Rxअन्वय">
             <Logo />
           </Link>
         </div>
@@ -342,7 +367,7 @@ export function HomeNav({ solid = false }: { solid?: boolean }) {
       }`}
     >
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:h-[72px] md:px-6">
-        <Link href="/" aria-label="Rxanvaya home">
+        <Link href="/" aria-label="Rxअन्वय home">
           <Logo />
         </Link>
         <div className="flex items-center gap-2">

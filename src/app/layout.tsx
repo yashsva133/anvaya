@@ -17,10 +17,10 @@ const devanagari = Noto_Sans_Devanagari({
 });
 
 export const metadata: Metadata = {
-  title: "Rxanvaya — Understand your health report. In simple language.",
+  title: "Rxअन्वय — Understand your health report. In simple language.",
   description:
     "AI-assisted laboratory report interpretation for every Indian patient. Upload a report, understand your results in simple words, see trends, and ask questions in your language. Educational, not a diagnosis.",
-  applicationName: "Rxanvaya",
+  applicationName: "Rxअन्वय",
 };
 
 export const viewport: Viewport = {
@@ -31,9 +31,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
       <body
         className={`${inter.variable} ${devanagari.variable} antialiased`}
+        suppressHydrationWarning
       >
         <AppProviders>{children}</AppProviders>
       </body>

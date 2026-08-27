@@ -74,7 +74,7 @@ export default function ScanPage() {
       <div className="relative mx-auto w-full max-w-md flex-1 px-4 pb-4">
         <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-[2rem] border border-white/15 bg-black">
           <Image
-            src="/images/sample-report.png"
+            src="/images/sample-report.svg"
             alt="Camera preview of a laboratory report"
             fill
             priority

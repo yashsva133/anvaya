@@ -63,8 +63,8 @@ export default function AskPage() {
       {
         role: "ai",
         text: hi
-          ? "नमस्ते! मैंने आपकी **20 अगस्त 2026** की रिपोर्ट पढ़ ली है। आप अपने परिणामों के बारे में कुछ भी पूछ सकते हैं — सरल भाषा में, या बोलकर।"
-          : "Hello! I've read your **20 Aug 2026** report. Ask anything about your results — in simple words, or by voice.",
+          ? "नमस्ते! मैंने आपकी **22 अगस्त 2026** की रिपोर्ट पढ़ ली है। आप अपने परिणामों के बारे में कुछ भी पूछ सकते हैं — सरल भाषा में, या बोलकर।"
+          : "Hello! I've read your **22 Aug 2026** report. Ask anything about your results — in simple words, or by voice.",
         sources: 0,
       },
     ]);
