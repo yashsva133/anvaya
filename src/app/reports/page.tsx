@@ -11,6 +11,7 @@ import {
   FileText,
   FolderOpen,
   GitCompareArrows,
+  Sparkles,
   UploadCloud,
 } from "lucide-react";
 import { AppShell } from "@/components/shell";
@@ -26,6 +27,7 @@ export default function ReportsPage() {
   const { t, s } = useI18n();
   const [open, setOpen] = useState<string | null>("aug26");
   const latest = REPORTS[REPORTS.length - 1];
+  const hi = s.lang === "hi";
 
   return (
     <AppShell>
@@ -33,7 +35,7 @@ export default function ReportsPage() {
         <SectionTitle
           icon={FolderOpen}
           title={t("reports.title")}
-          sub={`${REPORTS.length} ${s.lang === "hi" ? "रिपोर्ट्स" : "reports"} · 2026`}
+          sub={`${REPORTS.length} ${hi ? "रिपोर्ट्स" : "reports"} · 2026`}
         />
         <div className="flex gap-2">
           <Link
@@ -53,7 +55,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="mt-6 space-y-3">
+      <div className="mt-6 space-y-4">
         {[...REPORTS].reverse().map((r, idx) => {
           const isLatest = r.id === latest.id;
           const warn = r.attention > 0;
@@ -65,18 +67,18 @@ export default function ReportsPage() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: idx * 0.05 }}
-              className={`card-shadow overflow-hidden rounded-3xl border-2 bg-white ${
-                isLatest ? "border-brand-300" : "border-transparent"
+              className={`card-shadow overflow-hidden rounded-3xl border-2 bg-white transition-all ${
+                isLatest ? "border-brand-300" : "border-slate-100"
               }`}
             >
               <button
                 onClick={() => setOpen(expanded ? null : r.id)}
                 aria-expanded={expanded}
-                className="flex w-full flex-wrap items-center gap-4 p-5 text-left"
+                className="flex w-full flex-wrap items-center gap-4 p-5 text-left transition hover:bg-slate-50/60"
               >
                 <span
-                  className={`flex h-13 w-13 h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl ${
-                    isLatest ? "bg-brand-700 text-white" : "bg-brand-50 text-brand-700"
+                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
+                    isLatest ? "bg-brand-700 text-white shadow-md shadow-brand-900/20" : "bg-brand-50 text-brand-700"
                   }`}
                 >
                   <FileText className="h-6 w-6" />
@@ -92,82 +94,112 @@ export default function ReportsPage() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-sm font-bold text-slate-400">
+                  <p className="mt-0.5 text-xs sm:text-sm font-bold text-slate-400">
                     <CalendarDays className="mr-1 inline h-3.5 w-3.5" />
                     {r.testsCount} {t("reports.tests")} ·{" "}
                     {warn ? (
-                      <span className="text-amber-600">
+                      <span className="text-amber-600 font-extrabold">
                         {r.attention} {t("reports.needAttention")}
                       </span>
                     ) : (
-                      <span className="text-emerald-600">{t("reports.allWithin")}</span>
+                      <span className="text-emerald-600 font-extrabold">{t("reports.allWithin")}</span>
                     )}
                   </p>
                 </div>
+
                 {/* mini status dots */}
-                <span className="hidden items-center gap-1.5 sm:flex">
-                  {r.entries.slice(0, 8).map((e) => (
-                    <span
-                      key={e.test}
-                      className={`h-2.5 w-2.5 rounded-full ${
-                        e.status === "normal"
-                          ? "bg-emerald-400"
-                          : e.status === "borderline"
-                            ? "bg-amber-400"
-                            : "bg-rose-500"
-                      }`}
+                <div className="flex items-center gap-3">
+                  <span className="hidden items-center gap-1.5 sm:flex">
+                    {r.entries.slice(0, 8).map((e) => (
+                      <span
+                        key={e.test}
+                        className={`h-2.5 w-2.5 rounded-full ${
+                          e.status === "normal"
+                            ? "bg-emerald-400"
+                            : e.status === "borderline"
+                              ? "bg-amber-400"
+                              : "bg-rose-500"
+                        }`}
+                      />
+                    ))}
+                  </span>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition group-hover:bg-slate-200">
+                    <ChevronDown
+                      className={`h-5 w-5 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
                     />
-                  ))}
-                </span>
-                <ChevronDown
-                  className={`h-5 w-5 text-slate-400 transition ${expanded ? "rotate-180" : ""}`}
-                />
+                  </div>
+                </div>
               </button>
 
               {expanded && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
-                  className="border-t border-dashed border-slate-200 px-5 pb-5 pt-4"
+                  className="border-t border-dashed border-slate-200 bg-slate-50/40 p-4 sm:p-6"
                 >
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid gap-2.5 sm:gap-3 grid-cols-1 md:grid-cols-2">
                     {r.entries.map((e) => {
                       const def = TESTS[e.test];
+                      const notNormal = e.status !== "normal";
                       return (
                         <Link
                           key={e.test}
                           href={`/test/${e.test}`}
-                          className="flex items-center gap-3 rounded-2xl border border-slate-100 px-3 py-2.5 transition hover:border-brand-300 hover:bg-brand-50/50"
+                          className={`group flex items-center justify-between gap-3 rounded-2xl border p-3 sm:p-3.5 transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                            notNormal
+                              ? "border-amber-200 bg-amber-50/30 hover:border-amber-300 hover:bg-amber-50/60"
+                              : "border-slate-100 bg-white hover:border-brand-200 hover:bg-brand-50/30"
+                          }`}
                         >
-                          <TestIcon testId={e.test} size={34} />
-                          <span className="min-w-0 flex-1 truncate text-sm font-extrabold text-slate-700">
-                            {pick(def.name, s.lang)}
-                          </span>
-                          <span className="tabular text-sm font-extrabold text-brand-900">
-                            {fmtValue(e.value)}
-                          </span>
-                          <StatusPill status={e.status} size="sm" />
+                          <div className="flex items-center gap-3 min-w-0">
+                            <TestIcon testId={e.test} size={40} className="shrink-0" />
+                            <div className="min-w-0">
+                              <p className="font-extrabold text-slate-800 text-sm sm:text-[15px] leading-tight">
+                                {pick(def.name, s.lang)}
+                              </p>
+                              <p className="text-[11px] font-bold text-slate-400 mt-0.5">
+                                {def.ref.text}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 shrink-0">
+                            <div className="text-right">
+                              <p className="tabular font-extrabold text-brand-950 text-base sm:text-lg leading-none">
+                                {fmtValue(e.value)}
+                              </p>
+                              <p className="text-[10px] font-bold text-slate-400 mt-0.5">{def.unit}</p>
+                            </div>
+                            <StatusPill status={e.status} size="sm" />
+                          </div>
                         </Link>
                       );
                     })}
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {isLatest ? (
-                      <Link
-                        href="/dashboard"
-                        className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-brand-700 px-5 text-sm font-extrabold text-white transition hover:bg-brand-600 active:scale-95"
-                      >
-                        {t("reports.open")}
-                      </Link>
-                    ) : (
-                      <Link
-                        href={`/compare?old=${r.id}&new=${latest.id}`}
-                        className="inline-flex min-h-12 items-center gap-2 rounded-2xl border-2 border-brand-200 bg-white px-5 text-sm font-extrabold text-brand-700 transition hover:border-brand-400 active:scale-95"
-                      >
-                        <GitCompareArrows className="h-4 w-4" />
-                        {s.lang === "hi" ? "नवीनतम से तुलना करें" : "Compare with latest"}
-                      </Link>
-                    )}
+
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/60 pt-4">
+                    <p className="text-xs font-semibold text-slate-500">
+                      {hi ? "किसी भी जाँच पर टैप करके विस्तृत व्याख्या और रुझान देखें।" : "Tap any test to see detailed explanations and trends."}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {isLatest ? (
+                        <Link
+                          href="/dashboard"
+                          className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-brand-700 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-brand-600 active:scale-95"
+                        >
+                          <Sparkles className="h-4 w-4" />
+                          {t("reports.open")}
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/compare?old=${r.id}&new=${latest.id}`}
+                          className="inline-flex min-h-11 items-center gap-2 rounded-2xl border-2 border-brand-200 bg-white px-5 text-sm font-extrabold text-brand-700 transition hover:border-brand-400 active:scale-95"
+                        >
+                          <GitCompareArrows className="h-4 w-4" />
+                          {hi ? "नवीनतम से तुलना करें" : "Compare with latest"}
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               )}
