@@ -175,7 +175,7 @@ export default function LandingPage() {
             >
               <div className="card-lift relative overflow-hidden rounded-[2rem] border border-white bg-white">
                 <Image
-                  src="/images/hero-illustration.png"
+                  src="/images/hero-illustration.svg"
                   alt="A patient holding a lab report while Rxanvaya turns numbers into simple visual cards"
                   width={1024}
                   height={1024}
