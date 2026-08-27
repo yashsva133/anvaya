@@ -1,0 +1,655 @@
+-- ============================================================================
+-- Anvaya / Rxanvaya — Supabase migration 0018
+-- Row Level Security
+-- ----------------------------------------------------------------------------
+-- Purpose   : Deny-by-default access control for every table, expressed as
+--             policies for the three Supabase roles (anon, authenticated,
+--             service_role) plus the two application roles (patient, doctor)
+--             carried in profiles.role.
+-- Depends on: 0003-0017
+-- Fresh safe: YES (drop policy if exists before every create)
+--
+-- DESIGN RULES
+--   1. RLS is enabled on EVERY table. A table with no policy is unreadable,
+--      which is the safe failure mode.
+--   2. There is no policy at all on: validation_results (write), audit_logs
+--      (insert), doctor_reviews (write), report_versions (write),
+--      report_releases (write), anonymization_records, system_errors. Those
+--      writes happen only through the SECURITY DEFINER functions in 0017 or
+--      through the service role. "No policy" therefore means "the frontend
+--      cannot do this", which is the point.
+--   3. anon gets NOTHING. Every table requires an authenticated session; even
+--      the non-PHI reference catalogues are gated behind sign-in so that no
+--      clinical vocabulary is enumerable anonymously.
+--   4. service_role bypasses RLS entirely in Supabase. The service key must
+--      never be shipped to the browser — only used from Next.js route handlers.
+-- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- Enable RLS everywhere
+-- ---------------------------------------------------------------------------
+do $do$
+declare
+  r record;
+begin
+  for r in
+    select c.relname
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+      and not c.relrowsecurity
+  loop
+    execute format('alter table public.%I enable row level security', r.relname);
+  end loop;
+end
+$do$;
+
+-- ---------------------------------------------------------------------------
+-- Column guards: RLS is row-level, so privilege escalation through a column
+-- needs its own defence.
+-- ---------------------------------------------------------------------------
+create or replace function public.guard_profile_privileges()
+returns trigger
+language plpgsql
+as $$
+begin
+  if not (anvaya.is_definer_context(tg_relid) or anvaya.is_privileged()) then
+    if new.role   is distinct from old.role
+    or new.status is distinct from old.status then
+      raise exception 'anvaya: role and account status can only be changed by an administrator';
+    end if;
+    if new.id is distinct from old.id then
+      raise exception 'anvaya: profile id is immutable';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_privilege_guard on public.profiles;
+create trigger profiles_privilege_guard
+  before update on public.profiles
+  for each row execute function public.guard_profile_privileges();
+
+create or replace function public.guard_lab_report_core()
+returns trigger
+language plpgsql
+as $$
+begin
+  -- Ownership and existence are never a client decision, in any context.
+  if new.patient_id is distinct from old.patient_id then
+    raise exception 'anvaya: a report cannot be reassigned to another patient';
+  end if;
+  if new.created_at is distinct from old.created_at then
+    raise exception 'anvaya: created_at is immutable';
+  end if;
+  -- The pipeline/review functions run as the table owner; a browser session
+  -- runs as `authenticated` and is refused.
+  if not (anvaya.is_definer_context(tg_relid) or anvaya.is_privileged()) then
+    if new.deleted_at is distinct from old.deleted_at then
+      raise exception 'anvaya: erasure only happens through anvaya.hard_delete_report()';
+    end if;
+    if new.status is distinct from old.status then
+      raise exception 'anvaya: report status is driven by the processing pipeline, not by the client';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists reports_core_guard on public.lab_reports;
+create trigger reports_core_guard
+  before update on public.lab_reports
+  for each row execute function public.guard_lab_report_core();
+
+create or replace function public.guard_patient_identity()
+returns trigger
+language plpgsql
+as $$
+begin
+  if not (anvaya.is_definer_context(tg_relid) or anvaya.is_privileged())
+     and new.profile_id is distinct from old.profile_id then
+    raise exception 'anvaya: patient <-> profile linkage can only be set by an administrator';
+  end if;
+  if new.id is distinct from old.id then
+    raise exception 'anvaya: patient id is immutable';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists patients_identity_guard on public.patients;
+create trigger patients_identity_guard
+  before update on public.patients
+  for each row execute function public.guard_patient_identity();
+
+-- A doctor row must always belong to the caller unless privileged.
+create or replace function public.guard_doctor_identity()
+returns trigger
+language plpgsql
+as $$
+begin
+  if not (anvaya.is_definer_context(tg_relid) or anvaya.is_privileged())
+     and new.profile_id is distinct from old.profile_id then
+    raise exception 'anvaya: doctor <-> profile linkage can only be set by an administrator';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists doctors_identity_guard on public.doctors;
+create trigger doctors_identity_guard
+  before update on public.doctors
+  for each row execute function public.guard_doctor_identity();
+
+-- ---------------------------------------------------------------------------
+-- Grants
+-- ---------------------------------------------------------------------------
+grant usage on schema public to anon, authenticated, service_role;
+grant usage on schema anvaya to service_role;
+
+do $do$
+declare
+  r record;
+begin
+  for r in
+    select c.relname
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind = 'r'
+  loop
+    execute format('grant select on public.%I to authenticated', r.relname);
+    execute format('grant all on public.%I to service_role', r.relname);
+  end loop;
+end
+$do$;
+
+-- INSERT is granted where a patient legitimately creates their own rows; RLS
+-- WITH CHECK then restricts which rows. Everything else stays service-only.
+grant insert on public.patients            to authenticated;
+grant update on public.patients            to authenticated;
+grant insert on public.lab_reports         to authenticated;
+grant update on public.lab_reports         to authenticated;
+grant insert on public.report_files        to authenticated;
+grant insert on public.patient_consents    to authenticated;
+grant insert on public.voice_sessions      to authenticated;
+grant update on public.voice_sessions      to authenticated;
+grant insert on public.qa_messages         to authenticated;
+grant insert, delete on public.answer_feedback to authenticated;
+grant insert, update on public.deletion_requests to authenticated;
+grant select on public.audit_logs          to service_role;
+
+-- audit_logs uses an identity column; the service role needs sequence usage.
+grant usage on all sequences in schema public to service_role;
+
+-- ---------------------------------------------------------------------------
+-- Function privileges
+-- ---------------------------------------------------------------------------
+-- `authenticated` needs USAGE on the anvaya schema so a qualified call can be
+-- resolved. (RLS policies did not need it: a policy expression stores already
+-- resolved function OIDs, so no name lookup happens at execution time. Any
+-- direct call does require it.)
+grant usage on schema anvaya to authenticated;
+
+-- Read-only helpers MUST stay executable by `authenticated`, because RLS
+-- policies invoke them as the querying user.
+--
+-- The five user-initiated state changes also stay executable by `authenticated`
+-- ON PURPOSE: each one authorises against auth.uid() internally, so the real
+-- caller's identity is what is checked. Call them from a Next.js route handler
+-- using a user-scoped Supabase client built from the request's access token —
+-- never with the service key.
+--
+-- The two functions below are pipeline-internal and are NOT callable by a
+-- client session, which closes two holes at the privilege layer as well as by
+-- design:
+--   * anvaya.write_audit      — a client cannot forge an audit entry
+--   * anvaya.classify_value   — a client cannot compute/claim a verdict
+-- Both remain callable by the SECURITY DEFINER functions and by service_role,
+-- which run as the table/function owner.
+revoke execute on function anvaya.write_audit(text, text, text, uuid, uuid, text, jsonb)
+  from public, anon, authenticated;
+revoke execute on function anvaya.classify_value(numeric, numeric, numeric, numeric, numeric, numeric)
+  from public, anon, authenticated;
+grant execute on function anvaya.write_audit(text, text, text, uuid, uuid, text, jsonb)
+  to service_role;
+grant execute on function anvaya.classify_value(numeric, numeric, numeric, numeric, numeric, numeric)
+  to service_role;
+
+-- `anon` needs none of them.
+revoke execute on all functions in schema anvaya from anon;
+revoke execute on all functions in schema public from anon;
+
+comment on schema anvaya is
+  'Privileged helpers. Not in pgrst.db_schemas, so PostgREST exposes none of them as RPC endpoints. Read-only helpers stay executable by `authenticated` because RLS policies call them; state-changing ones authorise against auth.uid().';
+
+
+-- ===========================================================================
+-- POLICIES
+-- ===========================================================================
+
+-- ------------------------------- profiles ----------------------------------
+drop policy if exists profiles_select_own on public.profiles;
+create policy profiles_select_own on public.profiles
+  for select to authenticated
+  using (id = auth.uid() or anvaya.is_admin());
+
+drop policy if exists profiles_update_own on public.profiles;
+create policy profiles_update_own on public.profiles
+  for update to authenticated
+  using (id = auth.uid() or anvaya.is_admin())
+  with check (id = auth.uid() or anvaya.is_admin());
+
+-- No INSERT policy: rows are created by handle_new_auth_user() (SECURITY DEFINER).
+-- No DELETE policy: accounts are closed, not deleted.
+
+-- ------------------------------- patients ----------------------------------
+drop policy if exists patients_select on public.patients;
+create policy patients_select on public.patients
+  for select to authenticated
+  using (
+    profile_id = auth.uid()
+    or anvaya.is_admin()
+    or exists (
+      select 1 from public.doctors d
+      where d.profile_id = auth.uid()
+        and anvaya.has_active_grant(d.id, patients.id)
+    )
+  );
+
+drop policy if exists patients_insert_own on public.patients;
+create policy patients_insert_own on public.patients
+  for insert to authenticated
+  with check (profile_id = auth.uid() or anvaya.is_privileged());
+
+drop policy if exists patients_update_own on public.patients;
+create policy patients_update_own on public.patients
+  for update to authenticated
+  using (profile_id = auth.uid() or anvaya.is_admin())
+  with check (profile_id = auth.uid() or anvaya.is_admin());
+
+-- No DELETE policy: erasure is anvaya.hard_delete_patient().
+
+-- -------------------------------- doctors ----------------------------------
+drop policy if exists doctors_select_own on public.doctors;
+create policy doctors_select_own on public.doctors
+  for select to authenticated
+  using (profile_id = auth.uid() or anvaya.is_admin());
+
+drop policy if exists doctors_update_own on public.doctors;
+create policy doctors_update_own on public.doctors
+  for update to authenticated
+  using (profile_id = auth.uid() or anvaya.is_admin())
+  with check (profile_id = auth.uid() or anvaya.is_admin());
+
+-- -------------------------- doctor_patient_access --------------------------
+drop policy if exists dpa_select on public.doctor_patient_access;
+create policy dpa_select on public.doctor_patient_access
+  for select to authenticated
+  using (
+    anvaya.is_admin()
+    or patient_id = anvaya.current_patient_id()
+    or doctor_id  = anvaya.current_doctor_id()
+  );
+
+-- No write policy: grants are issued by staff/service role only.
+
+-- ---------------------------- consent_policies -----------------------------
+drop policy if exists consent_policies_read on public.consent_policies;
+create policy consent_policies_read on public.consent_policies
+  for select to authenticated
+  using (is_active);
+
+-- ---------------------------- patient_consents -----------------------------
+drop policy if exists consents_select_own on public.patient_consents;
+create policy consents_select_own on public.patient_consents
+  for select to authenticated
+  using (patient_id = anvaya.current_patient_id() or anvaya.is_admin());
+
+-- A patient may record their own decision, for themselves only, and only
+-- referencing a policy that actually exists and is active.
+drop policy if exists consents_insert_own on public.patient_consents;
+create policy consents_insert_own on public.patient_consents
+  for insert to authenticated
+  with check (
+    (patient_id = anvaya.current_patient_id() and status in ('granted', 'withdrawn', 'declined'))
+    or anvaya.is_privileged()
+  );
+
+-- No UPDATE/DELETE policy: the immutable trigger makes this table append-only,
+-- so a withdrawal is a new row that anvaya.has_active_consent() will prefer.
+
+-- ------------------------- reference catalogues ----------------------------
+-- Non-PHI clinical reference data. Readable by any signed-in user; writable
+-- only by the service role / admins.
+drop policy if exists lab_test_read on public.lab_test_catalog;
+create policy lab_test_read on public.lab_test_catalog
+  for select to authenticated using (is_active or anvaya.is_admin());
+
+drop policy if exists aliases_read on public.lab_test_aliases;
+create policy aliases_read on public.lab_test_aliases
+  for select to authenticated using (true);
+
+drop policy if exists rrs_read on public.reference_range_sources;
+create policy rrs_read on public.reference_range_sources
+  for select to authenticated using (true);
+
+drop policy if exists rr_read on public.reference_ranges;
+create policy rr_read on public.reference_ranges
+  for select to authenticated using (true);
+
+drop policy if exists rules_read on public.clinical_rules;
+create policy rules_read on public.clinical_rules
+  for select to authenticated using (true);
+
+drop policy if exists pt_read on public.pattern_templates;
+create policy pt_read on public.pattern_templates
+  for select to authenticated using (is_active or anvaya.is_admin());
+
+-- ------------------------------ lab_reports --------------------------------
+drop policy if exists reports_select on public.lab_reports;
+create policy reports_select on public.lab_reports
+  for select to authenticated
+  using (anvaya.can_access_report(id));
+
+drop policy if exists reports_insert_own on public.lab_reports;
+create policy reports_insert_own on public.lab_reports
+  for insert to authenticated
+  with check (patient_id = anvaya.current_patient_id() or anvaya.is_privileged());
+
+drop policy if exists reports_update_own on public.lab_reports;
+create policy reports_update_own on public.lab_reports
+  for update to authenticated
+  using (anvaya.can_access_report(id) or anvaya.is_privileged())
+  with check (anvaya.can_access_report(id) or anvaya.is_privileged());
+
+-- No DELETE policy. Erasure is anvaya.hard_delete_report().
+
+-- ------------------------------ report_files -------------------------------
+drop policy if exists files_select on public.report_files;
+create policy files_select on public.report_files
+  for select to authenticated
+  using (anvaya.can_access_report(report_id));
+
+drop policy if exists files_insert_own on public.report_files;
+create policy files_insert_own on public.report_files
+  for insert to authenticated
+  with check (anvaya.can_access_report(report_id) or anvaya.is_privileged());
+
+-- ------------------------ report_processing_jobs ---------------------------
+drop policy if exists jobs_select on public.report_processing_jobs;
+create policy jobs_select on public.report_processing_jobs
+  for select to authenticated
+  using (anvaya.can_access_report(report_id));
+
+-- ----------------------------- ocr_results ---------------------------------
+drop policy if exists ocr_select on public.ocr_results;
+create policy ocr_select on public.ocr_results
+  for select to authenticated
+  using (anvaya.can_access_report(report_id));
+
+-- ----------------------------- test_results --------------------------------
+drop policy if exists tr_select on public.test_results;
+create policy tr_select on public.test_results
+  for select to authenticated
+  using (anvaya.can_access_report(report_id));
+
+-- No INSERT/UPDATE policy: extraction is a service-role act and corrections go
+-- through anvaya.submit_value_correction(). This is what makes it impossible
+-- for a patient (or a doctor, or the LLM) to write a value directly.
+
+-- --------------------------- validation_results ----------------------------
+drop policy if exists vr_select on public.validation_results;
+create policy vr_select on public.validation_results
+  for select to authenticated
+  using (
+    exists (
+      select 1 from public.test_results t
+      where t.id = validation_results.test_result_id
+        and anvaya.can_access_report(t.report_id)
+    )
+  );
+
+-- No write policy whatsoever, plus the immutable trigger. This is the single
+-- strongest guarantee in the schema: deterministic classification is read-only
+-- to every client, including a doctor.
+
+-- ------------------------- anonymization_records ---------------------------
+drop policy if exists anon_select_admin on public.anonymization_records;
+create policy anon_select_admin on public.anonymization_records
+  for select to authenticated
+  using (anvaya.is_admin());
+
+-- ---------------------------- RAG metadata ---------------------------------
+drop policy if exists rag_sources_read on public.rag_sources;
+create policy rag_sources_read on public.rag_sources
+  for select to authenticated using (true);
+
+drop policy if exists rag_docs_read on public.rag_documents;
+create policy rag_docs_read on public.rag_documents
+  for select to authenticated using (true);
+
+drop policy if exists rag_chunks_read on public.rag_chunks;
+create policy rag_chunks_read on public.rag_chunks
+  for select to authenticated using (true);
+
+drop policy if exists rag_retrievals_read on public.rag_retrievals;
+create policy rag_retrievals_read on public.rag_retrievals
+  for select to authenticated using (anvaya.is_admin());
+
+drop policy if exists rag_matches_read on public.rag_retrieval_matches;
+create policy rag_matches_read on public.rag_retrieval_matches
+  for select to authenticated using (anvaya.is_admin());
+
+-- ---------------------------- ai_generations -------------------------------
+-- Reachable only through a path the caller is allowed to see: either the
+-- anonymisation record of an accessible report, or one of their own Q&A turns.
+drop policy if exists gen_select on public.ai_generations;
+create policy gen_select on public.ai_generations
+  for select to authenticated
+  using (
+    anvaya.is_admin()
+    or exists (
+      select 1 from public.anonymization_records a
+      where a.id = ai_generations.anonymization_id
+        and anvaya.can_access_report(a.lab_report_id)
+    )
+    or exists (
+      select 1
+      from public.qa_messages m
+      join public.voice_sessions s on s.id = m.session_id
+      where m.generation_id = ai_generations.id
+        and s.patient_id = anvaya.current_patient_id()
+    )
+  );
+
+-- ---------------------------- ai_explanations ------------------------------
+drop policy if exists expl_select on public.ai_explanations;
+create policy expl_select on public.ai_explanations
+  for select to authenticated
+  using (
+    (subject_test_result_id is not null and exists (
+       select 1 from public.test_results t
+       where t.id = ai_explanations.subject_test_result_id
+         and anvaya.can_access_report(t.report_id)))
+    or (subject_report_pattern_id is not null and exists (
+       select 1 from public.report_patterns rp
+       where rp.id = ai_explanations.subject_report_pattern_id
+         and anvaya.can_access_report(rp.report_id)))
+    or (subject_report_id is not null and anvaya.can_access_report(subject_report_id))
+  );
+
+-- -------------------------- explanation_citations --------------------------
+drop policy if exists cit_select on public.explanation_citations;
+create policy cit_select on public.explanation_citations
+  for select to authenticated
+  using (
+    exists (
+      select 1 from public.ai_explanations e
+      where e.id = explanation_citations.explanation_id
+        and (
+             (e.subject_test_result_id is not null and exists (
+                select 1 from public.test_results t
+                where t.id = e.subject_test_result_id
+                  and anvaya.can_access_report(t.report_id)))
+          or (e.subject_report_pattern_id is not null and exists (
+                select 1 from public.report_patterns rp
+                where rp.id = e.subject_report_pattern_id
+                  and anvaya.can_access_report(rp.report_id)))
+          or (e.subject_report_id is not null and anvaya.can_access_report(e.subject_report_id))
+        )
+    )
+  );
+
+-- --------------------------- report_patterns -------------------------------
+drop policy if exists rp_select on public.report_patterns;
+create policy rp_select on public.report_patterns
+  for select to authenticated
+  using (anvaya.can_access_report(report_id));
+
+drop policy if exists rpm_select on public.report_pattern_members;
+create policy rpm_select on public.report_pattern_members
+  for select to authenticated
+  using (
+    exists (
+      select 1 from public.report_patterns rp
+      where rp.id = report_pattern_members.report_pattern_id
+        and anvaya.can_access_report(rp.report_id)
+    )
+  );
+
+-- --------------------------- report_versions -------------------------------
+drop policy if exists rv_select on public.report_versions;
+create policy rv_select on public.report_versions
+  for select to authenticated
+  using (anvaya.can_access_report(report_id));
+
+-- No write policy: versions are created by the pipeline/review functions.
+
+-- ------------------------- report_translations -----------------------------
+drop policy if exists rt_select on public.report_translations;
+create policy rt_select on public.report_translations
+  for select to authenticated
+  using (
+    exists (
+      select 1 from public.report_versions v
+      where v.id = report_translations.report_version_id
+        and anvaya.can_access_report(v.report_id)
+    )
+  );
+
+-- ---------------------------- doctor_reviews -------------------------------
+-- The assigned clinician sees the review; the patient sees that their report is
+-- under review and its outcome, but cannot see or write the clinician's working
+-- notes beyond `comments`, and has no write path at all.
+drop policy if exists dr_select on public.doctor_reviews;
+create policy dr_select on public.doctor_reviews
+  for select to authenticated
+  using (
+    anvaya.is_admin()
+    or doctor_id = anvaya.current_doctor_id()
+    or anvaya.report_patient(report_id) = anvaya.current_patient_id()
+  );
+
+-- No INSERT/UPDATE policy: transitions happen only via anvaya.set_review_status()
+-- and anvaya.release_report(), both of which verify the reviewer identity. A
+-- patient therefore has no route to approving their own report.
+
+-- ---------------------------- report_releases ------------------------------
+drop policy if exists rel_select on public.report_releases;
+create policy rel_select on public.report_releases
+  for select to authenticated
+  using (anvaya.can_access_report(report_id));
+
+-- ---------------------------- voice_sessions -------------------------------
+drop policy if exists vs_select_own on public.voice_sessions;
+create policy vs_select_own on public.voice_sessions
+  for select to authenticated
+  using (patient_id = anvaya.current_patient_id() or anvaya.is_admin());
+
+drop policy if exists vs_insert_own on public.voice_sessions;
+create policy vs_insert_own on public.voice_sessions
+  for insert to authenticated
+  with check (patient_id = anvaya.current_patient_id() or anvaya.is_privileged());
+
+drop policy if exists vs_update_own on public.voice_sessions;
+create policy vs_update_own on public.voice_sessions
+  for update to authenticated
+  using (patient_id = anvaya.current_patient_id())
+  with check (patient_id = anvaya.current_patient_id());
+
+-- ------------------------------ qa_messages --------------------------------
+drop policy if exists qa_select_own on public.qa_messages;
+create policy qa_select_own on public.qa_messages
+  for select to authenticated
+  using (
+    exists (
+      select 1 from public.voice_sessions s
+      where s.id = qa_messages.session_id
+        and s.patient_id = anvaya.current_patient_id()
+    )
+    or anvaya.is_admin()
+  );
+
+drop policy if exists qa_insert_own on public.qa_messages;
+create policy qa_insert_own on public.qa_messages
+  for insert to authenticated
+  with check (
+    exists (
+      select 1 from public.voice_sessions s
+      where s.id = qa_messages.session_id
+        and s.patient_id = anvaya.current_patient_id()
+    )
+    or anvaya.is_privileged()
+  );
+
+-- ---------------------------- answer_feedback ------------------------------
+drop policy if exists fb_select_own on public.answer_feedback;
+create policy fb_select_own on public.answer_feedback
+  for select to authenticated
+  using (patient_id = anvaya.current_patient_id() or anvaya.is_admin());
+
+drop policy if exists fb_insert_own on public.answer_feedback;
+create policy fb_insert_own on public.answer_feedback
+  for insert to authenticated
+  with check (patient_id = anvaya.current_patient_id());
+
+drop policy if exists fb_delete_own on public.answer_feedback;
+create policy fb_delete_own on public.answer_feedback
+  for delete to authenticated
+  using (patient_id = anvaya.current_patient_id());
+
+-- ------------------------------- audit_logs --------------------------------
+-- Admins only. Patients and doctors get no read access: an audit trail is a
+-- compliance artefact, and exposing it would leak who accessed what.
+drop policy if exists audit_select_admin on public.audit_logs;
+create policy audit_select_admin on public.audit_logs
+  for select to authenticated
+  using (anvaya.is_admin());
+
+-- No INSERT policy for authenticated: only anvaya.write_audit() (SECURITY
+-- DEFINER, runs as the table owner and so bypasses RLS) may append.
+
+-- --------------------------- deletion_requests -----------------------------
+drop policy if exists delreq_select on public.deletion_requests;
+create policy delreq_select on public.deletion_requests
+  for select to authenticated
+  using (patient_id = anvaya.current_patient_id() or anvaya.is_admin());
+
+drop policy if exists delreq_insert_own on public.deletion_requests;
+create policy delreq_insert_own on public.deletion_requests
+  for insert to authenticated
+  with check (patient_id = anvaya.current_patient_id() or anvaya.is_privileged());
+
+drop policy if exists delreq_update_admin on public.deletion_requests;
+create policy delreq_update_admin on public.deletion_requests
+  for update to authenticated
+  using (anvaya.is_admin())
+  with check (anvaya.is_admin());
+
+-- ----------------------------- system_errors -------------------------------
+drop policy if exists err_select_admin on public.system_errors;
+create policy err_select_admin on public.system_errors
+  for select to authenticated
+  using (anvaya.is_admin());
