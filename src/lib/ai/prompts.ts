@@ -9,15 +9,26 @@ import type { LangCode } from "@/lib/data";
 import type { AnonymisedPayload, ReadingLevel, RetrievedChunk } from "./types";
 import { renderPayloadForPrompt } from "./anonymizer";
 import { renderChunksForPrompt } from "./rag";
+import { languageOf, type AnswerLang } from "./languages";
+import { safeRedirect } from "./translations";
 
 export const PROMPT_KEY = "qa_answer";
-export const PROMPT_VERSION = "2026-08-27.1";
+// .2 — the user turn now carries an answer language independent of the UI
+// language, and a channel (text | voice) that changes the formatting rules.
+export const PROMPT_VERSION = "2026-08-27.2";
 
-const LANGUAGE_NAME: Record<string, string> = {
-  en: "English",
-  hi: "Hindi (Devanagari script)",
-  bn: "Bengali",
-};
+/**
+ * How a language is named inside the prompt.
+ *
+ * Sourced from the registry rather than a local map: the voice agent offers
+ * fourteen languages and a map that only knew three would have silently
+ * answered Tamil in English. The spelling includes the script so a model cannot
+ * answer Hindi in Latin transliteration — which would read fine on screen and
+ * be unreadable to a Hindi TTS voice.
+ */
+function languageName(lang: AnswerLang): string {
+  return languageOf(lang).promptName;
+}
 
 const READING_LEVEL_RULE: Record<ReadingLevel, string> = {
   // The frontend default. Plain language, but ordinary medical terms are allowed
@@ -33,6 +44,23 @@ const READING_LEVEL_RULE: Record<ReadingLevel, string> = {
   very:
     "Write as if explaining to a 10-year-old. Very short sentences. No medical jargon at all. Use concrete everyday comparisons.",
 };
+
+/**
+ * How the channel changes the formatting rules.
+ *
+ * A voice answer is listened to, not scanned, so the rules that make text
+ * readable (bullets, bold, tables) are exactly the ones that make speech bad:
+ * a text-to-speech voice reads "- " as nothing or as "dash", and ** as
+ * "asterisk". The answer is still shown on screen, so it stays plain prose
+ * rather than becoming a wall of text — short sentences, no list markers.
+ */
+const CHANNEL_RULE = {
+  text: "Format for reading: short paragraphs, and \"- \" bullet lines when you are listing results.",
+  voice:
+    "This answer will be read aloud by a text-to-speech voice. Write plain spoken sentences only: no bullet markers, no asterisks, no symbols such as # or |. Say a reference range the way a person would say it. Keep it under 110 words so it can be listened to in one sitting.",
+} as const;
+
+export type Channel = keyof typeof CHANNEL_RULE;
 
 /**
  * The system prompt. It is a plain string (no interpolation) so its sha256 is
@@ -94,16 +122,32 @@ export interface BuildPromptOptions {
   matches: RetrievedChunk[];
   /** Recent turns, oldest first, for conversational follow-ups. */
   history?: { role: "user" | "assistant"; text: string }[];
+  /**
+   * The language to WRITE IN. Separate from `lang` (the UI language) because
+   * the voice agent lets a person ask in Tamil while the app chrome is Hindi —
+   * defaults to `lang`, so text-only callers behave exactly as before.
+   */
+  answerLang?: AnswerLang;
+  /** "voice" answers are spoken aloud, so they follow the spoken formatting rules. */
+  channel?: Channel;
 }
 
 export function buildPrompt(opts: BuildPromptOptions): PromptBundle {
   const { question, lang, readingLevel, payload, matches } = opts;
-  const langName = LANGUAGE_NAME[lang] ?? "English";
+  const answerLang: AnswerLang = opts.answerLang ?? lang;
+  const langName = languageName(answerLang);
+  const channel: Channel = opts.channel === "voice" ? "voice" : "text";
   const history = opts.history ?? [];
 
   const parts: string[] = [];
   parts.push(`ANSWER LANGUAGE: ${langName}. Write the entire answer in ${langName}.`);
+  if (lang !== answerLang) {
+    parts.push(
+      "The question may be written in another language. Answer in the ANSWER LANGUAGE above, not in the language of the question. Test names, units and numbers stay as they appear in the RESULTS section."
+    );
+  }
   parts.push(READING_LEVEL_RULE[readingLevel]);
+  parts.push(CHANNEL_RULE[channel]);
   parts.push("");
   parts.push("=== RESULTS (the person's own report, de-identified) ===");
   parts.push(renderPayloadForPrompt(payload));
@@ -119,6 +163,11 @@ export function buildPrompt(opts: BuildPromptOptions): PromptBundle {
     parts.push("");
   }
   parts.push("=== QUESTION ===");
+  if (channel === "voice") {
+    parts.push(
+      "(This question was transcribed from speech, so a word may be misheard. Interpret it in the context of this report rather than asking for a repeat.)"
+    );
+  }
   parts.push(question);
 
   return {
@@ -132,15 +181,19 @@ export function buildPrompt(opts: BuildPromptOptions): PromptBundle {
 
 /**
  * The safe replacement text used when the model is refused or blocked.
- * Bilingual so the UI's language badge stays correct either way.
  *
- * IMPORTANT: this text must not itself trip any pattern in guardrails.ts. If it
- * did, re-screening a refused answer would tag it `model_refusal` and the
- * safety_flags stored in ai_generations would misreport why the turn was
- * refused. The wording below is deliberately phrased to avoid "I cannot",
- * "as an AI" and "diagnosis is", while still saying the same thing.
+ * The strings now live in src/lib/ai/translations.ts alongside the other twelve
+ * languages, so a refusal is never shown in a language the person cannot read.
+ * This object is kept for the two languages the original callers indexed by
+ * name; new code should call safeRedirect(answerLang) from translations.ts.
+ *
+ * IMPORTANT: these strings must not themselves trip any pattern in
+ * guardrails.ts. If one did, re-screening a refused answer would tag it
+ * `model_refusal` and the safety_flags stored in ai_generations would misreport
+ * why the turn was refused. The wording is deliberately phrased to avoid "I
+ * cannot", "as an AI" and "diagnosis is", while still saying the same thing.
  */
 export const SAFE_REDIRECT = {
-  en: "Diagnosing a condition and advising on medicines are outside what I do here — those decisions belong to your doctor.\n\nI can explain what your results mean. Ask me about any result on your report and I will walk through it.",
-  hi: "बीमारी बताना और दवाइयों के बारे में सलाह देना मेरा काम नहीं है — ये फ़ैसले आपके डॉक्टर के हैं।\n\nमैं आपके परिणामों का मतलब समझा सकता हूँ। अपनी रिपोर्ट के किसी भी परिणाम के बारे में पूछें, मैं उसे समझाऊँगा।",
+  en: safeRedirect("en"),
+  hi: safeRedirect("hi"),
 } as const;

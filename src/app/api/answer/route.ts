@@ -21,6 +21,7 @@ import { askAgent } from "@/lib/ai/agent";
 import { parseClientReport } from "@/lib/ai/clientReport";
 import { loadAiEnv } from "@/lib/ai/env";
 import { persistTurn } from "@/lib/ai/persistence";
+import { detectLangFromText, toAnswerLang, type AnswerLang } from "@/lib/ai/languages";
 import type { LangCode } from "@/lib/data";
 import type { ReadingLevel } from "@/lib/ai/types";
 
@@ -30,6 +31,15 @@ export const maxDuration = 60;
 interface AnswerBody {
   q?: unknown;
   lang?: unknown;
+  /**
+   * The language to ANSWER IN, e.g. "ta" or "ta-IN". Optional and separate from
+   * `lang`: the voice agent sets it from the language the person spoke, so the
+   * app can stay in Hindi while the answer comes back in Tamil. Anything that is
+   * not a supported language is ignored, never trusted.
+   */
+  answerLang?: unknown;
+  /** "voice" turns are formatted for speech and recorded as voice sessions. */
+  channel?: unknown;
   reading?: unknown;
   session?: unknown;
   report?: unknown;
@@ -48,6 +58,15 @@ export async function POST(req: Request) {
   const hasDevanagari = /[\u0900-\u097F]/.test(question);
   const lang: LangCode =
     body.lang === "hi" || body.lang === "bn" ? body.lang : hasDevanagari ? "hi" : "en";
+
+  // Answer language: what the client asked for, else what the question is
+  // written in, else the UI language. A Tamil question typed into the English
+  // UI is answered in Tamil without anyone having to pick it.
+  const answerLang: AnswerLang = toAnswerLang(
+    body.answerLang,
+    body.answerLang === undefined ? detectLangFromText(question, lang) : lang
+  );
+  const channel = body.channel === "voice" ? "voice" : "text";
   const reading: ReadingLevel =
     body.reading === "simple" || body.reading === "advanced" || body.reading === "very"
       ? body.reading
@@ -67,6 +86,8 @@ export async function POST(req: Request) {
   const answer = await askAgent({
     question,
     lang,
+    answerLang,
+    channel,
     readingLevel: reading,
     sessionId,
     report: report ?? undefined,
@@ -97,6 +118,11 @@ export async function POST(req: Request) {
     model: answer.generation?.model ?? (env.live ? env.ai.model : null),
     personalized: Boolean(report),
     language: answer.language,
+    /** The language the returned text is actually written in (see agent.ts). */
+    answer_lang: answer.answer_lang,
+    /** Present when the requested language could not be honoured. */
+    language_note: answer.language_note ?? null,
+    channel,
     citations: answer.citations.map((c) => ({
       source: c.source_code,
       title: c.source_title,

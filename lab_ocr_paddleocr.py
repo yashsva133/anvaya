@@ -421,6 +421,48 @@ def normalize_unit(raw_unit: str, canonical_unit: str) -> str:
     return raw_unit
 
 
+def is_unit_compatible(detected_unit: str, canonical_unit: str) -> bool:
+    """
+    Returns True if detected_unit matches canonical_unit or is recognized
+    as a clinically identical representation (e.g. gm/dl vs g/dL).
+    """
+    if not detected_unit:
+        return False  # Unit is missing/unreadable
+
+    norm_detected = normalize_unit(detected_unit, canonical_unit).strip().lower()
+    norm_canonical = canonical_unit.strip().lower()
+
+    if norm_detected == norm_canonical:
+        return True
+
+    equivalents = {
+        "g/dl": ["gm/dl", "g/100ml", "g/dl"],
+        "mg/dl": ["mg/dl", "mg%"],
+        "/cumm": ["/cumm", "cumm", "/ul", "cells/cumm", "cells/ul", "/mm3", "per cumm", "io", "i"],
+        "mill/cumm": ["million/cumm", "mill/cumm", "mil/cumm", "m/cumm", "10^6/ul", "10^6/cumm", "lion/cumm", "illion/cumm"],
+        "lakh/cumm": ["lakh/cumm", "lakhs/cumm", "lac/cumm", "lacs/cumm", "10^5/cumm"],
+        "fl": ["fl", "femtoliter", "femtolitres", "cu.mic"],
+        "pg": ["pg", "picogram"],
+        "miu/l": ["miu/l", "uiu/ml", "miu/ml", "uiu/l"],
+        "µg/dl": ["µg/dl", "ug/dl"],
+        "%": ["%"],
+        "ng/ml": ["ng/ml"],
+        "ng/dl": ["ng/dl"],
+        "pg/ml": ["pg/ml"],
+        "meq/l": ["meq/l"],
+        "mmol/l": ["mmol/l"],
+        "u/l": ["u/l"],
+        "mm/hr": ["mm/hr", "mm/1st hr", "mm/1hr"],
+        "mg/l": ["mg/l"],
+    }
+
+    for key, alts in equivalents.items():
+        if norm_canonical == key and (norm_detected in alts or detected_unit.lower() in alts):
+            return True
+
+    return False
+
+
 SECTION_HEADERS = [
     "indices",
     "differential leucocyte count",
@@ -439,12 +481,14 @@ def is_section_header(row_text: str) -> bool:
     return any(w in low for w in SECTION_HEADERS)
 
 
-def parse_row(row_items):
+def parse_row(row_items, min_test_confidence: float = 0.6):
     """
-    Parses a horizontally grouped row into a clinical test record.
-    Extracts test name, numeric value, unit, and calculates status.
-    If a test is detected but the value is smudged/missing, retains the row
-    with an empty value and status 'Needs Input' so the user can provide it.
+    Parses a horizontally grouped row into a clinical test record with edge case rules:
+    1. If test_name is unreadable (very blurred or missing) -> returns None (not added to CSV).
+    2. If value is not readable -> leaves space blank ("") in CSV, status='Needs Input'.
+    3. If unit is not readable -> takes hardcoded unit and reduces OCR confidence by 0.30.
+    4. If unit is different from hardcoded unit -> mentions detected unit, but leaves ref_low,
+       ref_high, and status blank ("").
     """
     row_text = " ".join(item["text"] for item in row_items)
     lowered = row_text.lower()
@@ -459,8 +503,11 @@ def parse_row(row_items):
     # Search for test name from left to right
     for i in range(len(row_items)):
         candidate_name = row_items[i]["text"]
+        candidate_conf = row_items[i]["score"]
+
         canonical = match_whitelist(candidate_name)
         used_indices = {i}
+        test_confs = [candidate_conf]
 
         # Try merging adjacent token if not matched
         if not canonical and i + 1 < len(row_items):
@@ -468,88 +515,122 @@ def parse_row(row_items):
             canonical = match_whitelist(pair_name)
             if canonical:
                 used_indices.add(i + 1)
+                test_confs.append(row_items[i + 1]["score"])
 
-        if canonical:
-            ref = REFERENCE_RANGES[canonical]
-            value = None
-            unit = None
-            has_range = False
-            confidences = [row_items[k]["score"] for k in used_indices]
+        # Edge Case 1: If test_name is unreadable (very blurred or missing) -> do not add to CSV
+        if not canonical:
+            continue
 
-            for j in range(len(row_items)):
-                if j in used_indices:
-                    continue
-                item_text = row_items[j]["text"].strip()
+        avg_test_conf = sum(test_confs) / len(test_confs)
+        if avg_test_conf < min_test_confidence:
+            continue
 
-                # Check for range pattern
-                if re.search(r'\d+\s*[-–to]\s*\d+|<|>|\b\d+\s*-\s*\d+', item_text):
-                    has_range = True
+        ref = REFERENCE_RANGES[canonical]
+        value = None
+        raw_unit = None
+        has_range = False
+        all_confidences = list(test_confs)
 
-                # Check for numeric test value
-                if value is None:
-                    # Ignore range tokens like "13-17", "4000-10000", "<2", ">100"
-                    if not re.search(r'[-–]|to|<|>', item_text):
-                        clean_num = item_text.replace(',', '')
-                        m = re.match(r'^(\d+\.?\d*)$', clean_num)
-                        if m:
-                            try:
-                                value = float(m.group(1))
-                                confidences.append(row_items[j]["score"])
-                                continue
-                            except ValueError:
-                                pass
+        for j in range(len(row_items)):
+            if j in used_indices:
+                continue
+            item_text = row_items[j]["text"].strip()
 
-                # Check for unit
-                if unit is None and re.match(r'^[a-zA-Z/%µ]{1,12}(/[a-zA-Z]+)?$', item_text):
-                    if item_text.upper() not in ['H', 'L', 'N', 'A', 'P']:
-                        unit = normalize_unit(item_text, ref["unit"])
-                        confidences.append(row_items[j]["score"])
+            # Check for reference range pattern
+            if re.search(r'\d+\s*[-–to]\s*\d+|<|>|\b\d+\s*-\s*\d+', item_text):
+                has_range = True
 
-            avg_conf = sum(confidences) / len(confidences) if confidences else 1.0
+            # Check for numeric test value
+            if value is None:
+                if not re.search(r'[-–]|to|<|>', item_text):
+                    clean_num = item_text.replace(',', '')
+                    m = re.match(r'^(\d+\.?\d*)$', clean_num)
+                    if m:
+                        try:
+                            value = float(m.group(1))
+                            all_confidences.append(row_items[j]["score"])
+                            continue
+                        except ValueError:
+                            pass
 
+            # Check for unit
+            if raw_unit is None and re.match(r'^[a-zA-Z/%µ]{1,12}(/[a-zA-Z]+)?$', item_text):
+                if item_text.upper() not in ['H', 'L', 'N', 'A', 'P']:
+                    raw_unit = item_text
+                    all_confidences.append(row_items[j]["score"])
+
+        base_conf = sum(all_confidences) / len(all_confidences) if all_confidences else 1.0
+
+        # Normalize platelet count if reported in absolute /cumm (>10000)
+        if canonical == "platelet count" and value is not None and value > 10000:
+            value = round(value / 100000.0, 2)
+            raw_unit = "lakh/cumm"
+
+        # Edge Case 2 & 3: Unit and Value resolution
+        unit_was_readable = (raw_unit is not None)
+
+        if not unit_was_readable:
+            # Edge Case 3: If unit is not readable, take from hardcoded values and reduce OCR confidence by 0.30
+            unit = ref["unit"]
+            final_conf = max(0.0, base_conf - 0.30)
+            ref_low = ref["low"]
+            ref_high = ref["high"]
             if value is not None:
-                # Normalize platelet count if reported in absolute /cumm (>10000)
-                if canonical == "platelet count":
-                    if value > 10000:
-                        value = round(value / 100000.0, 2)
-                        unit = "lakh/cumm"
-                    elif not unit or unit == "/cumm":
-                        unit = "lakh/cumm"
-
                 status = validate_value(value, ref["low"], ref["high"])
-                return {
-                    "test_name": ref["display"],
-                    "value": value,
-                    "unit": unit if unit else ref["unit"],
-                    "ref_low": ref["low"],
-                    "ref_high": ref["high"],
-                    "status": status,
-                    "ocr_confidence": round(avg_conf, 3),
-                }
             else:
-                # Value is smudged/empty/missing - retain row for user input
-                if unit is not None or has_range or (len(row_items) > len(used_indices)):
-                    return {
-                        "test_name": ref["display"],
-                        "value": "",
-                        "unit": unit if unit else ref["unit"],
-                        "ref_low": ref["low"],
-                        "ref_high": ref["high"],
-                        "status": "Needs Input",
-                        "ocr_confidence": round(avg_conf, 3),
-                    }
+                # Value is also unreadable -> Edge Case 2
+                status = "Needs Input"
+        else:
+            # Unit was detected in OCR
+            normalized_u = normalize_unit(raw_unit, ref["unit"])
+            is_compat = is_unit_compatible(raw_unit, ref["unit"]) or is_unit_compatible(normalized_u, ref["unit"])
+
+            if not is_compat:
+                # Edge Case 4: Unit is DIFFERENT from hardcoded unit
+                # Mention detected unit in unit, but don't add ref_low, ref_high, and status
+                unit = raw_unit
+                ref_low = ""
+                ref_high = ""
+                status = ""
+                final_conf = base_conf
+            else:
+                # Unit matches hardcoded unit
+                unit = normalized_u
+                ref_low = ref["low"]
+                ref_high = ref["high"]
+                if value is not None:
+                    status = validate_value(value, ref["low"], ref["high"])
+                else:
+                    # Edge Case 2: Value is not readable
+                    status = "Needs Input"
+                final_conf = base_conf
+
+        # Edge Case 2: If value is not readable, leave space blank ("")
+        val_out = value if value is not None else ""
+
+        # Make sure row is valid (has value, unit, range, or other context tokens)
+        if value is not None or unit_was_readable or has_range or (len(row_items) > len(used_indices)):
+            return {
+                "test_name": ref["display"],
+                "value": val_out,
+                "unit": unit,
+                "ref_low": ref_low,
+                "ref_high": ref_high,
+                "status": status,
+                "ocr_confidence": round(final_conf, 3),
+            }
 
     return None
 
 
-def parse_lines_to_records(structured_items):
+def parse_lines_to_records(structured_items, min_test_confidence: float = 0.6):
     """Groups OCR items into rows and extracts all whitelisted test records."""
     rows = group_items_into_rows(structured_items)
     records = []
     seen_tests = set()
 
     for r in rows:
-        rec = parse_row(r)
+        rec = parse_row(r, min_test_confidence=min_test_confidence)
         if rec and rec["test_name"] not in seen_tests:
             seen_tests.add(rec["test_name"])
             records.append(rec)
@@ -686,7 +767,7 @@ def main():
         all_raw_lines.extend(raw_lines)
 
         print(f"[4/7] Page {page_num}/{len(pages)}: parsing test/value pairs ...")
-        records = parse_lines_to_records(structured_items)
+        records = parse_lines_to_records(structured_items, min_test_confidence=args.min_confidence)
         print(f"      -> {len(records)} matched known clinical parameters")
 
         all_records.extend(records)

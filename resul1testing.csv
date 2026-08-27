@@ -1,0 +1,21 @@
+report_date,test_name,value,unit,ref_low,ref_high,status,ocr_confidence
+2023-06-24,Hemoglobin,15.0,kg/dL,,,,1.0
+2023-06-24,WBC Count,,/cumm,4000,11000,Needs Input,1.0
+2023-06-24,Neutrophils,50.0,%,40,80,Normal,0.7
+2023-06-24,Eosinophils,,%,1,6,Needs Input,0.498
+2023-06-24,Monocytes,9.0,%,2,10,Normal,0.7
+2023-06-24,Basophils,0.0,%,0,2,Normal,0.7
+2023-06-24,Absolute Neutrophils,2500.0,/cumm,2000,7000,Normal,1.0
+2023-06-24,Absolute Lymphocytes,2000.0,/cumm,1000,3000,Normal,1.0
+2023-06-24,Absolute Eosinophils,50.0,/cumm,20,500,Normal,1.0
+2023-06-24,Absolute Monocytes,450.0,/cumm,200,1000,Normal,1.0
+2023-06-24,RBC Count,5.0,mill/cumm,4.5,5.5,Normal,1.0
+2023-06-24,MCV,80.0,fL,83,101,Low,0.699
+2023-06-24,MCHC,37.5,g/dL,31.5,34.5,High,1.0
+2023-06-24,Packed Cell Volume,,%,40,50,Needs Input,0.699
+2023-06-24,RDW-CV,12.0,%,11.6,14.0,Normal,1.0
+2023-06-24,RDW-SD,40.0,fL,39.0,46.0,Normal,0.996
+2023-06-24,Platelet Count,3.0,lakh/cumm,1.5,4.5,Normal,0.978
+2023-06-24,PCT,35.0,%,0.1,0.5,High,0.7
+2023-06-24,MPV,8.0,fL,7.5,11.5,Normal,0.997
+2023-06-24,PDW,9.0,%,9.0,17.0,Normal,0.7
