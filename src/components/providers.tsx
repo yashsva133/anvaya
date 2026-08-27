@@ -13,9 +13,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <I18nProvider>
       <ToastProvider>
         <AuthProvider>
-          <ReportDataProvider>
-            {children}
-          </ReportDataProvider>
+          <ReportDataProvider>{children}</ReportDataProvider>
         </AuthProvider>
       </ToastProvider>
     </I18nProvider>
