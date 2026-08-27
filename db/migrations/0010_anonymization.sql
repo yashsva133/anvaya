@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0010
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0010
 -- anonymization_records — the PII firewall in front of every model call
 -- ----------------------------------------------------------------------------
 -- Purpose   : Record, per report, that de-identification happened, what was

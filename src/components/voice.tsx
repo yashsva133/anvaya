@@ -3,13 +3,7 @@
 // ---------------------------------------------------------------------------
 // The voice agent UI.
 //
-// This file used to be a scripted animation: it waited 2.4 seconds, showed a
-// hard-coded Hindi question, waited again, and displayed a hard-coded answer
-// about hemoglobin — regardless of what anyone said or which report they were
-// looking at. It is now the real thing:
-//
-//   microphone → transcript → /api/answer (the user's own report) → speech
-//
+// microphone → transcript → /api/answer (the user's own report) → speech
 // Everything that sequences that loop lives in src/lib/voice/useVoiceAgent.ts,
 // so the sheet below and the full-page agent at /voice are the same agent in
 // two containers rather than two implementations that can drift.
@@ -258,8 +252,8 @@ function TurnCard({
                 {t("common.sources")}: {turn.citations?.length}
               </summary>
               <ul className="mt-1.5 space-y-1">
-                {turn.citations?.map((c) => (
-                  <li key={`${c.source}-${c.title}`} className="text-[11px] font-semibold text-slate-500">
+                {turn.citations?.map((c, idx) => (
+                  <li key={`${c.source}-${c.title}-${idx}`} className="text-[11px] font-semibold text-slate-500">
                     <a
                       href={c.url}
                       target="_blank"

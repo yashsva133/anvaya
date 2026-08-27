@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+﻿import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Inter, Noto_Sans_Devanagari } from "next/font/google";
 import { AppProviders } from "@/components/providers";
@@ -17,10 +17,10 @@ const devanagari = Noto_Sans_Devanagari({
 });
 
 export const metadata: Metadata = {
-  title: "Rxanvaya — Understand your health report. In simple language.",
+  title: "RxAnvaya — Understand your health report. In simple language.",
   description:
     "AI-assisted laboratory report interpretation for every Indian patient. Upload a report, understand your results in simple words, see trends, and ask questions in your language. Educational, not a diagnosis.",
-  applicationName: "Rxanvaya",
+  applicationName: "RxAnvaya",
 };
 
 export const viewport: Viewport = {

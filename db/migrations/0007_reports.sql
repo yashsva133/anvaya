@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0007
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0007
 -- Reports: lab_reports, report_files, report_processing_jobs, ocr_results
 -- ----------------------------------------------------------------------------
 -- Purpose   : The upload side of UPLOAD -> OCR/PARSING -> ... -> PATIENT.

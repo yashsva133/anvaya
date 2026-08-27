@@ -107,6 +107,38 @@ export function setStoredActiveReport(report: ActiveReportState) {
 }
 
 /**
+ * Delete a report from localStorage history
+ */
+export function deleteStoredReport(reportId: string): Report[] {
+  if (typeof window === "undefined") return REPORTS;
+  try {
+    const history = getStoredReportsHistory();
+    const updated = history.filter((r) => r.id !== reportId);
+    localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(updated));
+
+    // If deleting active report, reset active report to latest available
+    const active = getStoredActiveReport();
+    if (active.id === reportId) {
+      if (updated.length > 0) {
+        const nextActive = updated[updated.length - 1];
+        setStoredActiveReport({
+          id: nextActive.id,
+          date: nextActive.date,
+          month: nextActive.month,
+          entries: nextActive.entries,
+        });
+      }
+    }
+
+    window.dispatchEvent(new Event("anvaya_report_updated"));
+    return updated;
+  } catch (e) {
+    console.warn("Could not delete report from storage:", e);
+    return getStoredReportsHistory();
+  }
+}
+
+/**
  * Convert extracted parameters to ReportEntry list
  */
 export function mapChartDataToEntries(chartData: ExtractedParam[]): ReportEntry[] {
@@ -127,3 +159,4 @@ export function mapChartDataToEntries(chartData: ExtractedParam[]): ReportEntry[
     };
   });
 }
+

@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0005
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0005
 -- Consent: policy catalogue + patient consent records
 -- ----------------------------------------------------------------------------
 -- Purpose   : Auditable, purpose-scoped, versioned consent. A boolean

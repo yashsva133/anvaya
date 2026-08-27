@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0006
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0006
 -- Laboratory catalogue: test definitions, aliases, reference ranges, rules
 -- ----------------------------------------------------------------------------
 -- Purpose   : Normalise test identity and make reference ranges versioned and

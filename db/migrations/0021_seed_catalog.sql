@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0021
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0021
 -- Seed: test catalogue, aliases, reference ranges, RAG sources,
 --       pattern templates, default rule, consent policy
 -- ----------------------------------------------------------------------------

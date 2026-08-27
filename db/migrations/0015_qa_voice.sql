@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0015
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0015
 -- Voice sessions, Q&A messages, answer feedback
 -- ----------------------------------------------------------------------------
 -- Purpose   : Persist only what the voice/Q&A feature actually needs: a session,

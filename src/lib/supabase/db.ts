@@ -2,7 +2,7 @@ import {
   isSupabaseConfigured,
   getSupabaseBrowserClient,
 } from "./client";
-import { getSupabaseAdminClient } from "./server";
+import { getSupabaseAdminClient } from "./admin";
 import {
   PATIENT as DEFAULT_PATIENT,
   REPORTS as DEFAULT_REPORTS,
@@ -36,7 +36,7 @@ export interface SaveExtractedReportPayload {
  * If profileId is provided, only return the row belonging to that user.
  */
 export async function getPatientProfile(profileId?: string): Promise<any> {
-  if (isSupabaseConfigured) {
+  if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseBrowserClient();
       let query = supabase
@@ -107,7 +107,7 @@ export async function getPatientProfile(profileId?: string): Promise<any> {
  * Fetch lab test catalog from Supabase
  */
 export async function getLabTestCatalog(): Promise<Record<string, TestDef>> {
-  if (isSupabaseConfigured) {
+  if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseBrowserClient();
       const { data, error } = await supabase
@@ -173,7 +173,7 @@ export async function getLabTestCatalog(): Promise<Record<string, TestDef>> {
  * Fetch all reports for patient
  */
 export async function getPatientReports(patientId?: string): Promise<Report[]> {
-  if (isSupabaseConfigured) {
+  if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseBrowserClient();
       let query = supabase
@@ -381,3 +381,33 @@ export async function saveExtractedReportToDb(
     };
   }
 }
+
+/**
+ * Delete a report and its associated records from Supabase DB
+ */
+export async function deleteReportFromDb(
+  reportId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const admin = getSupabaseAdminClient();
+
+    // Delete child test results first if cascade is not enabled
+    await admin.from("test_results").delete().eq("report_id", reportId);
+    await admin.from("doctor_reviews").delete().eq("report_id", reportId);
+    await admin.from("ai_explanations").delete().eq("subject_report_id", reportId);
+
+    // Delete the report record
+    const { error } = await admin.from("lab_reports").delete().eq("id", reportId);
+
+    if (error) {
+      console.warn("[SUPABASE DB DELETE] Error:", error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.warn("[SUPABASE DB DELETE] Exception:", err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+

@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/auth";
 import {
   PATIENT as DEFAULT_PATIENT,
   REPORTS as DEFAULT_REPORTS,
@@ -24,6 +24,7 @@ import {
 import {
   getStoredActiveReport,
   getStoredReportsHistory,
+  deleteStoredReport,
   type ActiveReportState,
 } from "@/lib/report-store";
 import {
@@ -58,18 +59,19 @@ interface ReportDataContextType {
   getEntry: (testId: string) => ReportEntry | undefined;
   getTestDef: (testId: string) => TestDef;
   refresh: () => Promise<void>;
+  deleteReport: (reportId: string) => Promise<boolean>;
 }
 
 const ReportDataContext = createContext<ReportDataContextType | null>(null);
 
 export function ReportDataProvider({ children }: { children: ReactNode }) {
-  const { session, profile } = useAuth();
+  const { user, profile } = useAuth();
 
   const [patient, setPatient] = useState<PatientInfo>({
     ...DEFAULT_PATIENT,
-    name: { en: "Loading…", hi: "लोड हो रहा…" },
-    nameShort: "",
-    email: "",
+    name: { en: "Rahul Singh", hi: "राहुल सिंह" },
+    nameShort: "Rahul",
+    email: "rahul.singh42@gmail.com",
   });
   const [catalog, setCatalog] = useState<Record<string, TestDef>>(DEFAULT_TESTS);
   const [activeReport, setActiveReport] = useState<ActiveReportState>(
@@ -82,8 +84,7 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       // If we have an authenticated user, build patient info from auth profile first
-      if (session?.user) {
-        const user = session.user;
+      if (user) {
         const authName = profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "User";
         setPatient((prev) => ({
           ...prev,
@@ -94,7 +95,7 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
       }
 
       // 1. Fetch patient profile from Supabase (may override with richer data)
-      const profileId = session?.user?.id;
+      const profileId = user?.id;
       const p = await getPatientProfile(profileId);
       if (p) setPatient(p as PatientInfo);
 
@@ -121,7 +122,7 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id, profile?.full_name]);
+  }, [user?.id, profile?.full_name]);
 
   useEffect(() => {
     loadData();
@@ -155,6 +156,35 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
     [catalog]
   );
 
+  const deleteReport = useCallback(
+    async (reportId: string): Promise<boolean> => {
+      // 1. Optimistically update local context state
+      setReports((prev) => prev.filter((r) => r.id !== reportId));
+
+      // 2. Delete from localStorage
+      deleteStoredReport(reportId);
+      setActiveReport(getStoredActiveReport());
+
+      // 3. Delete from Supabase backend if connected
+      try {
+        const res = await fetch("/api/delete-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reportId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+          console.warn("[DELETE REPORT] DB deletion note:", data.error);
+        }
+      } catch (e) {
+        console.warn("[DELETE REPORT] Fallback local delete only:", e);
+      }
+
+      return true;
+    },
+    []
+  );
+
   return (
     <ReportDataContext.Provider
       value={{
@@ -168,6 +198,7 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
         getEntry,
         getTestDef,
         refresh: loadData,
+        deleteReport,
       }}
     >
       {children}

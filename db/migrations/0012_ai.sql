@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0012
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0012
 -- AI generation + explanations + citations
 -- ----------------------------------------------------------------------------
 -- Purpose   : Persist the LLM EXPLANATION stage with full provenance (model,

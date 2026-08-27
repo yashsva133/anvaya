@@ -1,5 +1,5 @@
--- ============================================================================
--- Anvaya / Rxanvaya — Supabase migration 0004
+﻿-- ============================================================================
+-- Anvaya / RxAnvaya — Supabase migration 0004
 -- Doctor ↔ patient authorisation grants
 -- ----------------------------------------------------------------------------
 -- Purpose   : A clinician may only see reports for patients they have been

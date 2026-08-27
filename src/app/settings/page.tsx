@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 // Screen — Settings & Accessibility + Collapsible Trusted Medical Sources Button.
 // Every setting applies app-wide instantly, and evidence library opens on demand.
@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Accessibility,
   ArrowUpRight,
@@ -19,25 +20,44 @@ import {
   Gauge,
   Languages,
   LetterText,
+  LogOut,
   MessageCircleQuestion,
   Quote,
   Settings2,
+  Shield,
   ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
   Type,
+  UserCheck,
   Volume2,
 } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { SectionTitle, StatusPill, TestIcon, useToast } from "@/components/core";
 import { useI18n, pick, type LangCode, type ReadingMode } from "@/lib/i18n";
-import { SOURCES, TESTS } from "@/lib/data";
+import { useAuth } from "@/lib/auth";
+import { PATIENT, SOURCES, TESTS } from "@/lib/data";
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { s, set, t } = useI18n();
+  const { user, profile, patient, signOut } = useAuth();
   const toast = useToast();
   const notify = () => toast(t("settings.savedToast"));
   const hi = s.lang === "hi";
 
   const [sourcesOpen, setSourcesOpen] = useState(false);
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.replace("/login");
+  };
+
+  const displayName =
+    patient?.full_name ||
+    profile?.full_name ||
+    user?.user_metadata?.full_name ||
+    pick(PATIENT.name, s.lang);
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#sources") {
@@ -249,6 +269,95 @@ export default function SettingsPage() {
               Automatic
             </span>
           </SettingCard>
+        </div>
+      </section>
+
+      {/* --------------------------- Account & Profile Management --------------------------- */}
+      <section className="mt-10">
+        <SectionTitle
+          icon={UserCheck}
+          title={hi ? "खाता और प्रोफ़ाइल" : "Account & Patient Profile"}
+          sub={
+            hi
+              ? "आपकी व्यक्तिगत जानकारी और स्वास्थ्य प्राथमिकताएं।"
+              : "Your verified patient details and clinical preferences."
+          }
+        />
+
+        <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand-700 text-lg font-extrabold text-white shadow-md shadow-brand-900/20">
+                {displayName.slice(0, 2).toUpperCase()}
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-extrabold text-brand-950">
+                    {displayName}
+                  </h3>
+                  <span className="rounded-full bg-mint-100 px-2.5 py-0.5 text-[11px] font-extrabold text-mint-800">
+                    {profile?.role ? (profile.role.charAt(0).toUpperCase() + profile.role.slice(1)) : "Patient"}
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm font-medium text-slate-500">
+                  {user?.email || "guest@rxanvaya.local"}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Link
+                href="/onboarding"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-4 text-xs font-bold text-slate-700 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                {hi ? "प्रोफ़ाइल संशोधित करें" : "Edit Profile"}
+              </Link>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-4 text-xs font-bold text-rose-700 transition hover:bg-rose-100/70"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                {hi ? "लॉग आउट करें" : "Sign Out"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-4">
+            <div className="rounded-xl bg-slate-50 p-2.5 text-center">
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                {hi ? "आयु" : "Age"}
+              </p>
+              <p className="mt-0.5 text-sm font-extrabold text-brand-950">
+                {patient?.age ? `${patient.age} yrs` : `${PATIENT.age} yrs`}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-2.5 text-center">
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                {hi ? "लिंग" : "Sex"}
+              </p>
+              <p className="mt-0.5 text-sm font-extrabold text-brand-950">
+                {patient?.sex ? (hi && patient.sex === "male" ? "पुरुष" : hi && patient.sex === "female" ? "महिला" : patient.sex) : pick(PATIENT.gender, s.lang)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-2.5 text-center">
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                {hi ? "पठन मोड" : "Reading Mode"}
+              </p>
+              <p className="mt-0.5 text-sm font-extrabold text-brand-950 capitalize">
+                {patient?.reading_level || s.mode}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-2.5 text-center">
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                {hi ? "डेटा सुरक्षा" : "Security"}
+              </p>
+              <p className="mt-0.5 text-sm font-extrabold text-emerald-700">
+                Supabase RLS
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
