@@ -61,7 +61,7 @@ export default function ScanPage() {
       })
       .catch((err) => {
         console.error("Camera access denied or unavailable", err);
-        toast("Camera access denied or unavailable", "error");
+        toast("Camera access denied or unavailable", "warn");
       });
 
     return () => {
@@ -107,7 +107,7 @@ export default function ScanPage() {
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          toast(err.error || "Failed to process report", "error");
+          toast(err.error || "Failed to process report", "warn");
           setCaptured(false);
           return;
         }
@@ -125,7 +125,7 @@ export default function ScanPage() {
         
         router.push("/processing");
       } catch (err) {
-        toast("Error processing report", "error");
+        toast("Error processing report", "warn");
         setCaptured(false);
       }
     }, "image/jpeg", 0.9);

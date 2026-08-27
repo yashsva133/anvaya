@@ -32,33 +32,39 @@ export interface SaveExtractedReportPayload {
 }
 
 /**
- * Fetch patient profile from Supabase
+ * Fetch patient profile from Supabase, filtered by the authenticated user's id.
+ * If profileId is provided, only return the row belonging to that user.
  */
-export async function getPatientProfile(): Promise<any> {
+export async function getPatientProfile(profileId?: string): Promise<any> {
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseBrowserClient();
-      const { data, error } = await supabase
+      let query = supabase
         .from("patients")
-        .select("id, full_name, date_of_birth, sex, email, preferred_language, reading_level")
-        .limit(1)
-        .maybeSingle();
+        .select("id, profile_id, full_name, date_of_birth, sex, email, preferred_language, reading_level");
+
+      // Filter by authenticated user so we don't return a random patient
+      if (profileId) {
+        query = query.eq("profile_id", profileId);
+      }
+
+      const { data, error } = await query.limit(1).maybeSingle();
 
       if (!error && data) {
-        let age = 42;
+        let age = 0;
         if (data.date_of_birth) {
           const diff = Date.now() - new Date(data.date_of_birth).getTime();
           age = Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
         }
 
-        const nameEn = data.full_name || "Rahul Singh";
+        const nameEn = data.full_name || "User";
         const isMale = data.sex === "male";
 
         return {
           id: data.id,
           name: {
             en: nameEn,
-            hi: isMale ? "राहुल सिंह" : nameEn,
+            hi: nameEn,
           },
           nameShort: nameEn.split(" ")[0] || nameEn,
           age,
@@ -66,18 +72,35 @@ export async function getPatientProfile(): Promise<any> {
             en: isMale ? "Male" : data.sex === "female" ? "Female" : "Other",
             hi: isMale ? "पुरुष" : data.sex === "female" ? "महिला" : "अन्य",
           },
-          email: data.email || "rahul.singh42@gmail.com",
+          email: data.email || "",
         };
+      }
+
+      // If no patient row found but we have a profileId, try the profiles table
+      if (profileId) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("id, full_name, email, preferred_language")
+          .eq("id", profileId)
+          .maybeSingle();
+        if (prof) {
+          const nameEn = prof.full_name || prof.email?.split("@")[0] || "User";
+          return {
+            id: prof.id,
+            name: { en: nameEn, hi: nameEn },
+            nameShort: nameEn.split(" ")[0] || nameEn,
+            age: 0,
+            gender: { en: "Other", hi: "अन्य" },
+            email: prof.email || "",
+          };
+        }
       }
     } catch (e) {
       console.warn("Supabase fetch patient error, using local fallback:", e);
     }
   }
 
-  return {
-    ...DEFAULT_PATIENT,
-    email: "rahul.singh42@gmail.com",
-  };
+  return null; // Return null so the caller uses auth-derived data instead of hardcoded fallback
 }
 
 /**

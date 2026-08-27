@@ -101,14 +101,6 @@ const SYNONYMS: Record<string, string[]> = {
   platelets: ["platelet", "प्लेटलेट", "platelets"],
   wbc: ["wbc", "white cell", "white blood cell", "श्वेत कोशिका", "infection", "इन्फेक्शन"],
   potassium: ["potassium", "पोटैशियम", "electrolyte", "इलेक्ट्रोलाइट"],
-  mch: ["mch", "mean corpuscular hemoglobin", "mean corpuscular haemoglobin", "एमसीएच"],
-  mchc: ["mchc", "mean corpuscular hemoglobin concentration", "एमसीएचसी"],
-  rdw: ["rdw", "red cell distribution width", "एमसीएच", "आरडीडब्ल्यू", "red cell size variation"],
-  neutrophils: ["neutrophil", "neutrophils", "न्यूट्रोफ़िल", "न्यूट्रोफिल", "neut"],
-  lymphocytes: ["lymphocyte", "lymphocytes", "लिम्फोसाइट", "लिम्फोसाइट्स", "lymph"],
-  eosinophils: ["eosinophil", "eosinophils", "इोसिनोफ़िल", "इयोसिनोफिल", "eos"],
-  monocytes: ["monocyte", "monocytes", "मोनोसाइट", "मोनोसाइट्स", "mono"],
-  basophils: ["basophil", "basophils", "बेसोफ़िल", "बेसोफिल", "baso"],
   "pattern-lipid": ["cholesterol pattern", "कोलेस्ट्रॉल पैटर्न", "lipid pattern", "heart", "दिल", "cardiac"],
   "pattern-blood": ["blood pattern", "रक्त", "blood count", "cbc"],
   "pattern-sugar": ["sugar pattern", "diabetes pattern", "शुगर पैटर्न"],
@@ -264,4 +256,27 @@ export function renderChunksForPrompt(matches: RetrievedChunk[]): string {
 /** Total passages available — surfaced by /api/ai/status. */
 export function chunkCount(): number {
   return CHUNKS.length;
+}
+
+export interface CorpusChunk {
+  /** Local id, written to rag_chunks.external_vector_id — the FAISS key. */
+  id: string;
+  source_code: string;
+  heading: string;
+  content_en: string;
+  content_hi: string;
+  topics: string[];
+}
+
+/**
+ * The corpus, for seeding rag_sources / rag_documents / rag_chunks in Supabase.
+ *
+ * The retrieval itself runs in-process, but a citation is only auditable if the
+ * passage it points at exists as a row: explanation_citations.rag_chunk_id is a
+ * foreign key, and rag_retrieval_matches.rag_chunk_id has ON DELETE RESTRICT
+ * precisely so a cited passage cannot vanish. persistence.ts upserts this
+ * corpus once per process and maps these ids to the uuids it gets back.
+ */
+export function ragCorpus(): { sources: typeof SOURCES; chunks: CorpusChunk[] } {
+  return { sources: SOURCES, chunks: CHUNKS };
 }

@@ -33,6 +33,19 @@ export interface ClientReportInput {
   gender?: unknown;
   results?: unknown;
   previous?: unknown;
+  /**
+   * Older reports, oldest first, so the model can talk about a TREND rather
+   * than a single snapshot. Same trust rules as `results`: test ids are
+   * whitelisted, values are numbers, and the only free text allowed is a short
+   * date label.
+   */
+  history?: unknown;
+}
+
+/** One earlier report kept for trend context. */
+export interface ClientHistoryPoint {
+  dateLabel?: string;
+  results: { test: string; value: number }[];
 }
 
 /** The validated, sanitised report context the agent is allowed to use. */
@@ -44,10 +57,14 @@ export interface ClientReport {
   sex: "female" | "male" | "other" | "unspecified";
   results: { test: string; value: number }[];
   previous?: { dateLabel?: string; results: { test: string; value: number }[] };
+  /** Earlier reports, oldest first (the immediately previous one included). */
+  history?: ClientHistoryPoint[];
 }
 
 const MAX_RESULTS = 40;
 const MAX_LABEL = 48;
+/** Enough to show a direction of travel; more only costs prompt budget. */
+const MAX_HISTORY = 8;
 
 function slug(v: unknown): string | undefined {
   return typeof v === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(v) ? v : undefined;
@@ -66,9 +83,7 @@ function label(v: unknown): string | undefined {
 
 function finiteValue(v: unknown): number | undefined {
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
-  // Allow 0: it is a legitimate lab value for several CBC components (e.g.
-  // basophils 0%, eosinophils 0%). Negative and absurdly large values still fail.
-  if (!Number.isFinite(n) || n < 0 || n > 1_000_000) return undefined;
+  if (!Number.isFinite(n) || n <= 0 || n > 1_000_000) return undefined;
   return Math.round(n * 100) / 100;
 }
 
@@ -84,6 +99,20 @@ function validResults(v: unknown): { test: string; value: number }[] {
     if (val === undefined) continue;
     seen.add(test);
     out.push({ test, value: val });
+  }
+  return out;
+}
+
+/** Validate the `history` array: earlier reports, oldest first. */
+function validHistory(v: unknown): ClientHistoryPoint[] {
+  if (!Array.isArray(v)) return [];
+  const out: ClientHistoryPoint[] = [];
+  for (const item of v.slice(-MAX_HISTORY)) {
+    if (typeof item !== "object" || item === null) continue;
+    const point = item as ClientReportInput;
+    const results = validResults(point.results);
+    if (results.length === 0) continue;
+    out.push({ dateLabel: label(point.dateLabel), results });
   }
   return out;
 }
@@ -153,6 +182,8 @@ export function parseClientReport(raw: unknown): ClientReport | null {
   const results = validResults(input.results);
   if (results.length === 0) return null;
 
+  const history = validHistory(input.history);
+
   let previous: ClientReport["previous"];
   if (typeof input.previous === "object" && input.previous !== null) {
     const p = input.previous as ClientReportInput;
@@ -160,6 +191,12 @@ export function parseClientReport(raw: unknown): ClientReport | null {
     if (prevResults.length > 0) {
       previous = { dateLabel: label(p.dateLabel), results: prevResults };
     }
+  }
+  // A client that only sent `history` still gets trend answers: the last
+  // history entry IS the previous report.
+  if (!previous && history.length > 0) {
+    const last = history[history.length - 1];
+    previous = { dateLabel: last.dateLabel, results: last.results };
   }
 
   return {
@@ -170,5 +207,6 @@ export function parseClientReport(raw: unknown): ClientReport | null {
     sex: clientSex(input.gender),
     results,
     ...(previous ? { previous } : {}),
+    ...(history.length > 0 ? { history } : {}),
   };
 }

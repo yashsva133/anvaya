@@ -104,6 +104,15 @@ export async function POST(req: Request) {
       question,
       sessionId,
       patientId,
+      // The report the client is looking at. Only used when it is a real
+      // lab_reports uuid — that is what anchors the anonymisation record, the
+      // explanation and its citations.
+      labReportId: report?.reportId,
+      channel,
+      readingLevel: reading,
+      temperature: env.ai.temperature,
+      maxTokens: env.ai.maxTokens,
+      transcript: channel === "voice" ? question : undefined,
     });
   }
 

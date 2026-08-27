@@ -61,21 +61,53 @@ export function storeSession(session: SupabaseSession | null) {
 async function authFetch<T>(path: string, init: RequestInit): Promise<T> {
   const { url } = supabaseConfig();
   const res = await fetch(`${url}/auth/v1${path}`, init);
-  const data = (await res.json().catch(() => ({}))) as T & { msg?: string; error_description?: string };
-  if (!res.ok) throw new Error(data.error_description || data.msg || "Request failed");
-  return data;
+  const data = (await res.json().catch(() => ({}))) as any;
+  if (!res.ok) {
+    const errorMsg =
+      data.error_description ||
+      data.msg ||
+      data.message ||
+      data.error ||
+      (typeof data === "string" ? data : `Request failed with status ${res.status}`);
+    throw new Error(errorMsg);
+  }
+  return data as T;
 }
 
-export async function signInWithPassword(email: string, password: string) {
-  return authFetch<SupabaseSession>("/token?grant_type=password", {
-    method: "POST", headers: headers(), body: JSON.stringify({ email, password }),
+export async function signInWithPassword(email: string, password: string): Promise<SupabaseSession> {
+  const data = await authFetch<any>("/token?grant_type=password", {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ email, password }),
   });
+
+  const session = data?.session || data;
+  const user = session?.user || data?.user || { id: data?.id, email: data?.email };
+
+  return {
+    access_token: session?.access_token || data?.access_token || "",
+    refresh_token: session?.refresh_token || data?.refresh_token || "",
+    expires_at: session?.expires_at,
+    user,
+  };
 }
 
-export async function signUpWithPassword(email: string, password: string) {
-  return authFetch<SupabaseSession>("/signup", {
-    method: "POST", headers: headers(), body: JSON.stringify({ email, password }),
+export async function signUpWithPassword(email: string, password: string): Promise<SupabaseSession> {
+  const data = await authFetch<any>("/signup", {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ email, password }),
   });
+
+  const session = data?.session || data;
+  const user = session?.user || data?.user || { id: data?.id, email: data?.email };
+
+  return {
+    access_token: session?.access_token || data?.access_token || "",
+    refresh_token: session?.refresh_token || data?.refresh_token || "",
+    expires_at: session?.expires_at,
+    user,
+  };
 }
 
 export async function sendPasswordReset(email: string) {

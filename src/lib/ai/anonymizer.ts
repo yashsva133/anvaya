@@ -21,8 +21,8 @@ import {
   type LangCode,
   type Report,
 } from "@/lib/data";
-import { computeStatus, type ClientReport } from "./clientReport";
-import type { AnonymisedPayload, AnonymisedResult } from "./types";
+import { computeStatus, type ClientHistoryPoint, type ClientReport } from "./clientReport";
+import type { AnonymisedPayload, AnonymisedResult, AnonymisedTrend } from "./types";
 
 export const ANON_INPUT_VERSION = "anvaya-anon-v1";
 
@@ -84,6 +84,97 @@ function resultFor(
   };
 }
 
+
+/**
+ * How far a value sits OUTSIDE its reference range (0 when inside it).
+ *
+ * The basis for "improving" vs "worsening": a value can rise and still be
+ * getting better (a low haemoglobin climbing back to normal), so a bare
+ * direction of travel is not enough to describe a trend honestly.
+ */
+function deviation(testId: string, value: number): number {
+  const def = TESTS[testId];
+  if (!def) return 0;
+  const { low, high } = def.ref;
+  if (low !== undefined && value < low) return low - value;
+  if (high !== undefined && value > high) return value - high;
+  return 0;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Build the per-test trend series.
+ *
+ * Deterministic on purpose. The model is handed the finished directions and
+ * deltas and told to explain them; it never computes one, so an overview
+ * summary cannot claim a value "improved" when the arithmetic says otherwise.
+ */
+export function buildTrends(opts: {
+  current: { test: string; value: number }[];
+  /** Earlier reports, oldest first. */
+  history: ClientHistoryPoint[];
+  latestDate: string;
+  lang: LangCode;
+}): AnonymisedTrend[] {
+  const { current, history, latestDate } = opts;
+  const l2 = opts.lang === "hi" ? "hi" : "en";
+  const trends: AnonymisedTrend[] = [];
+
+  for (const entry of current) {
+    const def = TESTS[entry.test];
+    if (!def) continue;
+
+    const points: AnonymisedTrend["points"] = [];
+    history.forEach((h, i) => {
+      const hit = h.results.find((r) => r.test === entry.test);
+      if (!hit) return;
+      points.push({
+        date: h.dateLabel ?? `report ${i + 1}`,
+        value: hit.value,
+        status: computeStatus(def, hit.value),
+      });
+    });
+    if (points.length === 0) continue;
+
+    const first = points[0];
+    const latestStatus = computeStatus(def, entry.value);
+    const change = round2(entry.value - first.value);
+    const span = def.ref.high !== undefined && def.ref.low !== undefined
+      ? def.ref.high - def.ref.low
+      : Math.abs(first.value) || 1;
+    // A wobble smaller than 5% of the reference span is noise, not a trend.
+    const flat = Math.abs(change) < Math.abs(span) * 0.05;
+    const devFirst = deviation(entry.test, first.value);
+    const devNow = deviation(entry.test, entry.value);
+
+    trends.push({
+      test: entry.test,
+      label: def.name[l2],
+      unit: def.unit,
+      points: [...points, { date: latestDate, value: entry.value, status: latestStatus }],
+      first_value: first.value,
+      first_date: first.date,
+      latest_value: entry.value,
+      latest_date: latestDate,
+      change,
+      change_pct: first.value !== 0 ? Math.round((change / first.value) * 1000) / 10 : undefined,
+      direction: flat ? "flat" : change > 0 ? "up" : "down",
+      worsening: devNow > devFirst + 1e-9,
+      improving: devNow < devFirst - 1e-9,
+      first_status: first.status,
+      latest_status: latestStatus,
+    });
+  }
+
+  // Most clinically interesting first: things that got worse, then things that
+  // moved at all, so a truncated prompt keeps what matters.
+  return trends.sort((a, b) => {
+    const rank = (t: AnonymisedTrend) => (t.worsening ? 0 : t.improving ? 1 : t.direction === "flat" ? 3 : 2);
+    return rank(a) - rank(b);
+  });
+}
+
 /**
  * Build the de-identified payload for one report.
  *
@@ -108,6 +199,8 @@ export function buildAnonymisedPayload(opts: {
   const l2 = lang === "hi" ? "hi" : "en";
 
   const results: AnonymisedResult[] = [];
+  /** Earlier reports, oldest first, for the trend series. */
+  let history: ClientHistoryPoint[] = [];
   let reportDate: string;
   let band: string;
   let sex: AnonymisedPayload["sex"];
@@ -136,6 +229,12 @@ export function buildAnonymisedPayload(opts: {
     reportDate = report.dateLabel ?? LATEST.date[l2];
     band = report.ageBand ?? "unspecified";
     sex = report.sex;
+    history =
+      report.history && report.history.length > 0
+        ? report.history
+        : report.previous
+          ? [{ dateLabel: report.previous.dateLabel, results: report.previous.results }]
+          : [];
   } else {
     // ---- the seeded demo report ------------------------------------------
     const demo = pickReport(reportId);
@@ -147,6 +246,11 @@ export function buildAnonymisedPayload(opts: {
     reportDate = demo.date[l2];
     band = ageBand(PATIENT.age);
     sex = normaliseSex(PATIENT.gender.en);
+    const demoIdx = REPORTS.findIndex((r) => r.id === demo.id);
+    history = (demoIdx > 0 ? REPORTS.slice(0, demoIdx) : []).map((r) => ({
+      dateLabel: r.date[l2],
+      results: r.entries.map((e) => ({ test: e.test, value: e.value })),
+    }));
   }
 
   // Only patterns whose every member test is actually present in this report,
@@ -158,12 +262,20 @@ export function buildAnonymisedPayload(opts: {
     tests: p.nodes.map((n) => n.test),
   }));
 
+  const trends = buildTrends({
+    current: results.map((r) => ({ test: r.test, value: r.value })),
+    history,
+    latestDate: reportDate,
+    lang,
+  });
+
   return {
     pseudonym: opts.pseudonym ?? randomUUID(),
     age_band: band,
     sex,
     report_date: reportDate,
     results,
+    trends,
     patterns,
     removed_fields: [
       "patient_name",
@@ -199,6 +311,25 @@ export function renderPayloadForPrompt(payload: AnonymisedPayload): string {
         : "";
     lines.push(`- ${r.label} | ${r.value} | ${r.unit} | ${r.ref_text} | ${r.status}${prev}`);
   }
+  if (payload.trends.length > 0) {
+    lines.push("");
+    lines.push(
+      "TREND HISTORY (test | oldest -> latest values with dates | direction | already judged as)"
+    );
+    for (const t of payload.trends.slice(0, 12)) {
+      const series = t.points.map((p) => `${p.value} on ${p.date}`).join(" -> ");
+      const verdict = t.worsening
+        ? "moving further outside the range"
+        : t.improving
+          ? "moving back towards the range"
+          : t.direction === "flat"
+            ? "broadly steady"
+            : "changed but still in the same relationship to the range";
+      lines.push(
+        `- ${t.label} (${t.unit}) | ${series} | ${t.direction} ${t.change >= 0 ? "+" : ""}${t.change} | ${verdict}`
+      );
+    }
+  }
   if (payload.patterns.length > 0) {
     lines.push("");
     lines.push("PATTERNS ALREADY IDENTIFIED BY THE RULE ENGINE");
@@ -232,6 +363,21 @@ export function allowedNumbers(payload: AnonymisedPayload): Set<string> {
     add(r.ref_high);
     // "below 5.7%", "12-16", "≤150" — the digits inside the printed range text.
     for (const m of r.ref_text.match(/\d+(?:\.\d+)?/g) ?? []) nums.add(m);
+  }
+  // Every historical value the trend section shows is quotable too, along with
+  // the deltas the rule engine computed — otherwise an answer that correctly
+  // says "up 1.3 since February" is penalised for inventing 1.3.
+  for (const t of payload.trends) {
+    for (const p of t.points) {
+      add(p.value);
+      for (const m of p.date.match(/\d+(?:\.\d+)?/g) ?? []) nums.add(m);
+    }
+    add(Math.abs(t.change));
+    add(t.change);
+    if (t.change_pct !== undefined) {
+      add(Math.abs(t.change_pct));
+      add(t.change_pct);
+    }
   }
   // An answer that names its own report date ("your 22 Aug 2026 report") is
   // quoting the payload, not inventing a number. Without this, every answer

@@ -21,3 +21,4 @@ export function AppProviders({ children }: { children: ReactNode }) {
 }
 
 export { AuthProvider, I18nProvider, ToastProvider, ReportDataProvider };
+

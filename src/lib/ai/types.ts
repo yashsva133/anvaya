@@ -65,6 +65,37 @@ export interface AnonymisedResult {
 }
 
 /**
+ * One test's movement across the reports on file — the de-identified trend the
+ * overview summary is built from.
+ *
+ * Computed deterministically in anonymizer.ts from values the catalogue already
+ * knows about, never by the model: per ANVAYA_DATABASE_SPEC.md §10.4 the LLM is
+ * not allowed to be the source of truth for a direction or a status either.
+ */
+export interface AnonymisedTrend {
+  test: string;
+  label: string;
+  unit: string;
+  /** Oldest first. Each point is one earlier report that measured this test. */
+  points: { date: string; value: number; status: Status }[];
+  first_value: number;
+  first_date: string;
+  latest_value: number;
+  latest_date: string;
+  /** latest − first, rounded to two decimals. */
+  change: number;
+  /** Percent change from the first value, or undefined when first is 0. */
+  change_pct?: number;
+  direction: "up" | "down" | "flat";
+  /** True when moving away from the reference range (or further outside it). */
+  worsening: boolean;
+  /** True when moving back towards, or into, the reference range. */
+  improving: boolean;
+  first_status: Status;
+  latest_status: Status;
+}
+
+/**
  * The PII-free payload that is the ONLY thing sent to the model.
  * Mirrors anonymization_records: pseudonym, age_band (never a date of birth),
  * sex, plus retained test values. There is no field here that could hold a
@@ -79,6 +110,11 @@ export interface AnonymisedPayload {
   /** Display date of the report under discussion. */
   report_date: string;
   results: AnonymisedResult[];
+  /**
+   * Movement of each test across the earlier reports on file, oldest first.
+   * Empty when only one report exists.
+   */
+  trends: AnonymisedTrend[];
 /** Plain-language description of a multi-test pattern, identifiers-free. */
   patterns: AnonymisedPattern[];
   removed_fields: string[];

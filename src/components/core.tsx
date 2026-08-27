@@ -666,7 +666,7 @@ function inlineMd(s: string): ReactNode[] {
 interface ToastItem {
   id: number;
   msg: string;
-  icon: "ok" | "info" | "warn" | "error";
+  icon: "ok" | "info" | "warn";
 }
 
 const ToastCtx = createContext<(msg: string, icon?: ToastItem["icon"]) => void>(
@@ -705,7 +705,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               {t.icon === "ok" && <Check className="h-4 w-4 text-mint-300" strokeWidth={3} />}
               {t.icon === "info" && <Info className="h-4 w-4 text-sky-300" strokeWidth={2.5} />}
               {t.icon === "warn" && <AlertTriangle className="h-4 w-4 text-amber-300" strokeWidth={2.5} />}
-              {t.icon === "error" && <AlertTriangle className="h-4 w-4 text-rose-300" strokeWidth={2.5} />}
               {t.msg}
             </motion.div>
           ))}

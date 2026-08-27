@@ -138,6 +138,116 @@ values that are actually flagged.
 
 ---
 
+## 2.6 The Overview summary — `POST /api/summary`
+
+The first box on **Overview** (`/dashboard`) is no longer two hard-coded
+sentences. It is a MedGemma briefing that answers the question a person
+actually opens the app with: *where do I stand today, and which way am I
+heading?*
+
+```
+ReportDataContext (activeReport + every earlier report + patient)
+  → buildReportContext()          reportContext.ts — now also sends `history[]`
+  → POST /api/summary { lang, reading, report }
+  → parseClientReport()           clientReport.ts — same trust boundary as chat
+  → buildAnonymisedPayload()      anonymizer.ts — + buildTrends()
+  → retrieve()                    rag.ts — seeded with the flagged/worsening tests
+  → buildSummaryPrompt()          summary.ts — prompt_key "report_overview"
+  → MedGemma → guardOutput()      unsafe output is discarded, not shown
+  → deterministicSummary()        the fallback, from the same numbers
+```
+
+Three properties are worth knowing before changing it:
+
+1. **Trends are computed in code, never by the model.** `buildTrends()` in
+   `anonymizer.ts` produces the direction, the delta and — importantly —
+   whether a value moved *towards* or *away from* its reference range, because
+   a rising value can be an improvement (a low haemoglobin recovering). The
+   model is handed the finished verdicts in a `TREND HISTORY` block and told to
+   explain them, matching the §10.4 rule that the LLM is never the source of
+   truth for a status. Those historical values are added to the guardrail's
+   allowed-number set, so a correct "up 1.3 since February" is not penalised as
+   an invented figure.
+2. **The box is never empty and never misattributed.** With no provider, a
+   model error, a timeout, or a generation the guardrails reject, the response
+   is the deterministic summary composed from the same payload — returned with
+   `engine: "rules"` and a `fallback_reason`, and the card's footer says the
+   text came from the report data rather than from MedGemma. The chat can show
+   a "please ask your doctor" redirect in place of an unsafe answer; an opening
+   summary cannot, so it falls back instead of refusing.
+3. **It regenerates on the inputs that change it** — report, language, reading
+   level — and only on those: an object-identity change from a context
+   re-render must not spend a model call.
+
+Response fields: `headline`, `body` (the markdown bullets), `text`, `speech`
+(markdown stripped, for the Listen button), `engine`, `model`, `confidence`,
+`fallback_reason`, `counts`, `trends[]` (the chips), `reports_compared`,
+`citations[]`.
+
+```bash
+curl -sX POST localhost:3000/api/summary -H 'content-type: application/json' \
+  -d '{"lang":"en","report":{"results":[{"test":"hba1c","value":7.2}],
+       "history":[{"dateLabel":"12 Feb 2026","results":[{"test":"hba1c","value":5.9}]}]}}'
+```
+
+---
+
+## 2.7 "AI found a connection" — `POST /api/insights`
+
+The AI Insights screen used to render three connections hard-coded to the demo
+patient, and the Overview teaser advertised one of them regardless of what was
+in the report. Both now come from the person's own results.
+
+The split is the important part:
+
+| Stage | Where | Who decides |
+| --- | --- | --- |
+| **Detect** the connection | `src/lib/ai/patterns.ts` | Deterministic rules over catalogue statuses + the trend series |
+| **Score** the confidence | `scorePattern()` | Counted evidence: flagged members, how far out of range, whether the trend agrees. Capped at 95 |
+| **Explain** it | `src/lib/ai/insights.ts` → MedGemma | Prose only, from the finished finding |
+
+The model is never allowed to decide that a connection *exists* — a
+hallucinated link between two tests is the failure mode that would matter most
+here, and §10.4 already says a clinical classification is not the LLM's to
+make. It receives the finding (these tests, these values, this direction, this
+confidence) and writes exactly two paragraphs: what the link is, and why it is
+worth raising with a doctor.
+
+Each card is generated separately, all in parallel: one bad or slow generation
+degrades one card, not the page. Anything that fails — no provider, an error, a
+guardrail rejection — falls back to the reviewed clinical copy in
+`src/lib/data.ts`, and the card's footer says "explained from reviewed clinical
+guidance" instead of "explained by MedGemma". If the seeded copy was written
+about a test this report does not contain, a sentence composed from the actual
+member results is used instead, so a card can never describe results the person
+did not have.
+
+**No connection found is a real answer.** When nothing groups into a pattern the
+page says so and the teaser says so, rather than promoting the least normal
+result into a "pattern".
+
+The **health story** timeline on the same screen is also derived now: it picks
+the trend moving furthest away from its range and renders first / middle /
+latest milestones from the actual values and dates. It is deterministic — no
+model call — because it is pure arithmetic over the report history.
+
+`useAiInsights()` (`src/lib/ai/useAiInsights.ts`) is the single client for this
+endpoint, shared by the Insights page and the Overview teaser, so the teaser can
+never advertise a connection the page below it does not list.
+
+### Loading
+
+`src/components/ai-loading.tsx` provides `AiStages` and `AiLines`, used by the
+summary card, the insights cards and the teaser. `AiStages` cycles the real
+pipeline steps ("reading your report", "comparing it with your earlier
+reports", "checking the guideline sources", "writing it in simple language")
+and stops on the last one rather than looping, so a slow local model reads as
+progress instead of a hang; `AiLines` renders shimmer placeholders shaped like
+the text that will land, so nothing jumps when it arrives. Both honour the
+app's reduce-motion setting.
+
+---
+
 ## 3. Running it
 
 ### 3.1 Without a model (works today)
@@ -243,29 +353,96 @@ the assembled prompt, and the exact age appears only as the band `40-49`.
 ## 6. Database writes
 
 `persistence.ts` writes over Supabase's PostgREST REST API (`/rest/v1`), so no
-driver dependency was added. Writes are best-effort: a persistence failure
-never turns a correct answer into a failed request; it is reported in the
-response's `persist_errors` instead.
+driver dependency was added. Writes are best-effort: a persistence failure never
+turns a correct answer into a failed request; the response carries
+`persisted: "ok" | "partial" | "off"` and the failing table names come back in
+the `errors` list of the internal result.
 
-**Two things are required before rows land:**
+Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (schema applied per
+`db/README.md`) and every AI surface files its own audit trail:
 
-1. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set. The schema is applied per
-   `db/README.md`.
-2. **A `patient_id`.** `voice_sessions.patient_id` is `NOT NULL`, and
-   `answer_feedback.patient_id` is too. There is no auth in this repository yet,
-   so no identity can be resolved. Rather than guess one, persistence skips those
-   two tables and reports `patient_id_missing`. Wiring auth (`auth.uid()` →
-   `patients.id`) is the remaining step; `persistTurn()` already accepts
-   `patientId` and `labReportId` arguments.
+| Surface | Tables written |
+| --- | --- |
+| `POST /api/summary` | `rag_retrievals` + `rag_retrieval_matches`, `anonymization_records`, `ai_generations` (`report_summary`), `ai_explanations` (subject = the report), `explanation_citations` |
+| `POST /api/insights` | the above per card (`pattern_insight`), plus `pattern_templates`, `report_patterns`, `report_pattern_members`, and one `ai_explanations` row per finding |
+| `POST /api/answer` | `rag_retrievals` + matches, `anonymization_records`, `ai_generations` (`qa_answer`), `voice_sessions`, `qa_messages` ×2 |
+| `POST /api/feedback` | `answer_feedback` |
 
-Until then, `ai_generations`, `rag_retrievals` and `rag_retrieval_matches` are
-the tables that can be written without an identity, and they are.
+### The corpus is seeded on first write
+
+`rag_retrieval_matches.rag_chunk_id` and `explanation_citations.rag_chunk_id`
+are foreign keys to `rag_chunks`, and retrieval runs in-process over the
+constants in `src/lib/ai/rag.ts`. Those two facts used to be irreconcilable: the
+writer sent the local chunk id (`"cdc-a1c#excerpt"`) into a uuid column, so
+every match insert failed silently and no citation chain existed in the
+database at all.
+
+`ensureCorpus()` now upserts `rag_sources` → `rag_documents` (version =
+`RAG_INDEX_VERSION`) → `rag_chunks` once per process, storing the local id in
+`rag_chunks.external_vector_id` — the same column a FAISS index would key on
+(§7) — and keeps an in-memory map from it to the uuid. Citations resolve, and
+the chain `ai_explanations → explanation_citations → rag_chunks → rag_documents
+→ rag_sources` answers "what did this sentence stand on?" from SQL alone.
+
+### Identity
+
+The client sends `patientId` only when the profile came from Supabase
+(`patientRef()` in `src/lib/ai/reportContext.ts`) and `report.reportId` is used
+as `lab_report_id` only when it is a real uuid. In demo mode both are absent, so
+the conversation and pattern tables are skipped with `patient_id_missing` /
+`lab_report_id_missing` rather than being filled with invented keys — the
+generation rows are still written, because they contain no identity.
+
+### Explanations are versioned, not overwritten
+
+`ai_explanations` is unique per (subject, language, reading level) with one
+`is_current` row, so a regenerated summary retires the previous row and inserts
+`version + 1`. Chat turns deliberately do **not** write an explanation: their
+subject would be the report, so every question asked would retire that report's
+summary. A turn's text lives in `qa_messages`, and its evidence is still
+reachable through `qa_messages.generation_id → ai_generations.retrieval_id →
+rag_retrieval_matches`.
+
+### Still no PHI
+
+`ai_generations.input_snapshot` receives the anonymised payload only (results,
+trends, patterns, age band, sex, pseudonym). The link back to a person is
+`anonymization_id` — one `anonymization_records` row per generation, carrying
+the removed/retained field lists, a keyed `subject_digest` and the payload hash.
+That record needs a real `lab_report_id`, since asserting "this report was
+de-identified" is meaningless without the report.
+
+### Reading level
+
+Migration `0023_reading_level_advanced.sql` adds `'advanced'` to
+`anvaya_reading_level`, which the UI has been sending since the Simple/Advanced
+picker landed. On a deployment that has not run 0023, the writer catches the
+enum error and retries as `standard` rather than dropping the row.
 
 The `anvaya` schema is deliberately not in `pgrst.db_schemas`
 (`ANVAYA_DATABASE_SPEC.md` §10.3), so the SQL functions —
 `has_active_consent()`, `set_review_status()`, `release_report()` — still need a
 direct connection. Nothing in the AI backend calls them yet; the consent gate
 (`has_active_consent(patient_id, 'ai_explanation')`) belongs with the auth work.
+
+### Seeing the writes without a Supabase project
+
+`scripts/fake-supabase.mjs` is a ~150-line stand-in for PostgREST (same idea as
+`fake-ollama.mjs`): POST returns the row with a generated uuid, GET filters on
+`eq`, `on_conflict` upserts merge, and everything is dumped on request.
+
+```bash
+node scripts/fake-supabase.mjs &
+SUPABASE_URL=http://127.0.0.1:54999 SUPABASE_SERVICE_ROLE_KEY=fake \
+  AI_PROVIDER=mock npm run dev
+
+curl -s localhost:3000/api/summary -H 'content-type: application/json' -d @report.json
+curl -s localhost:54999/__counts            # rows per table
+curl -s localhost:54999/__dump | jq '.ai_generations[0]'
+```
+
+It enforces no constraints and no types — it shows what the app *sends*; what
+must be true of the schema still lives in `db/migrations`.
 
 ---
 
@@ -303,6 +480,11 @@ and everything downstream stay identical.
 | `/api/ask` page | `curl /ask` | HTTP 200, renders |
 | `/api/feedback` | vote without Supabase | `{"ok":true,"persisted":false,"mode":"demo"}` |
 | Lint (touched files) | `npx eslint src/lib/ai src/app/api src/app/ask/page.tsx` | clean |
+| **Every AI table written** | `scripts/fake-supabase.mjs` + `/api/summary`, `/api/insights`, `/api/answer`, `/api/feedback` | 17 tables populated: 5 `rag_sources`, 5 `rag_documents`, 43 `rag_chunks`, 5 `rag_retrievals`, 15 `rag_retrieval_matches`, 3 `anonymization_records`, 5 `ai_generations`, 4 `ai_explanations`, 12 `explanation_citations`, 3 `pattern_templates`, 3 `report_patterns`, 8 `report_pattern_members`, `voice_sessions`, 2 `qa_messages`, `answer_feedback` |
+| Column coverage | dump of `ai_generations` | only `model_confidence` and the two error columns null — the mock provider returns no confidence and nothing failed |
+| No PHI in `input_snapshot` | same dump | pseudonym, age band, sex, dates, results only; the identity link is `anonymization_id` |
+| Idempotency | ran `/api/summary` and `/api/insights` twice | corpus, templates, patterns and members unchanged; the summary explanation became v2 `is_current`, v1 retired |
+| Demo mode (no uuids) | same call without `patientId` / with `reportId: "r1"` | `persisted: "partial"`, generation written, conversation + pattern tables skipped by design |
 
 The pipeline assertions cover: PHI absence, age-banding, retrieval correctness
 in both scripts, prompt hashing, input and output guardrails, renderer
@@ -382,37 +564,31 @@ report_date,test_name,value,unit,ref_low,ref_high,status,ocr_confidence
 That maps almost 1:1 onto `test_results` (`raw_name`, `original_value`, unit,
 `printed_ref_low`, `printed_ref_high`, `ocr_confidence`). No reshaping needed.
 
-### 11.2 Test-name coverage — the core CBC tests are now in the catalogue
+### 11.2 Test-name coverage is the real gap — 4 of 21
 
 The OCR emits **21 distinct test names**; the `TESTS` catalogue in
-`src/lib/data.ts` originally recognised only **4** of them. The missing core
-CBC tests (red-cell indices + the white-cell differential) have since been
-added to the catalogue, so the agent can now accept and explain them.
+`src/lib/data.ts` recognises **4** of them.
 
 | | |
 |---|---|
-| Covered | Hemoglobin, MCV, RBC Count, WBC Count, **MCH, MCHC, RDW, Neutrophils, Lymphocytes, Eosinophils, Monocytes, Basophils** (12) |
-| Still to be aliased (9) | Absolute Lymphocytes, Absolute Eosinophils, Absolute Monocytes, Packed Cell Volume (PCV), Platelet Count, PCT, MPV, PDW, RDW-CV / RDW-SD |
+| Covered | Hemoglobin, MCV, RBC Count, WBC Count |
+| Not covered (17) | Neutrophils, Lymphocytes, Eosinophils, Monocytes, Basophils, Absolute Lymphocytes, Absolute Eosinophils, Absolute Monocytes, Packed Cell Volume, MCH, MCHC, RDW-CV, RDW-SD, Platelet Count, PCT, MPV, PDW |
 
-The catalogue entry is what gives a test its unit, bilingual label and reference
-range. With the CBC tests present, `parseClientReport()` (and the anonymiser)
-accept those rows instead of silently dropping them — a scanned CBC now reaches
-the agent with its real values, not only hemoglobin + MCV.
+The anonymiser drops any row whose test is not in `TESTS`, because that is where
+the unit, the bilingual label and the reference range come from. So a real CBC
+would currently reach the chatbot with 4 of its 21 results.
 
-What remains is the OCR **name → catalogue id** map (`lab_test_aliases`), which
-resolves a printed label like "Packed Cell Volume" to `hematocrit` / "RDW-CV" to
-`rdw` / "Platelet Count" to `platelets`. That lives in the database per spec
-§10.4 step 3:
+This is exactly what the schema anticipated: `lab_test_aliases` exists to resolve
+`raw_name` → `lab_test_catalog` (spec §10.4 step 3). Two ways forward:
 
-- **Proper fix:** seed `lab_test_catalog` + `lab_test_aliases` (ICMR reference
-  ranges) and read the catalogue from the database instead of the `TESTS`
-  constant.
-- **Quick fix for a demo:** add the remaining aliases to the `TESTS` map's name
-  matching / the mapping in the frontend.
+- **Proper fix:** seed `lab_test_catalog` + `lab_test_aliases` with the 17
+  missing tests (ICMR reference ranges), and read the catalogue from the database
+  instead of the `TESTS` constant.
+- **Quick fix for a demo:** add the missing entries to `TESTS`. Faster, but it
+  puts clinical reference ranges in a frontend constant.
 
-Until the alias step is done, the agent answers correctly about a CBC as long
-as the client sends the catalogue ids (which the report context does — the
-frontend maps the viewer's report through the same `TESTS` keys).
+Until one of these happens, expect the chatbot to answer only about hemoglobin,
+MCV, RBC and WBC from a scanned report.
 
 ### 11.3 The OCR's `status` must not be trusted
 
