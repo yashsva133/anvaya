@@ -1,9 +1,5 @@
 /**
- * src/app.js
- *
- * Express application factory.
- * Separated from server.js so you can import `app` in tests
- * without binding a port.
+ * src/app.js — Express app, all middleware and routes wired up.
  */
 
 import express from "express";
@@ -11,62 +7,58 @@ import helmet from "helmet";
 import cors from "cors";
 import "dotenv/config";
 
-import { requestLogger } from "./middleware/Requestlogger.js";
-import { globalLimiter } from "./middleware/Ratelimiter.js";
-import { errorHandler } from "./middleware/Errorhandler.js";
+import { requestLogger } from "./middleware/requestLogger.js";
+import { globalLimiter } from "./middleware/rateLimiter.js";
+import { errorHandler } from "./middleware/errorHandler.js";
 
-import reportRoutes from "./routes/Reportroutes.js";
+import reportRoutes from "./routes/reportRoutes.js";
+import trendsRoutes from "./routes/trendsRoutes.js";
+import aiRoutes from "./routes/aiRoutes.js";
+import patientRoutes from "./routes/patientRoutes.js";
+import qaRoutes from "./routes/qaRoutes.js";
 
 const app = express();
 
-// ─── Security headers ─────────────────────────────────────────────────────────
+// ── Security ──────────────────────────────────────────────────────────────────
 app.use(helmet());
 
-// ─── CORS ────────────────────────────────────────────────────────────────────
-const allowedOrigins = (process.env.ALLOWED_ORIGIN ?? "http://localhost:3000")
-  .split(",")
-  .map((o) => o.trim());
+// ── CORS (allow Next.js dev + prod origins) ───────────────────────────────────
+const allowed = (process.env.ALLOWED_ORIGIN ?? "http://localhost:3000")
+  .split(",").map((o) => o.trim());
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. curl, Postman) in dev
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS: origin ${origin} not allowed`));
-      }
-    },
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: (origin, cb) => (!origin || allowed.includes(origin) ? cb(null, true) : cb(new Error(`CORS: ${origin} not allowed`))),
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
 
-// ─── Body parsing ─────────────────────────────────────────────────────────────
+// ── Body parsing ──────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// ─── Request logging ──────────────────────────────────────────────────────────
+// ── Logging + rate limiting ───────────────────────────────────────────────────
 app.use(requestLogger);
-
-// ─── Global rate limiter ──────────────────────────────────────────────────────
 app.use(globalLimiter);
 
-// ─── Health check ────────────────────────────────────────────────────────────
-app.get("/health", (_req, res) => {
-  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+// ── Health check ──────────────────────────────────────────────────────────────
+// Matches the existing /api/health route in the Next.js app
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({ ok: true, mode: "live", database: "supabase" });
 });
 
-// ─── API routes ───────────────────────────────────────────────────────────────
-app.use("/api/reports", reportRoutes);
+// ── API routes ────────────────────────────────────────────────────────────────
+// All routes are prefixed with /api inside each router file
+app.use("/api", patientRoutes);
+app.use("/api", reportRoutes);
+app.use("/api", trendsRoutes);
+app.use("/api", aiRoutes);
+app.use("/api", qaRoutes);
 
-// ─── 404 fallback ────────────────────────────────────────────────────────────
-app.use((_req, res) => {
-  res.status(404).json({ success: false, message: "Route not found." });
-});
+// ── 404 ───────────────────────────────────────────────────────────────────────
+app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found." }));
 
-// ─── Global error handler (must be last) ─────────────────────────────────────
+// ── Global error handler (must be last) ──────────────────────────────────────
 app.use(errorHandler);
 
 export default app;
