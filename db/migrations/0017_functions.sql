@@ -509,7 +509,8 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_patient uuid;
+  v_patient      uuid;
+  v_allow_delete text;
 begin
   select patient_id into v_patient from public.lab_reports where id = p_report_id;
   if v_patient is null then
@@ -556,11 +557,33 @@ begin
   -- Storage objects live outside the database; remove them by prefix so no
   -- orphaned PHI remains in a bucket. Same {patient_id}/{report_id}/ convention
   -- the storage policies in 0019 rely on.
+  --
+  -- Supabase Storage attaches a statement-level BEFORE DELETE trigger to
+  -- storage.objects (supabase/storage tenant migration 0055-prevent-direct-deletes)
+  -- that refuses any direct delete unless the transaction sets
+  -- storage.allow_delete_query = 'true'. That is the platform's sanctioned
+  -- override for precisely this case — a deliberate, authorised, audited
+  -- erasure — and it is the only way to make GDPR erasure actually reach the
+  -- object store from the database. It is scoped as narrowly as the platform
+  -- allows:
+  --   * transaction-local (is_local => true), so it cannot outlive this call;
+  --   * set inside a SECURITY DEFINER function that already authorises against
+  --     auth.uid(), so a caller can only open it for its own report;
+  --   * restored immediately after the delete, so nothing else in the same
+  --     transaction inherits it.
+  -- The alternative — dropping this delete — would leave the report's original
+  -- scan, its OCR dump and its exports sitting in a bucket after the patient
+  -- had exercised their right to erasure. That is the worse failure.
   if to_regclass('storage.objects') is not null then
+    v_allow_delete := current_setting('storage.allow_delete_query', true);
+    perform set_config('storage.allow_delete_query', 'true', true);
+
     delete from storage.objects
      where bucket_id in ('report-originals', 'report-processed', 'report-exports', 'voice-audio', 'consent-evidence')
        and (storage.foldername(name))[1] = v_patient::text
        and (storage.foldername(name))[2] = p_report_id::text;
+
+    perform set_config('storage.allow_delete_query', coalesce(v_allow_delete, 'false'), true);
   end if;
 end;
 $$;

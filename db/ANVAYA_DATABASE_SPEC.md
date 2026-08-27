@@ -579,7 +579,36 @@ Ownership is expressed by the path prefix, not by `storage.objects.owner`, becau
 
 For each bucket: `SELECT` / `INSERT` / `DELETE` policies `to authenticated` gated on that predicate (owner, authorised clinician, or admin).
 
-The migration also runs `alter table storage.objects enable row level security`. Supabase enables it by default, but re-asserting it is idempotent and means a misconfigured project cannot silently expose every uploaded report. (Verification found the policies were inert without it.)
+### 6.2.1 The migration does **not** touch anything Supabase owns
+
+`storage.buckets` and `storage.objects` are owned by `supabase_storage_admin`. Since Supabase platform migration `20250421084701_revoke_admin_roles_from_postgres` the role the SQL Editor connects as (`postgres`) is no longer a member of that role, so it is no longer treated as the owner of those tables — and PostgreSQL requires **ownership**, not a table grant, for `ALTER TABLE`, `CREATE INDEX`, `CREATE POLICY`, `DROP POLICY` and `COMMENT ON POLICY`. Every one of those therefore fails from the SQL Editor with `ERROR 42501: must be owner of table objects`.
+
+`0019_storage.sql` was written before that change landed and assumed ownership. It now:
+
+* **creates the five private buckets** — DML on `storage.buckets` is explicitly granted to `postgres`, so this always runs;
+* **fails the migration if any of the five is public**, rather than shipping a public medical bucket;
+* **creates `anvaya.may_access_patient_prefix()`** in our own schema, where we do own things;
+* **creates the 15 object policies only behind a capability probe** — `pg_has_role(current_user, <owner of storage.objects>, 'USAGE')`, which is the SQL-visible form of the check PostgreSQL itself runs. When the probe is false it skips the policies, emits a `NOTICE` naming the dashboard step, and exits 0.
+
+It no longer contains `alter table storage.objects enable row level security`. Supabase's own storage migrations already enable RLS on both `storage.objects` (storage tenant `0002`) and `storage.buckets` (tenant `0007`); re-asserting it is not ours to do and is the statement that produced the 42501.
+
+**Direction of failure.** If the policies are not created, `storage.objects` RLS is on with no policy for our buckets, so `authenticated` can read, upload and delete *nothing*. Storage is closed by default; adding the policies in the dashboard is what opens the narrow, prefix-scoped path. It is never the step that closes a hole.
+
+### 6.2.2 What must be done in the dashboard
+
+The 15 object policies. `Storage → Policies → storage.objects → For full customization`, one policy per bucket per command, `authenticated`, with `USING` / `WITH CHECK`:
+
+```
+bucket_id = '<bucket>' and anvaya.may_access_patient_prefix(name)
+```
+
+`db/harness/20_storage_policies_as_platform.sql` contains the same 15 statements as copy-pasteable SQL, and `db/harness/99_verify_supabase.sql` checks afterwards that all 15 are present, all five buckets are private, and `storage.objects` RLS is on.
+
+### 6.2.3 Direct deletes from `storage.objects` are refused by default
+
+Supabase Storage tenant migration `0055-prevent-direct-deletes` attaches a statement-level `BEFORE DELETE` trigger to `storage.objects` (and `storage.buckets`) that raises `42501: Direct deletion from storage tables is not allowed. Use the Storage API instead.` unless the transaction sets `storage.allow_delete_query = 'true'`.
+
+`anvaya.hard_delete_report()` therefore sets that GUC transaction-locally around its prefix delete and restores it immediately after. That is the platform's sanctioned override, scoped as tightly as it can be: transaction-local, inside a `SECURITY DEFINER` function that has already authorised against `auth.uid()`, and for one report prefix only. The alternative — dropping the delete — would leave a patient's original scan, OCR dump and exports in a bucket after they had exercised their right to erasure. Test 22 covers it, and a plain `delete from storage.objects` in the same session immediately afterwards is still refused.
 
 ### 6.3 What stays out of storage
 
@@ -611,7 +640,7 @@ Run in filename order. Every file states its purpose, dependencies, freshness an
 | `0016_audit_deletion_errors.sql` | `audit_logs` + hash chain, `deletion_requests`, `system_errors` | 0001-0003 | Yes | No |
 | `0017_functions.sql` | 21 `anvaya.*` functions: identity, consent gate, audit writer, correction, review transitions, release, erasure | 0003-0016 | Yes | No |
 | `0018_rls.sql` | RLS on all 39 tables, 4 column-guard triggers, grants, 69 policies | 0003-0017 | Yes | No |
-| `0019_storage.sql` | 5 private buckets, prefix predicate, 15 object policies | 0004, 0017 | Yes | No |
+| `0019_storage.sql` | 5 private buckets (+ public-bucket guard), prefix predicate, 15 object policies **behind an ownership capability probe** — the dashboard creates them on a stock project | 0004, 0017, 0018 | Yes | No |
 | `0020_views.sql` | 6 read models | 0006-0016 | Yes | No — shapes match the TS interfaces |
 | `0021_seed_catalog.sql` | 14 tests, 30 aliases, 14 ranges, 4 range sources, 5 RAG sources, 3 pattern templates, 1 rule, 6 consent policies | 0005-0006, 0013 | Yes — `ON CONFLICT DO NOTHING` throughout | No |
 
@@ -661,7 +690,19 @@ python3 -m venv .venv && .venv/bin/pip install pgserver
 PATH=.venv/bin:$PATH ./db/harness/verify.sh
 ```
 
-`db/harness/verify.sh` boots a throwaway PostgreSQL, recreates the small slice of the Supabase platform the migrations legitimately depend on (`auth.uid()`/`auth.role()`, `storage.buckets`/`storage.objects`, the three platform roles), applies all 21 migrations **three times**, then runs the 31 behavioural tests. Last run: exit 0, 63 migration applications OK, 0 failures, `ALL BEHAVIOUR TESTS PASSED`.
+`db/harness/verify.sh` boots a throwaway PostgreSQL and recreates the slice of the Supabase platform the migrations depend on — `auth.uid()`/`auth.role()`, `storage.buckets`/`storage.objects`, the platform roles **and their permission model**: the storage tables are owned by `supabase_storage_admin`, RLS is on, the `0055-prevent-direct-deletes` triggers are attached, and the migrations run as `postgres_editor`, a `NOSUPERUSER BYPASSRLS` role that is deliberately *not* a member of `supabase_storage_admin`. That is what the `postgres` role is on a real project since 2025-04-21, so anything that assumes ownership of a Supabase-managed table fails here with the same `SQLSTATE 42501` it fails with in the SQL Editor.
+
+The run then:
+
+1. asserts `anvaya_schema.sql` is byte-for-byte in sync with `db/migrations/` (`resplice_schema.py --check`);
+2. applies all 21 migrations **three times** as `postgres_editor`;
+3. runs `0019` on a policy-free project to prove the skip-and-`NOTICE` path exits 0;
+4. performs the dashboard step (`20_storage_policies_as_platform.sql`) as the platform admin and re-runs `0019` to prove it is still idempotent with the policies already present;
+5. runs the 31 behavioural tests;
+6. applies `anvaya_schema.sql` as **one single paste** to a second database and diffs the resulting schema against the migrations build;
+7. runs `99_verify_supabase.sql` against both builds.
+
+Last run: exit 0, 63 migration applications OK, 0 failures, `ALL BEHAVIOUR TESTS PASSED`, both builds → 39 base tables + 6 views, verification 11/11 PASS on the migrations build and the expected single FAIL on check 6 for the not-yet-configured single-file build.
 
 The harness files are test scaffolding only — `00_supabase_stubs.sql` is not part of the migration set, and none of it is needed on a real Supabase project.
 
@@ -723,7 +764,9 @@ These were not visible by reading the SQL. Each would have failed in production.
 | 8 | Immutability guards made erasure impossible | A patient's right to erasure could not be honoured | Test 22 |
 | 9 | `patient_consents → patients CASCADE` + trigger ordering | Wrong diagnostic on patient delete | Test 23 |
 | 10 | `authenticated` lacked `USAGE` on `anvaya` (RLS worked only because policy expressions store resolved OIDs) | Any direct function call failed | Test 05 |
-| 11 | Storage policies inert without RLS on `storage.objects` | Uploaded reports would be readable if a project's storage RLS were ever disabled | Test 19 |
+| 11 | Storage policies inert without RLS on `storage.objects` | `0019` ran `alter table storage.objects enable row level security` — **the statement that produces `42501: must be owner of table objects` on a real project**. Removed; Supabase enables it itself | Reproduced: `0019:82` |
+| 12 | `0019` also ran 15 `create policy`, 5 `drop policy` and 1 `comment on policy` against `storage.objects` | Same `42501`. Worse, `drop policy if exists` only fails when the policy **exists**, so the migration passed on a fresh project and broke on every re-run after the dashboard step | Reproduced per-statement |
+| 13 | `hard_delete_report()` deleted from `storage.objects` directly | Supabase's `protect_objects_delete` trigger raises `42501: Direct deletion from storage tables is not allowed`, so **a patient's right to erasure could not be honoured** — the clinical rows would be gone while the scan, OCR dump and exports stayed in the bucket | Test 22 against the real triggers |
 
 ### 9.3 Test inventory (31 assertions, all passing)
 
