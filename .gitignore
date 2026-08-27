@@ -50,11 +50,10 @@ node_modules/
 .env.local
 .env*.local
 
-# Reports, Images & CSV Outputs
-*.png
-*.jpg
-*.jpeg
-*.csv
+# Temporary files
+*.patch
+
+# Reports & CSV Outputs (allowed for project samples)
 
 # Paddle / Model cache
 .paddlex/
