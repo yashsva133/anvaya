@@ -60,7 +60,7 @@ export default function UploadPage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        toast(err.error || "Failed to process report", "error");
+        toast(err.error || "Failed to process report", "warn");
         return;
       }
 
@@ -78,7 +78,7 @@ export default function UploadPage() {
 
       router.push("/processing");
     } catch (err: any) {
-      toast("Error processing report", "error");
+      toast("Error processing report", "warn");
     }
   };
 

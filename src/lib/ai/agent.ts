@@ -16,6 +16,7 @@
 import type { LangCode } from "@/lib/data";
 import { loadAiEnv, type AiEnv } from "./env";
 import { buildAnonymisedPayload } from "./anonymizer";
+import type { ClientReport } from "./clientReport";
 import { retrieve } from "./rag";
 import { buildPrompt, SAFE_REDIRECT } from "./prompts";
 import {
@@ -39,6 +40,13 @@ export interface AskOptions {
   lang: LangCode;
   readingLevel?: ReadingLevel;
   reportId?: string;
+  /**
+   * The user's OWN report, as validated by parseClientReport(). When present
+   * the payload, the grounding numbers and the guardrail's allowed-number set
+   * all come from this report instead of the seeded demo data — that is what
+   * makes an answer personalized rather than about the fictional demo patient.
+   */
+  report?: ClientReport;
   /** Client-supplied conversation id; falls back to a generated one. */
   sessionId?: string;
   /** Reuse a caller-provided env (used by /api/ai/status and tests). */
@@ -163,6 +171,7 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
     lang,
     reportId: opts.reportId,
     pseudonym: sessionPseudonym(sessionId),
+    report: opts.report,
   });
 
   const prompt = buildPrompt({
@@ -226,12 +235,32 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
   }
 
   // ---- 3. Retrieve grounding passages -------------------------------------
-  const retrieval = retrieve({
+  let retrieval = retrieve({
     query: question,
     lang,
     topK: env.ai.topK,
     minScore: env.ai.minScore,
   });
+
+  // Personalization: a question that names no test ("explain my report",
+  // "what matters here?") retrieves nothing on its own. Fall back to the
+  // topics of the abnormal results in THIS user's report, so even the generic
+  // questions are grounded in passages about this person's flagged values.
+  if (retrieval.match_count === 0) {
+    const focus = payload.results
+      .filter((r) => r.status !== "normal")
+      .map((r) => r.test)
+      .slice(0, 4);
+    if (focus.length > 0) {
+      retrieval = retrieve({
+        query: question,
+        lang,
+        topK: env.ai.topK,
+        minScore: env.ai.minScore,
+        extraTopics: focus,
+      });
+    }
+  }
 
   const fullPrompt = buildPrompt({
     question,

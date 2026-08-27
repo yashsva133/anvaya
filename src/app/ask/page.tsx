@@ -36,6 +36,71 @@ interface Msg {
   text: string;
   sources?: number;
   confidence?: "high" | "moderate";
+  /** Which path produced this answer (additive; undefined on the welcome card). */
+  engine?: "medgemma" | "rules" | "fallback";
+  model?: string | null;
+  qaMessageId?: string | null;
+}
+
+interface AnswerResponse {
+  answer: string;
+  sources: number;
+  confidence: "high" | "moderate";
+  engine?: "medgemma" | "rules" | "fallback";
+  model?: string | null;
+  personalized?: boolean;
+  qa_message_id?: string | null;
+}
+
+/**
+ * The personalized context sent with every question: the report the user is
+ * actually looking at (their upload via /api/process-report, or the demo
+ * fallback), reduced to de-identified values. Only test ids and numbers cross
+ * the wire — the client deliberately does NOT send statuses, units or ranges
+ * (the server re-derives those from its catalogue) and never sends a name.
+ */
+function buildReportContext(args: {
+  activeReport: { id: string; date: { en: string; hi: string }; entries: { test: string; value: number }[] };
+  reports: { id: string; date: { en: string; hi: string }; entries: { test: string; value: number }[] }[];
+  patient: { age: number; gender: { en: string } };
+  hi: boolean;
+}) {
+  const { activeReport, reports, patient, hi } = args;
+  const idx = reports.findIndex((r) => r.id === activeReport.id);
+  const prev = idx > 0 ? reports[idx - 1] : undefined;
+  const values = (entries: { test: string; value: number }[]) =>
+    entries.map((e) => ({ test: e.test, value: e.value }));
+  return {
+    reportId: activeReport.id,
+    dateLabel: hi ? activeReport.date.hi : activeReport.date.en,
+    age: patient.age,
+    gender: patient.gender.en,
+    results: values(activeReport.entries),
+    ...(prev
+      ? {
+          previous: {
+            dateLabel: hi ? prev.date.hi : prev.date.en,
+            results: values(prev.entries),
+          },
+        }
+      : {}),
+  };
+}
+
+/** Stable per-browser conversation id, so multi-turn memory works server-side. */
+function chatSessionId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const key = "anvaya_chat_session_v1";
+    let v = window.localStorage.getItem(key);
+    if (!v || !/^[a-zA-Z0-9-]{8,64}$/.test(v)) {
+      v = crypto.randomUUID();
+      window.localStorage.setItem(key, v);
+    }
+    return v;
+  } catch {
+    return "";
+  }
 }
 
 const SUGGESTED: { en: string; hi: string }[] = [
@@ -49,7 +114,10 @@ const SUGGESTED: { en: string; hi: string }[] = [
 
 export default function AskPage() {
   const { t, s } = useI18n();
-  const { activeReport } = useReportData();
+  const { activeReport, patient, reports } = useReportData();
+  // Lazy useState (not a ref write in render): computed once, never displayed,
+  // so the SSR/client difference cannot cause a hydration mismatch.
+  const [sessionId] = useState(() => chatSessionId());
   const hi = s.lang === "hi";
   const toast = useToast();
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -87,17 +155,27 @@ export default function AskPage() {
       const res = await fetch("/api/answer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ q: query, lang: s.lang }),
+        body: JSON.stringify({
+          q: query,
+          lang: s.lang,
+          reading: s.mode,
+          ...(sessionId ? { session: sessionId } : {}),
+          report: buildReportContext({ activeReport, reports, patient, hi }),
+        }),
       });
-      const data = (await res.json()) as {
-        answer: string;
-        sources: number;
-        confidence: "high" | "moderate";
-      };
+      const data = (await res.json()) as AnswerResponse;
       await new Promise((r) => setTimeout(r, 700));
       setMsgs((m) => [
         ...m,
-        { role: "ai", text: data.answer, sources: data.sources, confidence: data.confidence },
+        {
+          role: "ai",
+          text: data.answer,
+          sources: data.sources,
+          confidence: data.confidence,
+          engine: data.engine,
+          model: data.model,
+          qaMessageId: data.qa_message_id,
+        },
       ]);
     } catch {
       setMsgs((m) => [
@@ -121,7 +199,11 @@ export default function AskPage() {
       await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ helpful: dir === "up" }),
+        body: JSON.stringify({
+          helpful: dir === "up",
+          qa_message_id: msgs[i]?.qaMessageId ?? undefined,
+          ...(sessionId ? { session: sessionId } : {}),
+        }),
       });
     } catch {
       /* demo */
@@ -173,6 +255,27 @@ export default function AskPage() {
                   <Md text={m.text} className="text-[15px] font-medium leading-relaxed text-slate-700" />
                   {i > 0 && (
                     <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-dashed border-slate-200 pt-3">
+                      {m.engine && (
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-extrabold ${
+                            m.engine === "medgemma"
+                              ? "bg-violet-50 text-violet-700"
+                              : "bg-slate-50 text-slate-500"
+                          }`}
+                          title={m.engine === "medgemma" ? (m.model ?? "medgemma") : undefined}
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {m.engine === "medgemma"
+                            ? `MedGemma · ${m.model ?? "local"}`
+                            : m.engine === "rules"
+                              ? hi
+                                ? "सुरक्षित उत्तर"
+                                : "Saved answer"
+                              : hi
+                                ? "डेमो उत्तर"
+                                : "Demo answer"}
+                        </span>
+                      )}
                       {(m.sources ?? 0) > 0 && (
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-extrabold text-brand-700">
                           <BookOpen className="h-3.5 w-3.5" />
