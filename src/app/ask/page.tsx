@@ -29,6 +29,7 @@ import {
 } from "@/components/core";
 import { VoiceSheet } from "@/components/voice";
 import { useI18n } from "@/lib/i18n";
+import { useReportData } from "@/context/ReportDataContext";
 
 interface Msg {
   role: "user" | "ai";
@@ -48,6 +49,7 @@ const SUGGESTED: { en: string; hi: string }[] = [
 
 export default function AskPage() {
   const { t, s } = useI18n();
+  const { activeReport } = useReportData();
   const hi = s.lang === "hi";
   const toast = useToast();
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -59,17 +61,17 @@ export default function AskPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const reportDate = hi ? activeReport.date.hi : activeReport.date.en;
     setMsgs([
       {
         role: "ai",
         text: hi
-          ? "नमस्ते! मैंने आपकी **22 अगस्त 2026** की रिपोर्ट पढ़ ली है। आप अपने परिणामों के बारे में कुछ भी पूछ सकते हैं — सरल भाषा में, या बोलकर।"
-          : "Hello! I've read your **22 Aug 2026** report. Ask anything about your results — in simple words, or by voice.",
+          ? `नमस्ते! मैंने आपकी **${reportDate}** की रिपोर्ट पढ़ ली है। आप अपने परिणामों के बारे में कुछ भी पूछ सकते हैं — सरल भाषा में, या बोलकर।`
+          : `Hello! I've read your **${reportDate}** report. Ask anything about your results — in simple words, or by voice.`,
         sources: 0,
       },
     ]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hi, activeReport.date.en, activeReport.date.hi]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });

@@ -1,6 +1,7 @@
 "use client";
 
 // Screen — compare two reports side by side with plain-language summary.
+// Connected to dynamic Supabase & local report data.
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -21,19 +22,18 @@ import {
   TrendDirIcon,
 } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
-import { REPORTS, TESTS, fmtValue, type Status } from "@/lib/data";
+import { TESTS, fmtValue, type Status } from "@/lib/data";
+import { useReportData } from "@/context/ReportDataContext";
 
 type Verdict = "improved" | "worsened" | "stable";
 
 const HIGH_BAD = new Set(["hba1c", "ldl", "glucose", "triglycerides", "totalchol"]);
 
-function verdict(testId: string, from: number, to: number): Verdict {
+function verdict(testId: string, from: number, to: number, def: any): Verdict {
   const pct = Math.abs((to - from) / (from || 1));
   if (pct < 0.03) return "stable";
-  const def = TESTS[testId];
   if (HIGH_BAD.has(testId)) return to > from ? "worsened" : "improved";
   if (def.ref.low != null && def.ref.high != null) {
-    // both bounded: check movement toward range
     const wasOut = from < def.ref.low || from > def.ref.high;
     const nowOut = to < def.ref.low || to > def.ref.high;
     if (wasOut && !nowOut) return "improved";
@@ -47,22 +47,29 @@ function verdict(testId: string, from: number, to: number): Verdict {
 function CompareInner() {
   const params = useSearchParams();
   const { t, s } = useI18n();
+  const { reports, catalog } = useReportData();
   const hi = s.lang === "hi";
-  const [oldId, setOldId] = useState(params.get("old") ?? "apr26");
-  const [newId, setNewId] = useState(params.get("new") ?? "aug26");
 
-  const oldR = REPORTS.find((r) => r.id === oldId) ?? REPORTS[1];
-  const newR = REPORTS.find((r) => r.id === newId) ?? REPORTS[3];
+  const defaultOld = reports.length > 1 ? reports[0].id : "apr26";
+  const defaultNew = reports.length > 0 ? reports[reports.length - 1].id : "aug26";
 
-  const shared = newR.entries
+  const [oldId, setOldId] = useState(params.get("old") ?? defaultOld);
+  const [newId, setNewId] = useState(params.get("new") ?? defaultNew);
+
+  const oldR = reports.find((r) => r.id === oldId) ?? reports[0];
+  const newR = reports.find((r) => r.id === newId) ?? reports[reports.length - 1];
+
+  const shared = (newR?.entries || [])
     .map((e) => {
-      const prev = oldR.entries.find((x) => x.test === e.test);
+      const prev = oldR?.entries.find((x) => x.test === e.test);
       return prev ? { test: e.test, from: prev, to: e } : null;
     })
     .filter((x): x is NonNullable<typeof x> => !!x)
     .sort((a, b) => {
+      const defA = catalog[a.test] || TESTS[a.test] || TESTS.hemoglobin;
+      const defB = catalog[b.test] || TESTS[b.test] || TESTS.hemoglobin;
       const rank = (v: Verdict) => (v === "worsened" ? 0 : v === "improved" ? 1 : 2);
-      return rank(verdict(a.test, a.from.value, a.to.value)) - rank(verdict(b.test, b.from.value, b.to.value));
+      return rank(verdict(a.test, a.from.value, a.to.value, defA)) - rank(verdict(b.test, b.from.value, b.to.value, defB));
     });
 
   const statusBadge = (st: Verdict) =>
@@ -89,36 +96,77 @@ function CompareInner() {
       />
 
       {/* pickers */}
-      <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center">
-        {[
-          { label: t("compare.older"), val: oldId, set: setOldId, other: newId },
-          { label: t("compare.newer"), val: newId, set: setNewId, other: oldId },
-        ].map((p) => (
-          <div key={p.label} className="card-shadow rounded-3xl border border-slate-100 bg-white p-4">
+      <div className="grid items-center gap-4 lg:grid-cols-[1fr_auto_1fr]">
+        {/* Box 1: Older Report */}
+        <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <p className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
-              {p.label}
+              {t("compare.older")}
             </p>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {REPORTS.map((r) => (
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-extrabold text-brand-900">
+              {oldR ? pick(oldR.date, s.lang) : "Previous"}
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2.5">
+            {reports.map((r) => {
+              const isSelected = oldId === r.id;
+              const isDisabled = newId === r.id;
+              return (
                 <button
                   key={r.id}
-                  disabled={r.id === p.other}
-                  onClick={() => p.set(r.id)}
-                  className={`min-h-12 rounded-2xl border-2 px-3 text-sm font-extrabold transition active:scale-95 disabled:opacity-30 ${
-                    p.val === r.id
-                      ? "border-brand-700 bg-brand-700 text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-brand-300"
+                  disabled={isDisabled}
+                  onClick={() => setOldId(r.id)}
+                  className={`min-h-[52px] rounded-2xl border-2 px-3 text-sm font-extrabold transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 ${
+                    isSelected
+                      ? "border-brand-700 bg-brand-700 text-white shadow-md shadow-brand-900/15"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-brand-300 hover:bg-brand-50/30"
                   }`}
                 >
                   {pick(r.month, s.lang)} 2026
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        ))}
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-          <ArrowRight className="h-6 w-6 rotate-90 md:rotate-0" strokeWidth={2.6} />
-        </span>
+        </div>
+
+        {/* Center Connector */}
+        <div className="flex justify-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-700 text-white shadow-md shadow-brand-900/20">
+            <ArrowRight className="h-5 w-5 rotate-90 lg:rotate-0" strokeWidth={2.6} />
+          </span>
+        </div>
+
+        {/* Box 2: Newer Report */}
+        <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <p className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
+              {t("compare.newer")}
+            </p>
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-extrabold text-brand-900">
+              {newR ? pick(newR.date, s.lang) : "Latest"}
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2.5">
+            {reports.map((r) => {
+              const isSelected = newId === r.id;
+              const isDisabled = oldId === r.id;
+              return (
+                <button
+                  key={r.id}
+                  disabled={isDisabled}
+                  onClick={() => setNewId(r.id)}
+                  className={`min-h-[52px] rounded-2xl border-2 px-3 text-sm font-extrabold transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 ${
+                    isSelected
+                      ? "border-brand-700 bg-brand-700 text-white shadow-md shadow-brand-900/15"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-brand-300 hover:bg-brand-50/30"
+                  }`}
+                >
+                  {pick(r.month, s.lang)} 2026
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* AI summary */}
@@ -141,8 +189,8 @@ function CompareInner() {
         <SectionTitle icon={ArrowLeftRight} title={t("compare.whatChanged")} />
         <div className="space-y-2.5">
           {shared.map((row, i) => {
-            const def = TESTS[row.test];
-            const v = verdict(row.test, row.from.value, row.to.value);
+            const def = catalog[row.test] || TESTS[row.test] || TESTS.hemoglobin;
+            const v = verdict(row.test, row.from.value, row.to.value, def);
             const dir = row.to.value > row.from.value ? "up" : row.to.value < row.from.value ? "down" : "flat";
             return (
               <motion.div

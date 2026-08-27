@@ -74,7 +74,7 @@ export default function WhyPage() {
             ok: false,
           },
           {
-            title: "Rxअन्वय",
+            title: "Rxanvaya",
             chain: hi
               ? ["रिपोर्ट", "समझो", "जोड़ो", "ट्रैक", "समझाओ", "उद्धरण", "पूछो"]
               : ["Report", "Understand", "Connect", "Track", "Explain", "Cite", "Ask"],
@@ -145,7 +145,7 @@ export default function WhyPage() {
                 <th className="bg-mint-50 px-5 py-4 text-center">
                   <span className="inline-flex items-center gap-1.5 text-[12px] font-black uppercase tracking-wider text-mint-800">
                     <Sparkles className="h-4 w-4" />
-                    Rxअन्वय
+                    Rxanvaya
                   </span>
                 </th>
               </tr>

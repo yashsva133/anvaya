@@ -114,7 +114,7 @@ export function Logo({ withTagline = true }: { withTagline?: boolean }) {
       <LogoMark size={withTagline ? 42 : 36} />
       <div className="leading-tight">
         <p className="text-lg font-extrabold tracking-tight text-brand-900">
-          Rxअन्वय
+          Rxanvaya
         </p>
         {withTagline && (
           <p className="text-[11px] font-medium text-slate-500">
@@ -265,17 +265,19 @@ export function ListenBtn({
   const { s, t, speechLang } = useI18n();
   const toast = useToast();
   const [speaking, setSpeaking] = useState(false);
-  useEffect(() => () => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => window.speechSynthesis?.cancel();
   }, []);
 
-  if (!s.voice) return null;
+  if (!mounted || !s.voice) return null;
+
+  const supported =
+    typeof window !== "undefined" && "speechSynthesis" in window;
 
   const speak = () => {
-    const supported =
-      typeof window !== "undefined" && "speechSynthesis" in window;
     if (!supported) {
       toast("Voice is not supported on this device.", "info");
       return;
@@ -298,7 +300,7 @@ export function ListenBtn({
     setTimeout(() => setSpeaking(false), 60000);
   };
 
-  const Icon = Volume2;
+  const Icon = !supported ? VolumeX : Volume2;
   return (
     <button
       type="button"
@@ -853,7 +855,7 @@ export function ChipLink({
 
 export function pickTestName(test: TestDef, mode: string, lang: "en" | "hi" | "bn"): string {
   const L = lang === "hi" ? "hi" : "en";
-  return mode === "standard" ? test.name[L as "en" | "hi"] : test.simple[L as "en" | "hi"];
+  return mode === "advanced" ? test.name[L as "en" | "hi"] : test.simple[L as "en" | "hi"];
 }
 
 export { pick };

@@ -1,13 +1,12 @@
 "use client";
 
-// Screen 5 — main AI health report. The centerpiece of the demo.
+// Screen 5 — main AI health report. Connected to dynamic Supabase & local report data.
 
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
-  ArrowRight,
   BadgeInfo,
   BookOpen,
   BrainCircuit,
@@ -33,36 +32,47 @@ import {
 import { useI18n, pick } from "@/lib/i18n";
 import {
   CRITICAL_DEMO,
-  LATEST,
-  PATIENT,
   PATTERNS,
-  STORY,
   TESTS,
   fmtValue,
   type ReportEntry,
-  type Status,
 } from "@/lib/data";
+import { useReportData } from "@/context/ReportDataContext";
 
 const MODES = [
-  { id: "standard", key: "settings.standard" },
   { id: "simple", key: "mode.simple" },
-  { id: "very", key: "mode.very" },
+  { id: "advanced", key: "mode.advanced" },
 ] as const;
 
 export default function DashboardPage() {
   const { t, s, set } = useI18n();
   const router = useRouter();
+  const { activeReport, patient, catalog } = useReportData();
   const hi = s.lang === "hi";
   const [criticalHidden, setCriticalHidden] = useState(false);
 
-  const counts = { normal: 8, borderline: 2, out: 4 };
-  const priorities = ["hemoglobin", "hba1c", "ldl"];
-  const borderline = ["glucose", "triglycerides"];
+  const report = activeReport;
+  const entries = report?.entries || [];
+
+  const counts = {
+    normal: entries.filter((e) => e.status === "normal").length,
+    borderline: entries.filter((e) => e.status === "borderline").length,
+    out: entries.filter((e) => e.status === "high" || e.status === "low" || e.status === "critical").length,
+  };
+
+  // Determine top priority cards from actual report entries
+  const attentionEntries = entries.filter((e) => e.status !== "normal");
+  const priorityIds = attentionEntries.length > 0
+    ? attentionEntries.slice(0, 3).map((e) => e.test)
+    : ["hemoglobin", "hba1c", "ldl"];
+
+  const borderline = entries.filter((e) => e.status === "borderline").map((e) => e.test);
+  const fallbackBorderline = borderline.length > 0 ? borderline : ["glucose", "triglycerides"];
   const lipid = PATTERNS[0];
 
   const summarySpeech = hi
-    ? "आपकी रिपोर्ट में कुछ परिणाम ऐसे हैं जिन पर ध्यान देने की आवश्यकता है। आठ परिणाम सामान्य हैं, दो पर ध्यान देना है, और चार सामान्य सीमा से बाहर हैं। कृपया अपने डॉक्टर से चर्चा करें।"
-    : "Some results need your attention. Eight results are normal, two need attention, and four are outside the usual range. Please discuss them with your doctor.";
+    ? `आपकी रिपोर्ट में ${counts.normal} परिणाम सामान्य हैं, ${counts.borderline} पर ध्यान देना है, और ${counts.out} सामान्य सीमा से बाहर हैं। कृपया अपने डॉक्टर से चर्चा करें।`
+    : `In your report, ${counts.normal} results are normal, ${counts.borderline} need attention, and ${counts.out} are outside the usual range. Please discuss them with your doctor.`;
 
   return (
     <AppShell>
@@ -75,16 +85,16 @@ export default function DashboardPage() {
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-bold text-slate-500">
             <span className="flex items-center gap-1.5">
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-700 text-[10px] font-extrabold text-white">
-                RS
+                {patient.nameShort.slice(0, 2).toUpperCase()}
               </span>
-              {pick(PATIENT.name, s.lang)} · {PATIENT.age}
+              {pick(patient.name, s.lang)} · {patient.age}
             </span>
             <span className="flex items-center gap-1.5">
               <CalendarDays className="h-4 w-4" />
-              {pick(LATEST.date, s.lang)}
+              {pick(report.date, s.lang)}
             </span>
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
-              {pick(PATIENT.fictionalNote, s.lang)}
+              {hi ? "Rxअन्वय लाइव रिपोर्ट" : "RxAnvaya Live Report"}
             </span>
           </div>
         </div>
@@ -122,12 +132,12 @@ export default function DashboardPage() {
                 AI {hi ? "सारांश" : "summary"}
               </span>
               <h2 className="mt-3 text-balance text-2xl font-extrabold leading-tight text-brand-950 md:text-3xl">
-                {t("dash.someAttention")}
+                {counts.out > 0 || counts.borderline > 0 ? t("dash.someAttention") : t("dash.allFine")}
               </h2>
               <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-500 md:text-[15px]">
                 {hi
-                  ? "ज़्यादातर परिणाम ठीक हैं। कुछ परिणाम सामान्य सीमा से बाहर हैं — नीचे सबसे ज़रूरी तीन देखें।"
-                  : "Most results are fine. A few are outside the usual range — see the three most important below."}
+                  ? `आपकी रिपोर्ट में ${counts.normal} सामान्य और ${counts.out + counts.borderline} ध्यान देने योग्य परिणाम हैं।`
+                  : `Your report contains ${counts.normal} normal results and ${counts.out + counts.borderline} results requiring review.`}
               </p>
             </div>
             <ListenBtn text={summarySpeech} />
@@ -159,17 +169,17 @@ export default function DashboardPage() {
       <section className="mt-10">
         <SectionTitle icon={Sparkles} title={t("dash.matters")} />
         <div className="grid gap-4 md:grid-cols-3">
-          {priorities.map((id, i) => {
-            const e = LATEST.entries.find((x) => x.test === id) as ReportEntry;
+          {priorityIds.map((id, i) => {
+            const e = entries.find((x) => x.test === id) || { test: id, value: 0, status: "normal" as const };
             return (
-              <PriorityCard key={id} entry={e} index={i} hi={hi} />
+              <PriorityCard key={id} entry={e} index={i} hi={hi} catalog={catalog} />
             );
           })}
         </div>
       </section>
 
       {/* ------------------------------ Pattern teaser ----------------------------- */}
-      <motion.section {...{}} className="mt-10">
+      <motion.section className="mt-10">
         <Link
           href="/insights"
           className="card-shadow group flex flex-col gap-4 rounded-[2rem] border-2 border-violet-200 bg-gradient-to-br from-violet-50 via-white to-white p-6 transition hover:border-violet-400 md:flex-row md:items-center"
@@ -186,7 +196,7 @@ export default function DashboardPage() {
                 <span key={n.test} className="flex items-center gap-2">
                   <span className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-sm font-extrabold text-slate-700 shadow-sm ring-1 ring-slate-100">
                     <TestIcon testId={n.test} size={22} />
-                    {TESTS[n.test].name.en}
+                    {(catalog[n.test] || TESTS[n.test] || TESTS.hemoglobin).name.en}
                     <span className={n.arrow === "up" ? "text-rose-600" : "text-rose-600"}>
                       {n.arrow === "up" ? "↑" : n.arrow === "down" ? "↓" : "→"}
                     </span>
@@ -210,11 +220,11 @@ export default function DashboardPage() {
         <SectionTitle
           icon={BookOpen}
           title={t("dash.allResults")}
-          sub={`${LATEST.testsCount} ${t("reports.tests")} · ${pick(LATEST.date, s.lang)}`}
+          sub={`${entries.length} ${t("reports.tests")} · ${pick(report.date, s.lang)}`}
         />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {LATEST.entries.map((e) => (
-            <ResultCard key={e.test} entry={e} />
+          {entries.map((e) => (
+            <ResultCard key={e.test} entry={e} catalog={catalog} />
           ))}
         </div>
       </section>
@@ -223,9 +233,9 @@ export default function DashboardPage() {
       <section className="mt-10">
         <SectionTitle icon={BadgeInfo} title={t("dash.closeToLimit")} sub={t("dash.closeNote")} />
         <div className="grid gap-4 md:grid-cols-2">
-          {borderline.map((id) => {
-            const e = LATEST.entries.find((x) => x.test === id) as ReportEntry;
-            const def = TESTS[id];
+          {fallbackBorderline.slice(0, 2).map((id) => {
+            const e = entries.find((x) => x.test === id) || { test: id, value: 0, status: "borderline" as const };
+            const def = catalog[id] || TESTS[id] || TESTS.hemoglobin;
             return (
               <div
                 key={id}
@@ -241,8 +251,8 @@ export default function DashboardPage() {
                   </div>
                   <p className="mt-1 text-sm font-semibold text-slate-500">
                     {hi
-                      ? "यह परिणाम पसंदीदा सीमा से ऊपर है, पर बहुत अधिक नहीं।"
-                      : "This result is above the preferred range but not extremely high."}
+                      ? "यह परिणाम पसंदीदा सीमा से थोड़ा ऊपर है, पर बहुत अधिक नहीं।"
+                      : "This result is slightly outside the preferred range."}
                   </p>
                 </div>
                 <div className="text-right">
@@ -313,52 +323,6 @@ export default function DashboardPage() {
         </motion.section>
       )}
 
-      {/* -------------------------------- AI story -------------------------------- */}
-      <section className="mt-10">
-        <SectionTitle icon={Sparkles} title={t("dash.story")} sub={t("dash.storyTitle")} />
-        <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-6 md:p-8">
-          <ol className="relative space-y-6 border-l-[3px] border-dashed border-brand-200 pl-6">
-            {STORY.map((step, i) => {
-              const c = statusClasses(step.status);
-              return (
-                <motion.li
-                  key={i}
-                  initial={{ opacity: 0, x: -10 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.12 }}
-                  className="relative"
-                >
-                  <span
-                    className={`absolute -left-[37px] top-0.5 flex h-6 w-6 items-center justify-center rounded-full border-[3px] border-white text-[9px] font-black text-white ${c.dot}`}
-                  >
-                    {i + 1}
-                  </span>
-                  <p className={`text-xs font-extrabold uppercase tracking-widest ${c.text}`}>
-                    {pick(step.when, s.lang)}
-                  </p>
-                  <p className="mt-1 max-w-xl text-[15px] font-bold leading-relaxed text-slate-700">
-                    {pick(step.text, s.lang)}
-                  </p>
-                </motion.li>
-              );
-            })}
-          </ol>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <ListenBtn
-              text={STORY.map((x) => pick(x.text, s.lang)).join(". ")}
-            />
-            <Link
-              href="/trends"
-              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-brand-100 px-4 text-sm font-extrabold text-brand-800 transition hover:bg-brand-200 active:scale-95"
-            >
-              {hi ? "पूरा रुझान देखें" : "See full trend"}
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </div>
-      </section>
-
       {/* ------------------------------ Safety + footer ------------------------------ */}
       <div className="mt-10">
         <SafetyNote />
@@ -398,14 +362,24 @@ export default function DashboardPage() {
 
 /* ------------------------------- Priority card ------------------------------- */
 
-function PriorityCard({ entry, index, hi }: { entry: ReportEntry; index: number; hi: boolean }) {
+function PriorityCard({
+  entry,
+  index,
+  hi,
+  catalog,
+}: {
+  entry: ReportEntry;
+  index: number;
+  hi: boolean;
+  catalog: any;
+}) {
   const { t } = useI18n();
-  const def = TESTS[entry.test];
-  const line = entry.test === "ldl"
-    ? { en: "Your LDL cholesterol is above the usual range.", hi: "आपका LDL कोलेस्ट्रॉल सामान्य सीमा से ऊपर है।" }
-    : entry.test === "hba1c"
-      ? { en: "Your average blood sugar level is higher than the usual range.", hi: "आपकी औसत ब्लड शुगर सामान्य सीमा से अधिक है।" }
-      : { en: "Your hemoglobin is lower than the usual range.", hi: "आपका हीमोग्लोबिन सामान्य सीमा से कम है।" };
+  const def = catalog[entry.test] || TESTS[entry.test] || TESTS.hemoglobin;
+  const line = entry.status === "high"
+    ? { en: `${def.name.en} is above the usual range.`, hi: `${def.name.hi} सामान्य सीमा से अधिक है।` }
+    : entry.status === "low"
+      ? { en: `${def.name.en} is lower than the usual range.`, hi: `${def.name.hi} सामान्य सीमा से कम है।` }
+      : { en: `${def.name.en} is within the expected range.`, hi: `${def.name.hi} सामान्य सीमा में है।` };
 
   return (
     <motion.div
@@ -450,14 +424,12 @@ function PriorityCard({ entry, index, hi }: { entry: ReportEntry; index: number;
 
 /* -------------------------------- Result card -------------------------------- */
 
-function ResultCard({ entry }: { entry: ReportEntry }) {
+function ResultCard({ entry, catalog }: { entry: ReportEntry; catalog: any }) {
   const { t, s } = useI18n();
-  const def = TESTS[entry.test];
-  const very = s.mode === "very";
+  const def = catalog[entry.test] || TESTS[entry.test] || TESTS.hemoglobin;
   const simple = s.mode === "simple";
-  const hi = s.lang === "hi";
   const c = statusClasses(entry.status);
-  const name = s.mode === "standard" ? pick(def.name, s.lang) : pick(def.simple, s.lang);
+  const name = s.mode === "advanced" ? pick(def.name, s.lang) : pick(def.simple, s.lang);
 
   return (
     <Link
@@ -465,35 +437,24 @@ function ResultCard({ entry }: { entry: ReportEntry }) {
       className={`card-shadow group rounded-3xl border bg-white p-4 transition hover:-translate-y-0.5 hover:border-brand-300 ${c.border}`}
     >
       <div className="flex items-center gap-3.5">
-        <TestIcon testId={entry.test} size={very ? 58 : 46} />
+        <TestIcon testId={entry.test} size={simple ? 56 : 44} />
         <div className="min-w-0 flex-1">
-          <p className={`truncate font-extrabold text-slate-800 ${very ? "text-xl" : "text-[15px]"}`}>
+          <p className={`truncate font-extrabold text-slate-800 ${simple ? "text-lg" : "text-[15px]"}`}>
             {name}
           </p>
-          {!very && (
+          {!simple && (
             <p className="text-[11px] font-bold text-slate-400">{def.ref.text}</p>
           )}
         </div>
         <ChevronRight className="h-5 w-5 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-600" />
       </div>
       <div className="mt-3 flex items-end justify-between gap-2">
-        <p className={`tabular font-extrabold text-brand-900 ${very ? "text-4xl" : "text-2xl"}`}>
+        <p className={`tabular font-extrabold text-brand-900 ${simple ? "text-3xl" : "text-2xl"}`}>
           {fmtValue(entry.value)}
           <span className="ml-1 text-xs font-bold text-slate-400">{def.unit}</span>
         </p>
         <StatusPill status={entry.status} size="sm" />
       </div>
-      {very && (
-        <p className={`mt-2 text-base font-bold leading-snug ${c.text}`}>
-          {entry.status === "normal"
-            ? t("status.within")
-            : entry.status === "low"
-              ? t("status.low")
-              : entry.status === "high"
-                ? t("status.high")
-                : t("status.borderline")}
-        </p>
-      )}
       {simple && (
         <p className="mt-2 text-sm font-semibold text-slate-500">
           {pick({ en: def.what.vs_en, hi: def.what.vs_hi }, s.lang)}
