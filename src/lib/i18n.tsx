@@ -13,7 +13,7 @@ import {
 } from "react";
 
 export type LangCode = "en" | "hi" | "bn";
-export type ReadingMode = "standard" | "simple" | "very";
+export type ReadingMode = "simple" | "advanced";
 
 export interface AppSettings {
   lang: LangCode;
@@ -26,7 +26,7 @@ export interface AppSettings {
 
 const DEFAULTS: AppSettings = {
   lang: "en",
-  mode: "standard",
+  mode: "simple",
   font: 0,
   voice: true,
   contrast: false,
@@ -165,9 +165,8 @@ const EN: Dict = {
   "test.normalZone": "Normal",
   "test.highZone": "High",
 
-  "mode.medical": "Medical",
   "mode.simple": "Simple",
-  "mode.very": "Very Simple",
+  "mode.advanced": "Advanced",
 
   "insights.title": "AI Insights",
   "insights.sub": "Patterns the AI found by connecting your results.",
@@ -399,9 +398,8 @@ const HI: Dict = {
   "test.normalZone": "सामान्य",
   "test.highZone": "अधिक",
 
-  "mode.medical": "चिकित्सकीय",
   "mode.simple": "सरल",
-  "mode.very": "बहुत सरल",
+  "mode.advanced": "विस्तृत",
 
   "insights.title": "AI इनसाइट्स",
   "insights.sub": "AI ने आपके परिणाम जोड़कर ये पैटर्न पाए।",
@@ -527,6 +525,8 @@ const BN: Dict = {
   "status.low": "স্বাভাবিকের চেয়ে কম",
   "dash.title": "আপনার রিপোর্ট",
   "dash.someAttention": "কিছু ফলাফলে মনোযোগ দরকার।",
+  "mode.simple": "সহজ",
+  "mode.advanced": "উন্নত",
   "disclaimer.short": "শুধুমাত্র শিক্ষামূলক তথ্য — রোগ নির্ণয় নয়। ডাক্তারের সাথে আলোচনা করুন।",
 };
 
@@ -550,7 +550,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY);
-      if (raw) setS({ ...DEFAULTS, ...JSON.parse(raw) });
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.mode === "standard") parsed.mode = "advanced";
+        if (parsed.mode === "very") parsed.mode = "simple";
+        setS({ ...DEFAULTS, ...parsed });
+      }
     } catch {
       /* ignore */
     }

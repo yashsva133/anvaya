@@ -850,7 +850,7 @@ export function ChipLink({
 
 export function pickTestName(test: TestDef, mode: string, lang: "en" | "hi" | "bn"): string {
   const L = lang === "hi" ? "hi" : "en";
-  return mode === "standard" ? test.name[L as "en" | "hi"] : test.simple[L as "en" | "hi"];
+  return mode === "advanced" ? test.name[L as "en" | "hi"] : test.simple[L as "en" | "hi"];
 }
 
 export { pick };

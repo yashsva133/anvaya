@@ -96,12 +96,11 @@ export default function SettingsPage() {
 
           {/* reading mode */}
           <SettingCard icon={LetterText} title={t("settings.reading")}>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {(
                 [
-                  ["standard", t("mode.medical")],
                   ["simple", t("mode.simple")],
-                  ["very", t("mode.very")],
+                  ["advanced", t("mode.advanced")],
                 ] as [ReadingMode, string][]
               ).map(([m, label]) => (
                 <button
@@ -123,8 +122,8 @@ export default function SettingsPage() {
             </div>
             <p className="mt-2 text-xs font-bold text-slate-400">
               {hi
-                ? "सरल मोड: कम शब्द, बड़े अक्षर, रोज़मर्रा की भाषा।"
-                : "Simple Mode: fewer words, everyday language, bigger visuals."}
+                ? "सरल मोड: आसान भाषा, बड़े दृश्य। विस्तृत मोड: डॉक्टरी विवरण और संदर्भ सीमा।"
+                : "Simple Mode: everyday language, bigger visuals. Advanced Mode: detailed medical terms and ranges."}
             </p>
           </SettingCard>
 
@@ -170,18 +169,18 @@ export default function SettingsPage() {
               className="mt-3 rounded-3xl border-2 border-rose-200 bg-rose-50/50 p-4 sm:p-5"
             >
               <div className="flex items-center gap-3">
-                <TestIcon testId="hemoglobin" size={s.mode === "very" ? 60 : 46} />
+                <TestIcon testId="hemoglobin" size={s.mode === "simple" ? 56 : 44} />
                 <div className="min-w-0 flex-1">
                   <p
                     className={`truncate font-extrabold text-slate-800 ${
-                      s.mode === "very" ? "text-xl" : "text-base"
+                      s.mode === "simple" ? "text-lg" : "text-base"
                     }`}
                   >
-                    {s.mode === "standard" ? pick(hb.name, s.lang) : pick(hb.simple, s.lang)}
+                    {s.mode === "advanced" ? pick(hb.name, s.lang) : pick(hb.simple, s.lang)}
                   </p>
                   <p
                     className={`tabular font-extrabold text-brand-900 ${
-                      s.mode === "very" ? "text-3xl sm:text-4xl" : "text-xl sm:text-2xl"
+                      s.mode === "simple" ? "text-2xl sm:text-3xl" : "text-xl sm:text-2xl"
                     }`}
                   >
                     10.5 g/dL
@@ -189,10 +188,10 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div className="mt-3">
-                <StatusPill status="low" size={s.mode === "very" ? "md" : "sm"} />
+                <StatusPill status="low" size={s.mode === "simple" ? "md" : "sm"} />
               </div>
               <p className="mt-2 text-sm font-semibold text-slate-600">
-                {pick({ en: hb.what.vs_en, hi: hb.what.vs_hi }, s.lang)}
+                {pick({ en: s.mode === "advanced" ? hb.what.en : hb.what.vs_en, hi: s.mode === "advanced" ? hb.what.hi : hb.what.vs_hi }, s.lang)}
               </p>
             </motion.div>
           </div>
