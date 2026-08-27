@@ -32,6 +32,12 @@ import {
 } from "@/lib/supabase/db";
 
 export interface PatientInfo {
+  /**
+   * The `patients.id` uuid, present only when the profile was loaded from
+   * Supabase. The AI endpoints need it to file a conversation against the right
+   * person; the seeded demo profile deliberately has none.
+   */
+  id?: string;
   name: { en: string; hi: string };
   nameShort: string;
   age: number;

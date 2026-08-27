@@ -265,3 +265,26 @@ export function renderChunksForPrompt(matches: RetrievedChunk[]): string {
 export function chunkCount(): number {
   return CHUNKS.length;
 }
+
+export interface CorpusChunk {
+  /** Local id, written to rag_chunks.external_vector_id — the FAISS key. */
+  id: string;
+  source_code: string;
+  heading: string;
+  content_en: string;
+  content_hi: string;
+  topics: string[];
+}
+
+/**
+ * The corpus, for seeding rag_sources / rag_documents / rag_chunks in Supabase.
+ *
+ * The retrieval itself runs in-process, but a citation is only auditable if the
+ * passage it points at exists as a row: explanation_citations.rag_chunk_id is a
+ * foreign key, and rag_retrieval_matches.rag_chunk_id has ON DELETE RESTRICT
+ * precisely so a cited passage cannot vanish. persistence.ts upserts this
+ * corpus once per process and maps these ids to the uuids it gets back.
+ */
+export function ragCorpus(): { sources: typeof SOURCES; chunks: CorpusChunk[] } {
+  return { sources: SOURCES, chunks: CHUNKS };
+}

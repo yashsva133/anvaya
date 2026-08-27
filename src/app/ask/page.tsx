@@ -30,7 +30,7 @@ import {
 import { VoiceSheet } from "@/components/voice";
 import { useI18n } from "@/lib/i18n";
 import { useReportData } from "@/context/ReportDataContext";
-import { buildReportContext, conversationId } from "@/lib/ai/reportContext";
+import { buildReportContext, conversationId, patientRef } from "@/lib/ai/reportContext";
 
 interface Msg {
   role: "user" | "ai";
@@ -114,6 +114,7 @@ export default function AskPage() {
           lang: s.lang,
           reading: s.mode,
           ...(sessionId ? { session: sessionId } : {}),
+          ...patientRef(patient),
           report: buildReportContext({ activeReport, reports, patient, lang: s.lang }),
         }),
       });
@@ -156,6 +157,9 @@ export default function AskPage() {
         body: JSON.stringify({
           helpful: dir === "up",
           qa_message_id: msgs[i]?.qaMessageId ?? undefined,
+          // Without the patient id the vote cannot be filed — answer_feedback
+          // is unique per (message, patient) so it knows who voted.
+          ...patientRef(patient),
           ...(sessionId ? { session: sessionId } : {}),
         }),
       });

@@ -29,6 +29,8 @@ import {
   TestIcon,
   statusClasses,
 } from "@/components/core";
+import { PatternTeaser } from "@/components/pattern-teaser";
+import { OverviewSummaryCard } from "@/components/summary-card";
 import { useI18n, pick } from "@/lib/i18n";
 import {
   CRITICAL_DEMO,
@@ -54,12 +56,6 @@ export default function DashboardPage() {
   const report = activeReport;
   const entries = report?.entries || [];
 
-  const counts = {
-    normal: entries.filter((e) => e.status === "normal").length,
-    borderline: entries.filter((e) => e.status === "borderline").length,
-    out: entries.filter((e) => e.status === "high" || e.status === "low" || e.status === "critical").length,
-  };
-
   // Determine top priority cards from actual report entries
   const attentionEntries = entries.filter((e) => e.status !== "normal");
   const priorityIds = attentionEntries.length > 0
@@ -68,11 +64,6 @@ export default function DashboardPage() {
 
   const borderline = entries.filter((e) => e.status === "borderline").map((e) => e.test);
   const fallbackBorderline = borderline.length > 0 ? borderline : ["glucose", "triglycerides"];
-  const lipid = PATTERNS[0];
-
-  const summarySpeech = hi
-    ? `आपकी रिपोर्ट में ${counts.normal} परिणाम सामान्य हैं, ${counts.borderline} पर ध्यान देना है, और ${counts.out} सामान्य सीमा से बाहर हैं। कृपया अपने डॉक्टर से चर्चा करें।`
-    : `In your report, ${counts.normal} results are normal, ${counts.borderline} need attention, and ${counts.out} are outside the usual range. Please discuss them with your doctor.`;
 
   return (
     <AppShell>
@@ -119,51 +110,11 @@ export default function DashboardPage() {
       </div>
 
       {/* ------------------------------ Summary hero ------------------------------ */}
-      <motion.section
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="card-lift mt-6 overflow-hidden rounded-[2rem] border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-white"
-      >
-        <div className="p-6 md:p-8">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-xl">
-              <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-extrabold text-amber-800">
-                <Sparkles className="h-4 w-4" />
-                AI {hi ? "सारांश" : "summary"}
-              </span>
-              <h2 className="mt-3 text-balance text-2xl font-extrabold leading-tight text-brand-950 md:text-3xl">
-                {counts.out > 0 || counts.borderline > 0 ? t("dash.someAttention") : t("dash.allFine")}
-              </h2>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-500 md:text-[15px]">
-                {hi
-                  ? `आपकी रिपोर्ट में ${counts.normal} सामान्य और ${counts.out + counts.borderline} ध्यान देने योग्य परिणाम हैं।`
-                  : `Your report contains ${counts.normal} normal results and ${counts.out + counts.borderline} results requiring review.`}
-              </p>
-            </div>
-            <ListenBtn text={summarySpeech} />
-          </div>
-
-          {/* counts */}
-          <div className="mt-6 grid grid-cols-3 gap-3">
-            {[
-              { n: counts.normal, label: t("dash.normal"), c: "bg-emerald-50 border-emerald-200 text-emerald-700", bar: "bg-emerald-500" },
-              { n: counts.borderline, label: t("dash.borderline"), c: "bg-amber-50 border-amber-300 text-amber-700", bar: "bg-amber-500" },
-              { n: counts.out, label: t("dash.out"), c: "bg-rose-50 border-rose-200 text-rose-700", bar: "bg-rose-500" },
-            ].map((x) => (
-              <div
-                key={x.label}
-                className={`rounded-3xl border p-4 text-center md:p-5 ${x.c}`}
-              >
-                <p className="tabular text-4xl font-extrabold md:text-5xl">{x.n}</p>
-                <div className={`mx-auto mt-2 h-1.5 w-10 rounded-full ${x.bar}`} />
-                <p className="mt-2 text-xs font-extrabold leading-tight md:text-sm">
-                  {x.label}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </motion.section>
+      {/* MedGemma writes this box: current status + the trend across every
+          earlier report. See src/components/summary-card.tsx and
+          POST /api/summary. It falls back to a deterministic summary built
+          from the same numbers when no model is reachable. */}
+      <OverviewSummaryCard />
 
       {/* ---------------------------- What matters most ---------------------------- */}
       <section className="mt-10">
@@ -179,41 +130,9 @@ export default function DashboardPage() {
       </section>
 
       {/* ------------------------------ Pattern teaser ----------------------------- */}
-      <motion.section className="mt-10">
-        <Link
-          href="/insights"
-          className="card-shadow group flex flex-col gap-4 rounded-[2rem] border-2 border-violet-200 bg-gradient-to-br from-violet-50 via-white to-white p-6 transition hover:border-violet-400 md:flex-row md:items-center"
-        >
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-600/25">
-            <BrainCircuit className="h-7 w-7" />
-          </span>
-          <div className="flex-1">
-            <p className="text-xs font-extrabold uppercase tracking-widest text-violet-600">
-              {t("insights.found")}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {lipid.nodes.map((n, i) => (
-                <span key={n.test} className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-sm font-extrabold text-slate-700 shadow-sm ring-1 ring-slate-100">
-                    <TestIcon testId={n.test} size={22} />
-                    {(catalog[n.test] || TESTS[n.test] || TESTS.hemoglobin).name.en}
-                    <span className={n.arrow === "up" ? "text-rose-600" : "text-rose-600"}>
-                      {n.arrow === "up" ? "↑" : n.arrow === "down" ? "↓" : "→"}
-                    </span>
-                  </span>
-                  {i < lipid.nodes.length - 1 && (
-                    <span className="text-lg font-black text-violet-400">+</span>
-                  )}
-                </span>
-              ))}
-            </div>
-            <p className="mt-2 text-sm font-semibold text-slate-500">
-              {pick(lipid.expl, s.lang)}
-            </p>
-          </div>
-          <ChevronRight className="h-6 w-6 self-start text-violet-400 transition group-hover:translate-x-1 md:self-center" />
-        </Link>
-      </motion.section>
+      {/* The strongest connection the rule engine found in THIS report, from the
+          same /api/insights call the AI Insights page uses. */}
+      <PatternTeaser />
 
       {/* ------------------------------- All results ------------------------------- */}
       <section className="mt-10">
