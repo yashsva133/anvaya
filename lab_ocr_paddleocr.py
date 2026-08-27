@@ -418,16 +418,39 @@ def normalize_unit(raw_unit: str, canonical_unit: str) -> str:
     return raw_unit
 
 
+SECTION_HEADERS = [
+    "indices",
+    "differential leucocyte count",
+    "differential count",
+    "absolute leucocyte count",
+    "haematology",
+    "complete blood count",
+    "test description",
+    "bio. ref. interval",
+    "method",
+]
+
+
+def is_section_header(row_text: str) -> bool:
+    low = row_text.lower()
+    return any(w in low for w in SECTION_HEADERS)
+
+
 def parse_row(row_items):
     """
     Parses a horizontally grouped row into a clinical test record.
     Extracts test name, numeric value, unit, and calculates status.
+    If a test is detected but the value is smudged/missing, retains the row
+    with an empty value and status 'Needs Input' so the user can provide it.
     """
     row_text = " ".join(item["text"] for item in row_items)
     lowered = row_text.lower()
 
-    # Drop obvious table headers / non-test lines
+    # Drop obvious table headers / section headers
     if ("test" in lowered and ("result" in lowered or "value" in lowered)) or ("description" in lowered and "unit" in lowered):
+        return None
+
+    if is_section_header(row_text):
         return None
 
     # Search for test name from left to right
@@ -447,12 +470,17 @@ def parse_row(row_items):
             ref = REFERENCE_RANGES[canonical]
             value = None
             unit = None
+            has_range = False
             confidences = [row_items[k]["score"] for k in used_indices]
 
             for j in range(len(row_items)):
                 if j in used_indices:
                     continue
                 item_text = row_items[j]["text"].strip()
+
+                # Check for range pattern
+                if re.search(r'\d+\s*[-–to]\s*\d+|<|>|\b\d+\s*-\s*\d+', item_text):
+                    has_range = True
 
                 # Check for numeric test value
                 if value is None:
@@ -474,6 +502,8 @@ def parse_row(row_items):
                         unit = normalize_unit(item_text, ref["unit"])
                         confidences.append(row_items[j]["score"])
 
+            avg_conf = sum(confidences) / len(confidences) if confidences else 1.0
+
             if value is not None:
                 # Normalize platelet count if reported in absolute /cumm (>10000)
                 if canonical == "platelet count":
@@ -484,8 +514,6 @@ def parse_row(row_items):
                         unit = "lakh/cumm"
 
                 status = validate_value(value, ref["low"], ref["high"])
-                avg_conf = sum(confidences) / len(confidences) if confidences else 1.0
-
                 return {
                     "test_name": ref["display"],
                     "value": value,
@@ -495,6 +523,18 @@ def parse_row(row_items):
                     "status": status,
                     "ocr_confidence": round(avg_conf, 3),
                 }
+            else:
+                # Value is smudged/empty/missing - retain row for user input
+                if unit is not None or has_range or (len(row_items) > len(used_indices)):
+                    return {
+                        "test_name": ref["display"],
+                        "value": "",
+                        "unit": unit if unit else ref["unit"],
+                        "ref_low": ref["low"],
+                        "ref_high": ref["high"],
+                        "status": "Needs Input",
+                        "ocr_confidence": round(avg_conf, 3),
+                    }
 
     return None
 
@@ -667,8 +707,9 @@ def main():
 
     print(f"\nDone. {len(all_records)} total rows across {len(pages)} page(s), "
           f"dated {report_date.isoformat()}. Sample:")
-    for r in all_records[:10]:
-        print(f"  {r['report_date']} {r['test_name']:<22} {r['value']:>8} "
+    for r in all_records[:15]:
+        val_display = str(r['value']) if r['value'] != "" else "<NEEDS INPUT>"
+        print(f"  {r['report_date']} {r['test_name']:<22} {val_display:>14} "
               f"{r['unit']:<10} [{r['ref_low']}-{r['ref_high']}] -> {r['status']}")
 
 
