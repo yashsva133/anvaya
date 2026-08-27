@@ -265,12 +265,17 @@ export function ListenBtn({
   const { s, t, speechLang } = useI18n();
   const toast = useToast();
   const [speaking, setSpeaking] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => window.speechSynthesis?.cancel();
+  }, []);
+
+  if (!mounted || !s.voice) return null;
+
   const supported =
     typeof window !== "undefined" && "speechSynthesis" in window;
-
-  useEffect(() => () => window.speechSynthesis?.cancel(), []);
-
-  if (!s.voice) return null;
 
   const speak = () => {
     if (!supported) {
@@ -295,7 +300,7 @@ export function ListenBtn({
     setTimeout(() => setSpeaking(false), 60000);
   };
 
-  const Icon = !supported ? VolumeX : speaking ? Volume2 : Volume2;
+  const Icon = !supported ? VolumeX : Volume2;
   return (
     <button
       type="button"
