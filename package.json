@@ -2,14 +2,13 @@
   "name": "anvaya-demo",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^0.1.2",
     "framer-motion": "^13.1.0",
     "lucide-react": "^1.33.0",
     "next": "16.2.6",

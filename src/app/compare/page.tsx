@@ -89,36 +89,77 @@ function CompareInner() {
       />
 
       {/* pickers */}
-      <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center">
-        {[
-          { label: t("compare.older"), val: oldId, set: setOldId, other: newId },
-          { label: t("compare.newer"), val: newId, set: setNewId, other: oldId },
-        ].map((p) => (
-          <div key={p.label} className="card-shadow rounded-3xl border border-slate-100 bg-white p-4">
+      <div className="grid items-center gap-4 lg:grid-cols-[1fr_auto_1fr]">
+        {/* Box 1: Older Report */}
+        <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <p className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
-              {p.label}
+              {t("compare.older")}
             </p>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {REPORTS.map((r) => (
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-extrabold text-brand-900">
+              {pick(oldR.date, s.lang)}
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2.5">
+            {REPORTS.map((r) => {
+              const isSelected = oldId === r.id;
+              const isDisabled = newId === r.id;
+              return (
                 <button
                   key={r.id}
-                  disabled={r.id === p.other}
-                  onClick={() => p.set(r.id)}
-                  className={`min-h-12 rounded-2xl border-2 px-3 text-sm font-extrabold transition active:scale-95 disabled:opacity-30 ${
-                    p.val === r.id
-                      ? "border-brand-700 bg-brand-700 text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-brand-300"
+                  disabled={isDisabled}
+                  onClick={() => setOldId(r.id)}
+                  className={`min-h-[52px] rounded-2xl border-2 px-3 text-sm font-extrabold transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 ${
+                    isSelected
+                      ? "border-brand-700 bg-brand-700 text-white shadow-md shadow-brand-900/15"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-brand-300 hover:bg-brand-50/30"
                   }`}
                 >
                   {pick(r.month, s.lang)} 2026
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        ))}
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-          <ArrowRight className="h-6 w-6 rotate-90 md:rotate-0" strokeWidth={2.6} />
-        </span>
+        </div>
+
+        {/* Center Connector */}
+        <div className="flex justify-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-700 text-white shadow-md shadow-brand-900/20">
+            <ArrowRight className="h-5 w-5 rotate-90 lg:rotate-0" strokeWidth={2.6} />
+          </span>
+        </div>
+
+        {/* Box 2: Newer Report */}
+        <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <p className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
+              {t("compare.newer")}
+            </p>
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-extrabold text-brand-900">
+              {pick(newR.date, s.lang)}
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2.5">
+            {REPORTS.map((r) => {
+              const isSelected = newId === r.id;
+              const isDisabled = oldId === r.id;
+              return (
+                <button
+                  key={r.id}
+                  disabled={isDisabled}
+                  onClick={() => setNewId(r.id)}
+                  className={`min-h-[52px] rounded-2xl border-2 px-3 text-sm font-extrabold transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 ${
+                    isSelected
+                      ? "border-brand-700 bg-brand-700 text-white shadow-md shadow-brand-900/15"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-brand-300 hover:bg-brand-50/30"
+                  }`}
+                >
+                  {pick(r.month, s.lang)} 2026
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* AI summary */}

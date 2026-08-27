@@ -32,9 +32,8 @@ import { useI18n, pick } from "@/lib/i18n";
 import { LATEST, SOURCES, TESTS, fmtValue, latestEntry } from "@/lib/data";
 
 const LEVELS = [
-  { id: "standard", key: "mode.medical" },
   { id: "simple", key: "mode.simple" },
-  { id: "very", key: "mode.very" },
+  { id: "advanced", key: "mode.advanced" },
 ] as const;
 
 export default function TestDetailPage() {
@@ -55,9 +54,9 @@ export default function TestDetailPage() {
   const hi = s.lang === "hi";
   const level = s.mode;
   const whatText =
-    level === "standard" ? def.what.med : hi ? (level === "very" ? def.what.vs_hi : def.what.hi) : level === "very" ? def.what.vs_en : def.what.en;
-  const whyText = hi ? def.why.hi : level === "very" ? def.why.vs_en : def.why.en;
-  const todoText = hi ? def.todo.hi : level === "very" ? def.todo.vs_en : def.todo.en;
+    level === "advanced" ? (def.what.med || (hi ? def.what.hi : def.what.en)) : hi ? def.what.vs_hi : def.what.vs_en;
+  const whyText = level === "advanced" ? (hi ? def.why.hi : def.why.en) : hi ? def.why.hi : def.why.vs_en;
+  const todoText = level === "advanced" ? (hi ? def.todo.hi : def.todo.en) : hi ? def.todo.hi : def.todo.vs_en;
   const causesText = pick(def.causes, s.lang);
   const sources = def.sources
     .map((id) => SOURCES.find((x) => x.id === id))
@@ -89,7 +88,7 @@ export default function TestDetailPage() {
                 <TestIcon testId={def.id} size={64} />
                 <div>
                   <h1 className="text-2xl font-extrabold tracking-tight text-brand-950 md:text-3xl">
-                    {s.mode === "standard" ? pick(def.name, s.lang) : pick(def.simple, s.lang)}
+                    {s.mode === "advanced" ? pick(def.name, s.lang) : pick(def.simple, s.lang)}
                   </h1>
                   <p className="text-sm font-bold text-slate-400">
                     {t("test.refRange")}: {def.ref.text}
@@ -135,10 +134,10 @@ export default function TestDetailPage() {
                 <HelpCircle className="h-4 w-4" />
                 {t("test.whatIs")}
               </p>
-              <p className={`mt-2 font-semibold leading-relaxed text-slate-700 ${level === "very" ? "text-lg" : "text-[15px]"}`}>
+              <p className={`mt-2 font-semibold leading-relaxed text-slate-700 ${level === "simple" ? "text-lg" : "text-[15px]"}`}>
                 {whatText}
               </p>
-              <p className={`mt-3 font-bold leading-relaxed text-slate-800 ${level === "very" ? "text-lg" : "text-[15px]"}`}>
+              <p className={`mt-3 font-bold leading-relaxed text-slate-800 ${level === "simple" ? "text-lg" : "text-[15px]"}`}>
                 {whyText}
               </p>
             </div>

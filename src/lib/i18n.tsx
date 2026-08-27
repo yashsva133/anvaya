@@ -13,7 +13,7 @@ import {
 } from "react";
 
 export type LangCode = "en" | "hi" | "bn";
-export type ReadingMode = "standard" | "simple" | "very";
+export type ReadingMode = "simple" | "advanced";
 
 export interface AppSettings {
   lang: LangCode;
@@ -26,7 +26,7 @@ export interface AppSettings {
 
 const DEFAULTS: AppSettings = {
   lang: "en",
-  mode: "standard",
+  mode: "simple",
   font: 0,
   voice: true,
   contrast: false,
@@ -38,7 +38,7 @@ type Dict = Record<string, string>;
 const EN: Dict = {
   "app.tagline": "Understand your health report. In simple language.",
   "app.taglineShort": "Your report, explained simply.",
-  "app.name": "Rxअन्वय",
+  "app.name": "Rxanvaya",
 
   "nav.overview": "Overview",
   "nav.reports": "My Reports",
@@ -51,7 +51,7 @@ const EN: Dict = {
   "nav.home": "Home",
   "nav.more": "More",
   "nav.how": "How it works",
-  "nav.why": "Why Rxअन्वय",
+  "nav.why": "Why Rxanvaya",
 
   "common.continue": "Continue",
   "common.back": "Back",
@@ -165,15 +165,19 @@ const EN: Dict = {
   "test.normalZone": "Normal",
   "test.highZone": "High",
 
-  "mode.medical": "Medical",
   "mode.simple": "Simple",
-  "mode.very": "Very Simple",
+  "mode.advanced": "Advanced",
 
   "insights.title": "AI Insights",
-  "insights.sub": "Patterns the AI found by connecting your results.",
+  "insights.sub": "Multi-test clinical patterns and your longitudinal health story.",
+  "insights.story": "AI Health Story",
+  "insights.storySub": "How your indicators evolved across recent reports",
+  "insights.patternsTitle": "Connected Lab Patterns",
+  "insights.patternsSub": "Related tests evaluated together rather than isolated numbers",
   "insights.found": "AI found a pattern",
+  "insights.linkedTests": "linked tests",
   "insights.whyWeSay": "Why we say this",
-  "insights.basedOn": "Based on cardiovascular guidance",
+  "insights.basedOn": "Based on clinical guidelines",
   "insights.notDiagnosis": "This does not establish a diagnosis.",
 
   "trends.title": "How your results changed over time",
@@ -219,7 +223,7 @@ const EN: Dict = {
   "ask.notHelpful": "Not helpful",
   "ask.thanks": "Thank you — your feedback improves explanations.",
   "ask.tapMic": "Ask by speaking",
-  "ask.typing": "Rxअन्वय is thinking…",
+  "ask.typing": "Rxanvaya is thinking…",
 
   "sources.title": "Why do we say this?",
   "sources.sub": "Every explanation is grounded in trusted medical sources.",
@@ -274,7 +278,7 @@ const EN: Dict = {
 const HI: Dict = {
   "app.tagline": "अपनी हेल्थ रिपोर्ट समझें। आसान भाषा में।",
   "app.taglineShort": "आपकी रिपोर्ट, सरल भाषा में।",
-  "app.name": "Rxअन्वय",
+  "app.name": "Rxanvaya",
 
   "nav.overview": "मुख्य सारांश",
   "nav.reports": "मेरी रिपोर्ट्स",
@@ -287,7 +291,7 @@ const HI: Dict = {
   "nav.home": "होम",
   "nav.more": "और",
   "nav.how": "यह कैसे काम करता है",
-  "nav.why": "Rxअन्वय क्यों",
+  "nav.why": "Rxanvaya क्यों",
 
   "common.continue": "आगे बढ़ें",
   "common.back": "वापस",
@@ -399,15 +403,19 @@ const HI: Dict = {
   "test.normalZone": "सामान्य",
   "test.highZone": "अधिक",
 
-  "mode.medical": "चिकित्सकीय",
   "mode.simple": "सरल",
-  "mode.very": "बहुत सरल",
+  "mode.advanced": "विस्तृत",
 
   "insights.title": "AI इनसाइट्स",
-  "insights.sub": "AI ने आपके परिणाम जोड़कर ये पैटर्न पाए।",
+  "insights.sub": "बहु-जाँच क्लिनिकल पैटर्न और समय के साथ आपकी स्वास्थ्य कहानी।",
+  "insights.story": "AI हेल्थ स्टोरी",
+  "insights.storySub": "हालिया रिपोर्टों में आपके स्वास्थ्य संकेतकों का बदलाव",
+  "insights.patternsTitle": "जुड़े हुए लैब पैटर्न",
+  "insights.patternsSub": "अलग-अलग संख्याओं के बजाय संबंधित जाँचों का एक साथ क्लिनिकल विश्लेषण",
   "insights.found": "AI ने एक पैटर्न पाया",
+  "insights.linkedTests": "जाँचें जुड़ी हैं",
   "insights.whyWeSay": "हमने ऐसा क्यों कहा",
-  "insights.basedOn": "कार्डियोवैस्कुलर दिशानिर्देशों पर आधारित",
+  "insights.basedOn": "क्लिनिकल दिशानिर्देशों पर आधारित",
   "insights.notDiagnosis": "यह निदान सिद्ध नहीं करता।",
 
   "trends.title": "समय के साथ आपके परिणाम कैसे बदले",
@@ -452,7 +460,7 @@ const HI: Dict = {
   "ask.notHelpful": "उपयोगी नहीं",
   "ask.thanks": "धन्यवाद — आपकी प्रतिक्रिया व्याख्या बेहतर बनाती है।",
   "ask.tapMic": "बोलकर पूछें",
-  "ask.typing": "Rxअन्वय सोच रहा है…",
+  "ask.typing": "Rxanvaya सोच रहा है…",
 
   "sources.title": "हमने ऐसा क्यों कहा?",
   "sources.sub": "हर व्याख्या विश्वसनीय चिकित्सा स्रोतों पर आधारित है।",
@@ -527,6 +535,8 @@ const BN: Dict = {
   "status.low": "স্বাভাবিকের চেয়ে কম",
   "dash.title": "আপনার রিপোর্ট",
   "dash.someAttention": "কিছু ফলাফলে মনোযোগ দরকার।",
+  "mode.simple": "সহজ",
+  "mode.advanced": "উন্নত",
   "disclaimer.short": "শুধুমাত্র শিক্ষামূলক তথ্য — রোগ নির্ণয় নয়। ডাক্তারের সাথে আলোচনা করুন।",
 };
 
@@ -550,7 +560,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY);
-      if (raw) setS({ ...DEFAULTS, ...JSON.parse(raw) });
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.mode === "standard") parsed.mode = "advanced";
+        if (parsed.mode === "very") parsed.mode = "simple";
+        setS({ ...DEFAULTS, ...parsed });
+      }
     } catch {
       /* ignore */
     }
