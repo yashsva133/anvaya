@@ -114,6 +114,27 @@ export default function LandingPage() {
             </span>
           </motion.h1>
 
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.18 }}
+                className="mt-8 flex flex-wrap items-center gap-3"
+              >
+                <Link
+                  href="/login?mode=signup"
+                  className="inline-flex min-h-14 items-center gap-2 rounded-2xl bg-brand-700 px-7 text-base font-extrabold text-white shadow-lg shadow-brand-900/25 transition hover:-translate-y-0.5 hover:bg-brand-600 active:scale-95"
+                >
+                  Get Started
+                  <ArrowRight className="h-5 w-5" />
+                </Link>
+                <Link
+                  href="/login"
+                  className="inline-flex min-h-14 items-center gap-2 rounded-2xl border-2 border-brand-200 bg-white px-7 text-base font-extrabold text-brand-800 transition hover:border-brand-400 active:scale-95"
+                >
+                  <Play className="h-5 w-5" />
+                  Log In
+                </Link>
+              </motion.div>
           <motion.p
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -394,6 +415,20 @@ export default function LandingPage() {
                 This number tells us about your blood sugar over the past
                 few months.
               </p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Link
+                  href="/login?mode=signup"
+                  className="inline-flex min-h-14 items-center gap-2 rounded-2xl bg-white px-7 text-base font-extrabold text-brand-800 shadow-lg transition hover:-translate-y-0.5 active:scale-95"
+                >
+                  Get Started
+                  <ArrowRight className="h-5 w-5" />
+                </Link>
+                <Link
+                  href="/how"
+                  className="inline-flex min-h-14 items-center gap-2 rounded-2xl border-2 border-white/40 px-7 text-base font-extrabold text-white transition hover:bg-white/10 active:scale-95"
+                >
+                  How it works
+                </Link>
               <div className="mt-4 flex items-center gap-2">
                 <ListenBtn text="Average blood sugar is 7.2 percent. This is higher than usual. This number tells us about your blood sugar over the past few months." />
                 <span className="text-xs font-bold text-slate-400">
