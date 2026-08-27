@@ -36,7 +36,6 @@ import {
   LATEST,
   PATIENT,
   PATTERNS,
-  STORY,
   TESTS,
   fmtValue,
   type ReportEntry,
@@ -311,52 +310,6 @@ export default function DashboardPage() {
           </div>
         </motion.section>
       )}
-
-      {/* -------------------------------- AI story -------------------------------- */}
-      <section className="mt-10">
-        <SectionTitle icon={Sparkles} title={t("dash.story")} sub={t("dash.storyTitle")} />
-        <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-6 md:p-8">
-          <ol className="relative space-y-6 border-l-[3px] border-dashed border-brand-200 pl-6">
-            {STORY.map((step, i) => {
-              const c = statusClasses(step.status);
-              return (
-                <motion.li
-                  key={i}
-                  initial={{ opacity: 0, x: -10 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.12 }}
-                  className="relative"
-                >
-                  <span
-                    className={`absolute -left-[37px] top-0.5 flex h-6 w-6 items-center justify-center rounded-full border-[3px] border-white text-[9px] font-black text-white ${c.dot}`}
-                  >
-                    {i + 1}
-                  </span>
-                  <p className={`text-xs font-extrabold uppercase tracking-widest ${c.text}`}>
-                    {pick(step.when, s.lang)}
-                  </p>
-                  <p className="mt-1 max-w-xl text-[15px] font-bold leading-relaxed text-slate-700">
-                    {pick(step.text, s.lang)}
-                  </p>
-                </motion.li>
-              );
-            })}
-          </ol>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <ListenBtn
-              text={STORY.map((x) => pick(x.text, s.lang)).join(". ")}
-            />
-            <Link
-              href="/trends"
-              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-brand-100 px-4 text-sm font-extrabold text-brand-800 transition hover:bg-brand-200 active:scale-95"
-            >
-              {hi ? "पूरा रुझान देखें" : "See full trend"}
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </div>
-      </section>
 
       {/* ------------------------------ Safety + footer ------------------------------ */}
       <div className="mt-10">
