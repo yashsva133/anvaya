@@ -50,6 +50,12 @@ node_modules/
 .env.local
 .env*.local
 
+# Reports, Images & CSV Outputs
+*.png
+*.jpg
+*.jpeg
+*.csv
+
 # Paddle / Model cache
 .paddlex/
 official_models/
