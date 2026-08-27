@@ -95,6 +95,21 @@ export function OverviewSummaryCard() {
   const historySignature = reports.map((r) => r.id).join(",");
 
   const load = useCallback(async () => {
+    // If nonce is 0 (i.e. on normal load, not refresh button), check cache first
+    const cacheKey = `rxanvaya-summary-v2-${signature}-${historySignature}-${s.lang}-${s.mode}`;
+    if (nonce === 0) {
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          setData(JSON.parse(cached));
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        // ignore cache errors
+      }
+    }
+
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -114,6 +129,11 @@ export function OverviewSummaryCard() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as SummaryResponse;
       if (ctrl.signal.aborted) return;
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(json));
+      } catch (e) {
+        // ignore storage errors
+      }
       setData(json);
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;

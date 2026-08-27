@@ -49,7 +49,7 @@ const MODES = [
 export default function DashboardPage() {
   const { t, s, set } = useI18n();
   const router = useRouter();
-  const { activeReport, patient, catalog } = useReportData();
+  const { activeReport, patient, catalog, reports, loading } = useReportData();
   const hi = s.lang === "hi";
   const [criticalHidden, setCriticalHidden] = useState(false);
 
@@ -64,6 +64,33 @@ export default function DashboardPage() {
 
   const borderline = entries.filter((e) => e.status === "borderline").map((e) => e.test);
   const fallbackBorderline = borderline.length > 0 ? borderline : ["glucose", "triglycerides"];
+
+  if (!loading && reports.length === 0) {
+    return (
+      <AppShell>
+        <div className="flex h-[60vh] flex-col items-center justify-center text-center">
+          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-brand-100 text-brand-600 mb-6">
+            <FilePlus2 className="h-12 w-12" />
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-brand-950 md:text-4xl mb-3">
+            {hi ? "कोई डेटा नहीं" : "No data available"}
+          </h1>
+          <p className="max-w-md text-lg font-medium text-slate-500 mb-8">
+            {hi
+              ? "शुरू करने के लिए अपनी पहली लैब रिपोर्ट अपलोड करें।"
+              : "Upload your first lab report to get started."}
+          </p>
+          <Link
+            href="/upload"
+            className="inline-flex min-h-14 items-center gap-2 rounded-2xl bg-brand-700 px-8 text-lg font-extrabold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-brand-600 active:scale-95"
+          >
+            <FilePlus2 className="h-5 w-5" />
+            {t("footer.cta1")}
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

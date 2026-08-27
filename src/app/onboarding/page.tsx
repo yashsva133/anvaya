@@ -7,10 +7,12 @@ import { ArrowRight, Loader2, UserRound } from "lucide-react";
 import { FlowShell } from "@/components/shell";
 import { useAuth } from "@/lib/auth-context";
 import { completeOnboarding, type PatientProfileInput } from "@/lib/supabase-auth";
+import { useI18n } from "@/lib/i18n";
 
 export default function OnboardingPage() {
   const router = useRouter();
   const { status, session, profile, reloadProfile } = useAuth();
+  const { set } = useI18n();
   const [form, setForm] = useState<PatientProfileInput>({ full_name: session?.user.user_metadata?.full_name || session?.user.user_metadata?.name || "", date_of_birth: "", sex: "unspecified", preferred_language: "en" });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -25,7 +27,7 @@ export default function OnboardingPage() {
     if (!form.date_of_birth) { setError("Please enter a valid date of birth."); return; }
     if (new Date(form.date_of_birth) > new Date()) { setError("Date of birth cannot be in the future."); return; }
     setSaving(true);
-    try { await completeOnboarding(session.access_token, session.user, { ...form, full_name: form.full_name.trim() }); await reloadProfile(); router.replace("/dashboard"); }
+    try { await completeOnboarding(session.access_token, session.user, { ...form, full_name: form.full_name.trim() }); await reloadProfile(); set({ lang: form.preferred_language as any }); router.replace("/dashboard"); }
     catch { setError("We could not save your profile right now. Please try again."); }
     finally { setSaving(false); }
   };

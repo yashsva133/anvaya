@@ -93,11 +93,12 @@ const MORE = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { t, s } = useI18n();
+  const { t, s, set } = useI18n();
   const { status, session, profile } = useAuth();
   const { patient } = useReportData();
   const [moreOpen, setMoreOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [syncedLang, setSyncedLang] = useState(false);
 
   // Derive display name: auth profile > patient context > email > fallback
   const displayName =
@@ -122,6 +123,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       router.replace("/onboarding");
     }
   }, [status, profile, pathname, router]);
+
+  useEffect(() => {
+    if (profile?.preferred_language && !syncedLang) {
+      setSyncedLang(true);
+      if (s.lang !== profile.preferred_language) {
+        set({ lang: profile.preferred_language as any });
+      }
+    }
+  }, [profile, syncedLang, s.lang, set]);
 
   if (status === "loading") {
     return <div className="flex min-h-dvh items-center justify-center bg-brand-50 text-sm font-extrabold text-brand-800">Preparing your ANVAYA experience...</div>;
