@@ -4,7 +4,7 @@
 
 import { Router } from "express";
 import { body, param } from "express-validator";
-import { reportLimiter } from "../middleware/rateLimiter.js";
+import { reportLimiter } from "../middleware/ateLimiter.js";
 import {
   listReportsHandler,
   getReportHandler,

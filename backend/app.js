@@ -11,10 +11,10 @@ import { requestLogger } from "./middleware/requestLogger.js";
 import { globalLimiter } from "./middleware/rateLimiter.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
-import reportRoutes from "./routes/reportRoutes.js";
-import trendsRoutes from "./routes/trendsRoutes.js";
+import reportRoutes from "./routes/Reportroutes.js";
+import trendsRoutes from "./routes/Trendsroutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
-import patientRoutes from "./routes/patientRoutes.js";
+import patientRoutes from "./routes/Patientroutes.js";
 import qaRoutes from "./routes/qaRoutes.js";
 
 const app = express();
