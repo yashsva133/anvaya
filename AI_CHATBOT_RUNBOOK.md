@@ -192,6 +192,62 @@ curl -sX POST localhost:3000/api/summary -H 'content-type: application/json' \
 
 ---
 
+## 2.7 "AI found a connection" — `POST /api/insights`
+
+The AI Insights screen used to render three connections hard-coded to the demo
+patient, and the Overview teaser advertised one of them regardless of what was
+in the report. Both now come from the person's own results.
+
+The split is the important part:
+
+| Stage | Where | Who decides |
+| --- | --- | --- |
+| **Detect** the connection | `src/lib/ai/patterns.ts` | Deterministic rules over catalogue statuses + the trend series |
+| **Score** the confidence | `scorePattern()` | Counted evidence: flagged members, how far out of range, whether the trend agrees. Capped at 95 |
+| **Explain** it | `src/lib/ai/insights.ts` → MedGemma | Prose only, from the finished finding |
+
+The model is never allowed to decide that a connection *exists* — a
+hallucinated link between two tests is the failure mode that would matter most
+here, and §10.4 already says a clinical classification is not the LLM's to
+make. It receives the finding (these tests, these values, this direction, this
+confidence) and writes exactly two paragraphs: what the link is, and why it is
+worth raising with a doctor.
+
+Each card is generated separately, all in parallel: one bad or slow generation
+degrades one card, not the page. Anything that fails — no provider, an error, a
+guardrail rejection — falls back to the reviewed clinical copy in
+`src/lib/data.ts`, and the card's footer says "explained from reviewed clinical
+guidance" instead of "explained by MedGemma". If the seeded copy was written
+about a test this report does not contain, a sentence composed from the actual
+member results is used instead, so a card can never describe results the person
+did not have.
+
+**No connection found is a real answer.** When nothing groups into a pattern the
+page says so and the teaser says so, rather than promoting the least normal
+result into a "pattern".
+
+The **health story** timeline on the same screen is also derived now: it picks
+the trend moving furthest away from its range and renders first / middle /
+latest milestones from the actual values and dates. It is deterministic — no
+model call — because it is pure arithmetic over the report history.
+
+`useAiInsights()` (`src/lib/ai/useAiInsights.ts`) is the single client for this
+endpoint, shared by the Insights page and the Overview teaser, so the teaser can
+never advertise a connection the page below it does not list.
+
+### Loading
+
+`src/components/ai-loading.tsx` provides `AiStages` and `AiLines`, used by the
+summary card, the insights cards and the teaser. `AiStages` cycles the real
+pipeline steps ("reading your report", "comparing it with your earlier
+reports", "checking the guideline sources", "writing it in simple language")
+and stops on the last one rather than looping, so a slow local model reads as
+progress instead of a hang; `AiLines` renders shimmer placeholders shaped like
+the text that will land, so nothing jumps when it arrives. Both honour the
+app's reduce-motion setting.
+
+---
+
 ## 3. Running it
 
 ### 3.1 Without a model (works today)

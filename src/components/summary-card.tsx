@@ -30,6 +30,7 @@ import {
   Sparkles,
   TrendingUp,
 } from "lucide-react";
+import { AiLines, AiStages } from "@/components/ai-loading";
 import { ListenBtn, Md } from "@/components/core";
 import { useI18n } from "@/lib/i18n";
 import { useReportData } from "@/context/ReportDataContext";
@@ -64,16 +65,6 @@ const TONE: Record<TrendChip["tone"], string> = {
   better: "border-emerald-200 bg-emerald-50 text-emerald-700",
   steady: "border-slate-200 bg-slate-50 text-slate-600",
 };
-
-function Skeleton() {
-  return (
-    <div className="mt-4 space-y-2.5" aria-hidden>
-      <div className="h-4 w-11/12 animate-pulse rounded-full bg-amber-100" />
-      <div className="h-4 w-9/12 animate-pulse rounded-full bg-amber-100" />
-      <div className="h-4 w-10/12 animate-pulse rounded-full bg-amber-100" />
-    </div>
-  );
-}
 
 export function OverviewSummaryCard() {
   const { t, s } = useI18n();
@@ -178,13 +169,12 @@ export function OverviewSummaryCard() {
               {headline}
             </h2>
 
-            {loading && !data ? (
+            {loading ? (
               <>
-                <p className="mt-3 flex items-center gap-2 text-sm font-bold text-amber-700">
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  {t("dash.summaryWriting")}
-                </p>
-                <Skeleton />
+                {/* The stages are the real pipeline steps, so a slow local
+                    model reads as work in progress rather than a hang. */}
+                <AiStages className="mt-3" />
+                <AiLines className="mt-4" widths={["w-11/12", "w-10/12", "w-8/12", "w-9/12"]} />
               </>
             ) : data?.body ? (
               <Md

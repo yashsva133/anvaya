@@ -29,6 +29,7 @@ import {
   TestIcon,
   statusClasses,
 } from "@/components/core";
+import { PatternTeaser } from "@/components/pattern-teaser";
 import { OverviewSummaryCard } from "@/components/summary-card";
 import { useI18n, pick } from "@/lib/i18n";
 import {
@@ -63,7 +64,6 @@ export default function DashboardPage() {
 
   const borderline = entries.filter((e) => e.status === "borderline").map((e) => e.test);
   const fallbackBorderline = borderline.length > 0 ? borderline : ["glucose", "triglycerides"];
-  const lipid = PATTERNS[0];
 
   return (
     <AppShell>
@@ -130,41 +130,9 @@ export default function DashboardPage() {
       </section>
 
       {/* ------------------------------ Pattern teaser ----------------------------- */}
-      <motion.section className="mt-10">
-        <Link
-          href="/insights"
-          className="card-shadow group flex flex-col gap-4 rounded-[2rem] border-2 border-violet-200 bg-gradient-to-br from-violet-50 via-white to-white p-6 transition hover:border-violet-400 md:flex-row md:items-center"
-        >
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-600/25">
-            <BrainCircuit className="h-7 w-7" />
-          </span>
-          <div className="flex-1">
-            <p className="text-xs font-extrabold uppercase tracking-widest text-violet-600">
-              {t("insights.found")}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {lipid.nodes.map((n, i) => (
-                <span key={n.test} className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-sm font-extrabold text-slate-700 shadow-sm ring-1 ring-slate-100">
-                    <TestIcon testId={n.test} size={22} />
-                    {(catalog[n.test] || TESTS[n.test] || TESTS.hemoglobin).name.en}
-                    <span className={n.arrow === "up" ? "text-rose-600" : "text-rose-600"}>
-                      {n.arrow === "up" ? "↑" : n.arrow === "down" ? "↓" : "→"}
-                    </span>
-                  </span>
-                  {i < lipid.nodes.length - 1 && (
-                    <span className="text-lg font-black text-violet-400">+</span>
-                  )}
-                </span>
-              ))}
-            </div>
-            <p className="mt-2 text-sm font-semibold text-slate-500">
-              {pick(lipid.expl, s.lang)}
-            </p>
-          </div>
-          <ChevronRight className="h-6 w-6 self-start text-violet-400 transition group-hover:translate-x-1 md:self-center" />
-        </Link>
-      </motion.section>
+      {/* The strongest connection the rule engine found in THIS report, from the
+          same /api/insights call the AI Insights page uses. */}
+      <PatternTeaser />
 
       {/* ------------------------------- All results ------------------------------- */}
       <section className="mt-10">
