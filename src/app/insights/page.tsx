@@ -36,6 +36,7 @@ import {
   statusClasses,
 } from "@/components/core";
 import { useI18n } from "@/lib/i18n";
+import { useReportData } from "@/context/ReportDataContext";
 import { useAiInsights, type InsightPatternView } from "@/lib/ai/useAiInsights";
 
 const CONNECTION_STAGES = ["ai.load.reading", "ai.load.connections", "ai.load.explaining"] as const;
@@ -44,7 +45,54 @@ const STORY_STAGES = ["ai.load.reading", "ai.load.comparing"] as const;
 export default function InsightsPage() {
   const { t, s } = useI18n();
   const hi = s.lang === "hi";
+  const { activeReport, loading: reportLoading } = useReportData();
   const { data, loading, failed, refresh } = useAiInsights();
+
+  if (reportLoading || activeReport.entries.length === 0) {
+    return (
+      <AppShell>
+        <SectionTitle icon={BrainCircuit} title={t("insights.title")} sub={t("insights.sub")} />
+        <section className="card-shadow mt-5 rounded-[2rem] border-2 border-dashed border-brand-200 bg-gradient-to-br from-brand-50 via-white to-mint-50 p-8 text-center md:p-12">
+          {reportLoading ? (
+            <>
+              <div className="mx-auto h-12 w-12 animate-pulse rounded-2xl bg-brand-100" />
+              <h1 className="mt-5 text-2xl font-extrabold text-brand-950">
+                {hi ? "आपकी रिपोर्ट्स लोड हो रही हैं…" : "Loading your reports…"}
+              </h1>
+            </>
+          ) : (
+            <>
+              <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-mint-100 text-mint-700">
+                <SearchX className="h-8 w-8" />
+              </span>
+              <h1 className="mt-5 text-2xl font-extrabold tracking-tight text-brand-950">
+                {hi ? "अभी कोई रिपोर्ट नहीं है" : "No report data yet"}
+              </h1>
+              <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-relaxed text-slate-500 md:text-base">
+                {hi
+                  ? "अपनी लैब रिपोर्ट अपलोड या स्कैन करें। असली परिणाम मिलने के बाद यहाँ आपके रुझान और कनेक्शन दिखेंगे।"
+                  : "Upload or scan a lab report first. Your trends and connections will appear here from your actual results."}
+              </p>
+              <div className="mt-6 flex flex-wrap justify-center gap-3">
+                <Link
+                  href="/upload"
+                  className="inline-flex min-h-12 items-center rounded-2xl bg-brand-700 px-6 text-sm font-extrabold text-white shadow-md transition hover:bg-brand-600"
+                >
+                  {hi ? "रिपोर्ट अपलोड करें" : "Upload report"}
+                </Link>
+                <Link
+                  href="/scan"
+                  className="inline-flex min-h-12 items-center rounded-2xl border-2 border-mint-200 bg-white px-6 text-sm font-extrabold text-mint-800 transition hover:border-mint-400 hover:bg-mint-50"
+                >
+                  {hi ? "स्कैन करें" : "Scan with camera"}
+                </Link>
+              </div>
+            </>
+          )}
+        </section>
+      </AppShell>
+    );
+  }
 
   const story = data?.story ?? [];
   const patterns = data?.patterns ?? [];
@@ -104,7 +152,9 @@ export default function InsightsPage() {
         ) : (
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             {story.map((step, i) => {
-              const c = statusClasses(step.status);
+              const c = step.statusKnown === false
+                ? { bg: "bg-slate-50", border: "border-slate-200", dot: "bg-slate-400", text: "text-slate-500" }
+                : statusClasses(step.status);
               return (
                 <motion.div
                   key={`${step.when}-${i}`}
@@ -129,17 +179,21 @@ export default function InsightsPage() {
                   </div>
                   <div className="mt-3 flex items-center justify-between border-t border-slate-200/60 pt-2 text-[11px] font-bold text-slate-400">
                     <span>
-                      {step.status === "normal"
+                      {step.statusKnown === false
                         ? hi
-                          ? "सामान्य"
-                          : "Normal"
-                        : step.status === "borderline"
+                          ? "सीमा उपलब्ध नहीं"
+                          : "Range not reported"
+                        : step.status === "normal"
                           ? hi
-                            ? "सीमा पर"
-                            : "Borderline"
-                          : hi
-                            ? "सीमा से बाहर"
-                            : "Out of range"}
+                            ? "सामान्य"
+                            : "Normal"
+                          : step.status === "borderline"
+                            ? hi
+                              ? "सीमा पर"
+                              : "Borderline"
+                            : hi
+                              ? "सीमा से बाहर"
+                              : "Out of range"}
                     </span>
                     <span className="font-extrabold text-brand-600">#{i + 1}</span>
                   </div>
@@ -368,7 +422,11 @@ function PatternCard({ p, index }: { p: InsightPatternView; index: number }) {
             <span className="font-semibold">{t("insights.whyWeSay")}:</span>
             {p.source && <span className="font-bold text-slate-700">{p.source.publisher}</span>}
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-extrabold text-slate-500">
-              {p.engine === "medgemma" ? t("insights.writtenBy") : t("insights.writtenOffline")}
+              {p.engine === "medgemma"
+                ? t("insights.writtenBy")
+                : p.engine === "mock"
+                  ? "Mock provider"
+                  : t("insights.writtenOffline")}
             </span>
           </div>
           {p.source && (

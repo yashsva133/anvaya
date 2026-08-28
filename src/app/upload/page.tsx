@@ -22,7 +22,11 @@ import {
 import { FlowShell, FlowMic } from "@/components/shell";
 import { useI18n } from "@/lib/i18n";
 import { Sheet, useToast } from "@/components/core";
-import { setStoredActiveReport, mapChartDataToEntries } from "@/lib/report-store";
+import {
+  getDefaultActiveReport,
+  setStoredActiveReport,
+  mapChartDataToEntries,
+} from "@/lib/report-store";
 
 const TIP_ICONS = [SquareDashed, Sun, Contrast, ScanLine];
 
@@ -47,16 +51,16 @@ export default function UploadPage() {
 
   const readFile = async (e?: React.ChangeEvent<HTMLInputElement> | any) => {
     let file = null;
-    if (e && e.target && e.target.files) {
+    if (e?.dataTransfer?.files?.length) {
+      file = e.dataTransfer.files[0];
+    } else if (e && e.target && e.target.files) {
       file = e.target.files[0];
     } else if (fileRef.current && fileRef.current.files) {
       file = fileRef.current.files[0];
     }
     
     if (!file) {
-      // Fallback for drag and drop without file or clicking dummy buttons
-      toast(t("upload.scan") + "…", "info");
-      setTimeout(() => router.push("/processing"), 900);
+      toast(hi ? "कृपया रिपोर्ट फ़ाइल चुनें।" : "Please choose a report file first.", "info");
       return;
     }
 
@@ -93,14 +97,35 @@ export default function UploadPage() {
 
       const data = await res.json();
       
+      const entries = mapChartDataToEntries(data.chart_data || []);
+      if (entries.length === 0) {
+        setIsUploading(false);
+        toast(hi ? "रिपोर्ट में कोई परिणाम नहीं मिला।" : "No lab results were found in this report.", "warn");
+        return;
+      }
+
+      const collectedOn = new Date();
+      const dateEn = collectedOn.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+      const dateHi = collectedOn.toLocaleDateString("hi-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+      const monthEn = collectedOn.toLocaleDateString("en-GB", { month: "short" });
+      const monthHi = collectedOn.toLocaleDateString("hi-IN", { month: "short" });
+
       setStoredActiveReport({
         id: `report-${Date.now()}`,
-        date: { en: "27 Aug 2026", hi: "27 अगस्त 2026" },
-        month: { en: "Aug", hi: "अग." },
+        date: { en: dateEn, hi: dateHi },
+        month: { en: monthEn, hi: monthHi },
         patient_summary: data.patient_summary,
         flagged_issues: data.flagged_issues,
         audio_script: data.audio_script,
-        entries: mapChartDataToEntries(data.chart_data || []),
+        entries,
       });
 
       // Wait a tiny bit for the user to see the final checkmark before redirecting
@@ -137,7 +162,7 @@ export default function UploadPage() {
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            readFile();
+            readFile(e);
           }}
           className={`card-shadow mt-6 flex min-h-[180px] w-full flex-col items-center justify-center gap-3 rounded-3xl border-3 border-dashed bg-white p-6 text-center transition active:scale-[0.99] ${
             dragOver ? "border-mint-500 bg-mint-50" : "border-brand-200 hover:border-brand-400"
@@ -157,7 +182,7 @@ export default function UploadPage() {
         <input
           ref={fileRef}
           type="file"
-          accept="image/*,application/pdf"
+          accept="image/*,application/pdf,text/csv,.csv"
           className="hidden"
           onChange={readFile}
         />
@@ -207,13 +232,18 @@ export default function UploadPage() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-extrabold text-slate-800">
-                Sample report — City Diagnostics
+                Sample laboratory report
               </p>
               <p className="text-xs font-semibold text-slate-400">
                 14 tests · CBC + Lipid + Sugar
               </p>
               <button
-                onClick={() => router.push("/processing")}
+                onClick={() => {
+                  // Sample data is opt-in only. It is never the starting state
+                  // of a new account.
+                  setStoredActiveReport(getDefaultActiveReport());
+                  router.push("/processing");
+                }}
                 className="mt-2 min-h-10 rounded-full bg-brand-700 px-4 text-xs font-extrabold text-white transition hover:bg-brand-600 active:scale-95"
               >
                 {t("upload.trySample")}
@@ -255,10 +285,42 @@ export default function UploadPage() {
       {/* ------------------------------ Manual entry sheet ------------------------------ */}
       <Sheet open={manualOpen} onClose={() => setManualOpen(false)} title={t("upload.manual")}>
         <ManualEntry
-          onDone={() => {
+          onDone={(rows) => {
+            const chartData = rows.flatMap((row) => {
+              const value = Number(row.value);
+              return row.name.trim() && Number.isFinite(value)
+                ? [{ parameter: row.name.trim(), value }]
+                : [];
+            });
+            const entries = mapChartDataToEntries(chartData);
+            if (entries.length === 0) {
+              toast(hi ? "कम से कम एक जाँच का नाम और मान भरें।" : "Enter at least one test name and value.", "warn");
+              return;
+            }
+
+            const collectedOn = new Date();
+            const dateEn = collectedOn.toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            });
+            const dateHi = collectedOn.toLocaleDateString("hi-IN", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            });
+            const monthEn = collectedOn.toLocaleDateString("en-GB", { month: "short" });
+            const monthHi = collectedOn.toLocaleDateString("hi-IN", { month: "short" });
+            setStoredActiveReport({
+              id: `manual-${Date.now()}`,
+              date: { en: dateEn, hi: dateHi },
+              month: { en: monthEn, hi: monthHi },
+              patient_summary: "Results entered manually from the user's report.",
+              entries,
+            });
             setManualOpen(false);
             toast(t("extract.correctToast"));
-            setTimeout(() => router.push("/extracted"), 700);
+            setTimeout(() => router.push("/processing"), 500);
           }}
         />
       </Sheet>
@@ -324,12 +386,16 @@ export default function UploadPage() {
   );
 }
 
-function ManualEntry({ onDone }: { onDone: () => void }) {
+function ManualEntry({
+  onDone,
+}: {
+  onDone: (rows: { name: string; value: string }[]) => void;
+}) {
   const { t } = useI18n();
   const [rows, setRows] = useState([
-    { name: "Hemoglobin", value: "10.5" },
-    { name: "HbA1c", value: "7.2" },
-    { name: "LDL", value: "154" },
+    { name: "", value: "" },
+    { name: "", value: "" },
+    { name: "", value: "" },
   ]);
   return (
     <div className="mt-3 space-y-3">
@@ -361,7 +427,7 @@ function ManualEntry({ onDone }: { onDone: () => void }) {
         + Add row
       </button>
       <button
-        onClick={onDone}
+        onClick={() => onDone(rows)}
         className="min-h-14 w-full rounded-2xl bg-mint-600 text-base font-extrabold text-white shadow-md transition hover:bg-mint-500 active:scale-[0.98]"
       >
         {t("common.continue")}

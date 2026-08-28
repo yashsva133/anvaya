@@ -1,20 +1,7 @@
-﻿import type { Metadata, Viewport } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Inter, Noto_Sans_Devanagari } from "next/font/google";
 import { AppProviders } from "@/components/providers";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
-const devanagari = Noto_Sans_Devanagari({
-  subsets: ["devanagari"],
-  variable: "--font-dev",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "RxAnvaya — Understand your health report. In simple language.",
@@ -32,9 +19,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body
-        className={`${inter.variable} ${devanagari.variable} antialiased`}
-      >
+      <body className="antialiased">
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

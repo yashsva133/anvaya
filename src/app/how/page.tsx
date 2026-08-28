@@ -211,11 +211,11 @@ export default function HowPage() {
       {/* ------------------------------- Footer CTA ------------------------------ */}
       <div className="mt-10 flex flex-wrap justify-center gap-3">
         <Link
-          href="/dashboard"
+          href="/upload"
           className="inline-flex min-h-14 items-center gap-2 rounded-2xl bg-brand-700 px-6 text-base font-extrabold text-white shadow-lg transition hover:bg-brand-600 active:scale-95"
         >
           <Sparkles className="h-5 w-5" />
-          {hi ? "रिपोर्ट देखें" : "View sample report"}
+          {hi ? "रिपोर्ट अपलोड करें" : "Upload your report"}
         </Link>
         <Link
           href="/insights"

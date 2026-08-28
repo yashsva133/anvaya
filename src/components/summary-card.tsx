@@ -35,6 +35,7 @@ import { ListenBtn, Md } from "@/components/core";
 import { useI18n } from "@/lib/i18n";
 import { useReportData } from "@/context/ReportDataContext";
 import { buildReportContext } from "@/lib/ai/reportContext";
+import { reportStatusKnown } from "@/lib/data";
 
 interface TrendChip {
   test: string;
@@ -50,11 +51,11 @@ interface SummaryResponse {
   body: string;
   text: string;
   speech: string;
-  engine: "medgemma" | "rules";
+  engine: "medgemma" | "mock" | "rules";
   model: string | null;
   confidence: "high" | "moderate";
   fallback_reason: string | null;
-  counts: { total: number; normal: number; borderline: number; out: number };
+  counts: { total: number; normal: number; borderline: number; out: number; unknown?: number };
   trends: TrendChip[];
   reports_compared: number;
   language: string;
@@ -82,10 +83,12 @@ export function OverviewSummaryCard() {
   // Local counts, so the grid is correct before (and regardless of) the fetch.
   const local = {
     total: entries.length,
-    normal: entries.filter((e) => e.status === "normal").length,
-    borderline: entries.filter((e) => e.status === "borderline").length,
-    out: entries.filter((e) => e.status === "high" || e.status === "low" || e.status === "critical")
-      .length,
+    normal: entries.filter((e) => reportStatusKnown(e) && e.status === "normal").length,
+    borderline: entries.filter((e) => reportStatusKnown(e) && e.status === "borderline").length,
+    out: entries.filter(
+      (e) => reportStatusKnown(e) && (e.status === "high" || e.status === "low" || e.status === "critical")
+    ).length,
+    unknown: entries.filter((e) => !reportStatusKnown(e)).length,
   };
 
   // Only the parts of the report that actually change the summary are in the
@@ -96,10 +99,16 @@ export function OverviewSummaryCard() {
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
+    setFailed(false);
+    if (entries.length === 0) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setLoading(true);
-    setFailed(false);
     try {
       const res = await fetch("/api/summary", {
         method: "POST",
@@ -133,15 +142,30 @@ export function OverviewSummaryCard() {
 
   const headline =
     data?.headline ||
-    (local.out > 0 || local.borderline > 0 ? t("dash.someAttention") : t("dash.allFine"));
+    (entries.length === 0
+      ? hi
+        ? "अभी कोई रिपोर्ट नहीं है"
+        : "No report data yet"
+      : local.unknown > 0
+        ? hi
+          ? "कुछ परिणामों की संदर्भ सीमा उपलब्ध नहीं है"
+          : "Some results have no reported reference range"
+        : local.out > 0 || local.borderline > 0
+          ? t("dash.someAttention")
+          : t("dash.allFine"));
 
   const counts = data?.counts ?? local;
+  const unknownCount = counts.unknown ?? local.unknown;
 
   const speech =
     data?.speech ||
-    (hi
-      ? `आपकी रिपोर्ट में ${counts.normal} परिणाम सामान्य हैं, ${counts.borderline} पर ध्यान देना है, और ${counts.out} सामान्य सीमा से बाहर हैं।`
-      : `In your report, ${counts.normal} results are normal, ${counts.borderline} need attention, and ${counts.out} are outside the usual range.`);
+    (entries.length === 0
+      ? hi
+        ? "अभी कोई रिपोर्ट नहीं है। रिपोर्ट अपलोड या स्कैन करें।"
+        : "There is no report data yet. Upload or scan a report."
+      : hi
+        ? `आपकी रिपोर्ट में ${counts.normal} परिणाम सामान्य हैं, ${counts.borderline} पर ध्यान देना है, ${counts.out} सामान्य सीमा से बाहर हैं${unknownCount ? `, और ${unknownCount} की सीमा उपलब्ध नहीं है` : ""}।`
+        : `In your report, ${counts.normal} results are normal, ${counts.borderline} need attention, and ${counts.out} are outside the usual range${unknownCount ? `; ${unknownCount} have no reported range` : ""}.`);
 
   return (
     <motion.section
@@ -186,8 +210,8 @@ export function OverviewSummaryCard() {
                 {failed
                   ? t("dash.summaryFailed")
                   : hi
-                    ? `आपकी रिपोर्ट में ${counts.normal} सामान्य और ${counts.out + counts.borderline} ध्यान देने योग्य परिणाम हैं।`
-                    : `Your report contains ${counts.normal} normal results and ${counts.out + counts.borderline} results requiring review.`}
+                    ? `आपकी रिपोर्ट में ${counts.normal} सामान्य और ${counts.out + counts.borderline} ध्यान देने योग्य परिणाम हैं${unknownCount ? `; ${unknownCount} की सीमा उपलब्ध नहीं है` : ""}।`
+                    : `Your report contains ${counts.normal} normal results and ${counts.out + counts.borderline} results requiring review${unknownCount ? `; ${unknownCount} have no reported range` : ""}.`}
               </p>
             )}
           </div>
@@ -224,7 +248,7 @@ export function OverviewSummaryCard() {
         )}
 
         {/* ---- counts ---- */}
-        <div className="mt-6 grid grid-cols-3 gap-3">
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             {
               n: counts.normal,
@@ -244,6 +268,12 @@ export function OverviewSummaryCard() {
               c: "bg-rose-50 border-rose-200 text-rose-700",
               bar: "bg-rose-500",
             },
+            {
+              n: unknownCount,
+              label: hi ? "सीमा उपलब्ध नहीं" : "Range not reported",
+              c: "bg-slate-50 border-slate-200 text-slate-600",
+              bar: "bg-slate-400",
+            },
           ].map((x) => (
             <div key={x.label} className={`rounded-3xl border p-4 text-center md:p-5 ${x.c}`}>
               <p className="tabular text-4xl font-extrabold md:text-5xl">{x.n}</p>
@@ -256,7 +286,11 @@ export function OverviewSummaryCard() {
         {/* ---- provenance: who actually wrote the text above ---- */}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-amber-100 pt-3">
           <p className="text-[11px] font-bold text-slate-400">
-            {data?.engine === "medgemma" ? t("dash.summaryBy") : t("dash.summaryOffline")}
+            {data?.engine === "medgemma"
+              ? t("dash.summaryBy")
+              : data?.engine === "mock"
+                ? "Mock provider"
+                : t("dash.summaryOffline")}
             {data?.model ? ` · ${data.model}` : ""}
           </p>
           <button

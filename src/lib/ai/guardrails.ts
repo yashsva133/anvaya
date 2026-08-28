@@ -18,19 +18,14 @@ import type { LangCode } from "@/lib/data";
 import type { AnonymisedPayload, ConfidenceLevel, GuardResult } from "./types";
 import { allowedNumbers } from "./anonymizer";
 import { safeRedirect, emergencyText } from "./translations";
-import { isAnswerLang, type AnswerLang } from "./languages";
+import { detectLangFromText, isAnswerLang, type AnswerLang } from "./languages";
 
 /**
  * Questions we refuse before spending a model call.
- * Bilingual: a Hindi-only user must be refused in Hindi, not answered in English.
- *
- * COVERAGE LIMIT, stated plainly: these patterns were written for English and
- * Hindi. A diagnosis request phrased in Tamil or Marathi will not be caught
- * here and will instead rely on the model plus guardOutput(). To keep that
- * gap from being invisible, guardInput() tags the turn with
- * `input_guard_language_uncovered:<lang>` when it screens a language it has no
- * patterns for, so ai_generations shows exactly which turns were screened by
- * the weaker path.
+ * Multilingual input patterns cover the common diagnosis, dosing and emergency
+ * phrases; a server translation pass provides broader English-boundary
+ * screening when it is configured. The coverage note remains useful because
+ * keywords are not a clinical classifier.
  */
 const DIAGNOSIS_REQUESTS: RegExp[] = [
   /\bdo i have\b/i,
@@ -45,6 +40,25 @@ const DIAGNOSIS_REQUESTS: RegExp[] = [
   /मुझे .* रोग है/,
   /निदान/,
   /बीमारी का नाम/,
+];
+
+// Conservative safety phrases for languages that may arrive when the
+// translation service is unavailable. The English-boundary translation is
+// still the stronger path, but an unavailable dependency must not turn a
+// direct diagnosis or dosing request into ordinary report help.
+const DIAGNOSIS_REQUESTS_MULTILINGUAL: RegExp[] = [
+  /আমার কি .* রোগ|কোন রোগ|রোগ নির্ণয়/, // Bengali
+  /எனக்கு .* நோய்|என்ன நோய்|நோயறிதல்|நோய் கண்டறி/, // Tamil
+  /నాకు .* వ్యాధి|ఏ వ్యాధి|వ్యాధి నిర్ధారణ|నాకు .* ఉందా/, // Telugu
+  /मला .* रोग आहे का|कोणता रोग|रोगनिदान/, // Marathi
+  /મને .* રોગ છે|કયો રોગ|રોગનિદાન/, // Gujarati
+  /ನನಗೆ .* ರೋಗ|ಯಾವ ರೋಗ|ರೋಗನಿರ್ಣಯ/, // Kannada
+  /എനിക്ക് .* രോഗമുണ്ടോ|ഏത് രോഗം|രോഗനിർണയം/, // Malayalam
+  /ਕੀ ਮੈਨੂੰ .* ਬਿਮਾਰੀ|ਕਿਹੜੀ ਬਿਮਾਰੀ|ਰੋਗ ਦੀ ਪਛਾਣ/, // Punjabi
+  /کیا مجھے .* بیماری|کون سی بیماری|تشخیص/, // Urdu
+  /ମୋର .* ରୋଗ|କେଉଁ ରୋଗ|ରୋଗ ନିର୍ଣ୍ଣୟ/, // Odia
+  /মোৰ .* ৰোগ|কোন ৰোগ|ৰোগ নিৰ্ণয়/, // Assamese
+  /मलाई .* रोग|कुन रोग|रोग पहिचान/, // Nepali
 ];
 
 const DOSING_REQUESTS: RegExp[] = [
@@ -62,6 +76,21 @@ const DOSING_REQUESTS: RegExp[] = [
   /गोली[^।?]{0,24}कितन/,
   /इंसुलिन[^।?]{0,24}कितन/,
   /(?:दवा|गोली|इंसुलिन)[^।?]{0,24}(?:बदल|कम|ज़्यादा|ज्यादा)/,
+];
+
+const DOSING_REQUESTS_MULTILINGUAL: RegExp[] = [
+  /ওষুধ.*কত|কত.*ওষুধ|ডোজ|ইনসুলিন/, // Bengali
+  /மருந்து.*எவ்வளவு|எவ்வளவு.*மருந்து|மருந்தின் அளவு|இன்சுலின்/, // Tamil
+  /మందు.*ఎంత|ఎంత.*మందు|మోతాదు|ఇన్సులిన్/, // Telugu
+  /औषध.*किती|किती.*औषध|डोस|इन्सुलिन/, // Marathi
+  /દવા.*કેટલી|કેટલી.*દવા|ડોઝ|ઇન્સ્યુલિન/, // Gujarati
+  /ಔಷಧ.*ಎಷ್ಟು|ಎಷ್ಟು.*ಔಷಧ|ಡೋಸ್|ಇನ್ಸುಲಿನ್/, // Kannada
+  /മരുന്ന്.*എത്ര|എത്ര.*മരുന്ന്|ഡോസ്|ഇൻസുലിൻ/, // Malayalam
+  /ਦਵਾਈ.*ਕਿੰਨੀ|ਕਿੰਨੀ.*ਦਵਾਈ|ਖੁਰਾਕ|ਇਨਸੁਲਿਨ/, // Punjabi
+  /دوا.*کتنی|کتنی.*دوا|خوراک|انسولین/, // Urdu
+  /ଔଷଧ.*କେତେ|କେତେ.*ଔଷଧ|ଡୋଜ|ଇନସୁଲିନ/, // Odia
+  /দৰব.*কিমান|কিমান.*দৰব|ড'জ|ইনচুলিন/, // Assamese
+  /औषधि.*कति|कति.*औषधि|मात्रा|इन्सुलिन/, // Nepali
 ];
 
 const EMERGENCY_REQUESTS: RegExp[] = [
@@ -146,21 +175,29 @@ export type InputGuard =
  * does not read is not a refusal. Accepts any AnswerLang; the older LangCode
  * values are a subset, so existing callers are unaffected.
  */
-export function guardInput(question: string, lang: LangCode | AnswerLang): InputGuard {
+export function guardInput(
+  question: string,
+  lang: LangCode | AnswerLang,
+  /** Language used to decide whether the lexical screen covers the input. */
+  questionLanguage?: AnswerLang
+): InputGuard {
   const answerLang: AnswerLang = isAnswerLang(lang) ? lang : "en";
+  const screenedLanguage = questionLanguage ?? detectLangFromText(question, "en");
   if (test(question, EMERGENCY_REQUESTS) || test(question, EMERGENCY_REQUESTS_MULTILINGUAL)) {
     return { blocked: true, reason: "emergency", text: emergencyText(answerLang) };
   }
-  if (test(question, DOSING_REQUESTS)) {
+  if (test(question, DOSING_REQUESTS) || test(question, DOSING_REQUESTS_MULTILINGUAL)) {
     return { blocked: true, reason: "dosing", text: safeRedirect(answerLang) };
   }
-  if (test(question, DIAGNOSIS_REQUESTS)) {
+  if (test(question, DIAGNOSIS_REQUESTS) || test(question, DIAGNOSIS_REQUESTS_MULTILINGUAL)) {
     return { blocked: true, reason: "diagnosis", text: safeRedirect(answerLang) };
   }
-  if (inputGuardCovers(answerLang)) return { blocked: false };
-  // Not blocked — but recorded, because this language was screened by the
-  // multilingual keyword list only, not by the reviewed en/hi pattern set.
-  return { blocked: false, note: `input_guard_language_uncovered:${answerLang}` };
+  if (inputGuardCovers(screenedLanguage)) return { blocked: false };
+  // Not blocked — but recorded, because this input language was screened by the
+  // multilingual keyword list only, not by the reviewed en/hi pattern set. The
+  // requested answer language is deliberately not used here: an English input
+  // translated into Tamil is still covered by the English lexical screen.
+  return { blocked: false, note: `input_guard_language_uncovered:${screenedLanguage}` };
 }
 
 /** True when the reviewed English/Hindi pattern set applies to this language. */
@@ -247,6 +284,11 @@ export interface OutputGuardOptions {
   weights?: { model: number; retrieval: number };
   /** Trust score at or above which the UI shows the "high" badge. */
   highThreshold?: number;
+  /**
+   * Localized text authored by the application does not need a model-language
+   * coverage warning. Model output should leave this at the default.
+   */
+  guardLanguage?: "model" | "curated";
 }
 
 /**
@@ -286,7 +328,7 @@ export function guardOutput(opts: OutputGuardOptions): GuardResult {
   // The diagnosis/dosing output patterns are English + Hindi. Numeric grounding
   // and the refusal check are language-independent, so the score is still
   // meaningful, but the phrase screening is weaker in another script — say so.
-  if (!inputGuardCovers(answerLang)) {
+  if (opts.guardLanguage !== "curated" && !inputGuardCovers(answerLang)) {
     flags.push(`output_guard_language_uncovered:${answerLang}`);
   }
 

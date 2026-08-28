@@ -46,15 +46,15 @@ export interface InsightPatternView {
   disclaimer: string;
   source: InsightSource | null;
   missing: string[];
-  engine: "medgemma" | "rules";
+  engine: "medgemma" | "mock" | "rules";
   model: string | null;
   fallback_reason: string | null;
 }
 
 export interface InsightsView {
   patterns: InsightPatternView[];
-  story: { when: string; text: string; status: Status }[];
-  engine: "medgemma" | "rules";
+  story: { when: string; text: string; status: Status; statusKnown?: boolean }[];
+  engine: "medgemma" | "mock" | "rules";
   model: string | null;
   counts: { total: number; flagged: number; patterns: number };
   reports_compared: number;
@@ -79,10 +79,24 @@ export function useAiInsights(options?: { max?: number }) {
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
+    setFailed(false);
+    if (entries.length === 0) {
+      setData({
+        patterns: [],
+        story: [],
+        engine: "rules",
+        model: null,
+        counts: { total: 0, flagged: 0, patterns: 0 },
+        reports_compared: 0,
+        latency_ms: 0,
+      });
+      setLoading(false);
+      return;
+    }
+
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setLoading(true);
-    setFailed(false);
     try {
       const res = await fetch("/api/insights", {
         method: "POST",

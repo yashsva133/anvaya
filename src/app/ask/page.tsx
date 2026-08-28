@@ -31,6 +31,7 @@ import { VoiceSheet } from "@/components/voice";
 import { useI18n } from "@/lib/i18n";
 import { useReportData } from "@/context/ReportDataContext";
 import { buildReportContext, conversationId, patientRef } from "@/lib/ai/reportContext";
+import { LANGUAGES, languageOf, type AnswerLang } from "@/lib/ai/languages";
 
 interface Msg {
   role: "user" | "ai";
@@ -38,8 +39,9 @@ interface Msg {
   sources?: number;
   confidence?: "high" | "moderate";
   /** Which path produced this answer (additive; undefined on the welcome card). */
-  engine?: "medgemma" | "rules" | "fallback";
+  engine?: "medgemma" | "mock" | "rules" | "fallback";
   model?: string | null;
+  answerLang?: AnswerLang;
   qaMessageId?: string | null;
 }
 
@@ -47,9 +49,10 @@ interface AnswerResponse {
   answer: string;
   sources: number;
   confidence: "high" | "moderate";
-  engine?: "medgemma" | "rules" | "fallback";
+  engine?: "medgemma" | "mock" | "rules" | "fallback";
   model?: string | null;
   personalized?: boolean;
+  answer_lang?: AnswerLang;
   qa_message_id?: string | null;
 }
 
@@ -74,6 +77,7 @@ export default function AskPage() {
   const [sessionId] = useState(() => conversationId("anvaya_chat_session_v1"));
   const hi = s.lang === "hi";
   const toast = useToast();
+  const [answerLang, setAnswerLang] = useState<AnswerLang>(s.lang);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [typing, setTyping] = useState(false);
   const [input, setInput] = useState("");
@@ -83,17 +87,22 @@ export default function AskPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const hasReport = activeReport.entries.length > 0;
     const reportDate = hi ? activeReport.date.hi : activeReport.date.en;
     setMsgs([
       {
         role: "ai",
-        text: hi
-          ? `नमस्ते! मैंने आपकी **${reportDate}** की रिपोर्ट पढ़ ली है। आप अपने परिणामों के बारे में कुछ भी पूछ सकते हैं — सरल भाषा में, या बोलकर।`
-          : `Hello! I've read your **${reportDate}** report. Ask anything about your results — in simple words, or by voice.`,
+        text: hasReport
+          ? hi
+            ? `नमस्ते! मैंने आपकी **${reportDate}** की रिपोर्ट पढ़ ली है। आप अपने परिणामों के बारे में कुछ भी पूछ सकते हैं — सरल भाषा में, या बोलकर।`
+            : `Hello! I've read your **${reportDate}** report. Ask anything about your results — in simple words, or by voice.`
+          : hi
+            ? "नमस्ते! अभी कोई रिपोर्ट नहीं मिली है। रिपोर्ट अपलोड या स्कैन करें, फिर मैं आपके असली परिणाम समझाने में मदद करूँगा।"
+            : "Hi! I don’t have a report from you yet. Upload or scan one, and I’ll help explain your actual results.",
         sources: 0,
       },
     ]);
-  }, [hi, activeReport.date.en, activeReport.date.hi]);
+  }, [hi, activeReport.entries.length, activeReport.date.en, activeReport.date.hi]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -112,12 +121,14 @@ export default function AskPage() {
         body: JSON.stringify({
           q: query,
           lang: s.lang,
+          answerLang,
           reading: s.mode,
           ...(sessionId ? { session: sessionId } : {}),
           ...patientRef(patient),
           report: buildReportContext({ activeReport, reports, patient, lang: s.lang }),
         }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as AnswerResponse;
       await new Promise((r) => setTimeout(r, 700));
       setMsgs((m) => [
@@ -129,6 +140,7 @@ export default function AskPage() {
           confidence: data.confidence,
           engine: data.engine,
           model: data.model,
+          answerLang: data.answer_lang ?? answerLang,
           qaMessageId: data.qa_message_id,
         },
       ]);
@@ -182,8 +194,33 @@ export default function AskPage() {
           className="card-shadow mb-4 flex min-h-14 w-full items-center justify-center gap-2.5 rounded-3xl border-2 border-mint-600 bg-mint-600 px-4 text-base font-extrabold text-white shadow-mint-600/25 transition hover:bg-mint-500 active:scale-[0.99]"
         >
           <Mic className="h-5 w-5" />
-          {t("ask.tapMic")} — {hi ? "हिन्दी में बोलें" : "speak in Hindi"}
+          {t("ask.tapMic")} — {hi ? `${languageOf(answerLang).native} में बोलें` : `speak in ${languageOf(answerLang).english}`}
         </button>
+
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-100 bg-brand-50/60 px-4 py-3">
+          <div>
+            <p className="text-sm font-extrabold text-brand-900">{hi ? "जवाब की भाषा" : "Answer language"}</p>
+            <p className="text-xs font-medium text-brand-700/80">
+              {hi ? "आप किसी भी उपलब्ध भाषा में पूछ सकते हैं।" : "Choose the language for this answer, or ask in your message."}
+            </p>
+          </div>
+          <label className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-brand-200 bg-white px-3 text-xs font-extrabold text-brand-700">
+            <Languages className="h-4 w-4" />
+            <span className="sr-only">{hi ? "जवाब की भाषा" : "Answer language"}</span>
+            <select
+              value={answerLang}
+              onChange={(e) => setAnswerLang(e.target.value as AnswerLang)}
+              aria-label={hi ? "जवाब की भाषा" : "Answer language"}
+              className="min-h-8 cursor-pointer bg-transparent pr-1 text-xs font-extrabold text-brand-700 outline-none"
+            >
+              {LANGUAGES.map((language) => (
+                <option key={language.code} value={language.code}>
+                  {language.native} · {language.english}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         {/* messages */}
         <div ref={scrollRef} className="flex-1 space-y-4">
@@ -216,22 +253,28 @@ export default function AskPage() {
                       {m.engine && (
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-extrabold ${
-                            m.engine === "medgemma"
+                            m.engine === "medgemma" || m.engine === "mock"
                               ? "bg-violet-50 text-violet-700"
                               : "bg-slate-50 text-slate-500"
                           }`}
-                          title={m.engine === "medgemma" ? (m.model ?? "medgemma") : undefined}
+                          title={
+                            m.engine === "medgemma" || m.engine === "mock"
+                              ? (m.model ?? m.engine)
+                              : undefined
+                          }
                         >
                           <Sparkles className="h-3.5 w-3.5" />
                           {m.engine === "medgemma"
                             ? `MedGemma · ${m.model ?? "local"}`
-                            : m.engine === "rules"
-                              ? hi
-                                ? "सुरक्षित उत्तर"
-                                : "Saved answer"
-                              : hi
-                                ? "डेमो उत्तर"
-                                : "Demo answer"}
+                            : m.engine === "mock"
+                              ? `Mock provider · ${m.model ?? "local"}`
+                              : m.engine === "rules"
+                                ? hi
+                                  ? "सुरक्षित उत्तर"
+                                  : "Saved answer"
+                                : hi
+                                  ? "डेमो उत्तर"
+                                  : "Demo answer"}
                         </span>
                       )}
                       {(m.sources ?? 0) > 0 && (
@@ -258,7 +301,7 @@ export default function AskPage() {
                       )}
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-extrabold text-slate-500">
                         <Languages className="h-3.5 w-3.5" />
-                        {/[\u0900-\u097F]/.test(m.text) ? "हिन्दी" : "English"}
+                        {languageOf(m.answerLang ?? "en").native}
                       </span>
                       <ListenBtn compact text={m.text} />
                       <span className="ml-auto flex items-center gap-1">

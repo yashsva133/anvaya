@@ -78,6 +78,7 @@ const EN: Dict = {
   "status.high": "Higher than usual",
   "status.low": "Lower than usual",
   "status.critical": "Seek medical attention",
+  "status.unassessed": "Range not reported",
   "status.within": "Within usual range",
 
   "disclaimer.short":
@@ -181,6 +182,7 @@ const EN: Dict = {
   "test.lowZone": "Low",
   "test.normalZone": "Normal",
   "test.highZone": "High",
+  "test.rangeUnavailable": "The report did not include a usable reference range for this test.",
 
   "mode.simple": "Simple",
   "mode.advanced": "Advanced",
@@ -199,6 +201,8 @@ const EN: Dict = {
   "insights.detecting": "Looking for connections between your results…",
   "insights.noneFound": "No connected pattern stands out in this report.",
   "insights.noneFoundSub": "The results in this report do not group into a pattern worth flagging. Individual results are still on your Overview.",
+  "insights.noReport": "No report data yet",
+  "insights.noReportSub": "Upload or scan a report to see patterns from your actual results.",
   "insights.failed": "Could not reach the insights service. Showing what we already have.",
   "insights.retry": "Look again",
   "insights.writtenBy": "Explained by MedGemma from your results",
@@ -238,6 +242,7 @@ const EN: Dict = {
   "compare.stable": "Stable",
   "compare.improved": "Improved",
   "compare.worsened": "Worsened",
+  "compare.changed": "Changed — no range",
   "compare.summary":
     "Your hemoglobin has decreased, while HbA1c and LDL have increased since your previous report.",
   "compare.older": "Older report",
@@ -388,6 +393,7 @@ const HI: Dict = {
   "status.high": "सामान्य से अधिक",
   "status.low": "सामान्य से कम",
   "status.critical": "तुरंत चिकित्सक से मिलें",
+  "status.unassessed": "सीमा उपलब्ध नहीं",
   "status.within": "सामान्य सीमा में",
 
   "disclaimer.short":
@@ -489,6 +495,7 @@ const HI: Dict = {
   "test.lowZone": "कम",
   "test.normalZone": "सामान्य",
   "test.highZone": "अधिक",
+  "test.rangeUnavailable": "इस जाँच के लिए रिपोर्ट में उपयोगी संदर्भ सीमा नहीं दी गई थी।",
 
   "mode.simple": "सरल",
   "mode.advanced": "विस्तृत",
@@ -507,6 +514,8 @@ const HI: Dict = {
   "insights.detecting": "आपके परिणामों के बीच संबंध खोजे जा रहे हैं…",
   "insights.noneFound": "इस रिपोर्ट में कोई जुड़ा हुआ पैटर्न सामने नहीं आया।",
   "insights.noneFoundSub": "इस रिपोर्ट के परिणाम ऐसे किसी पैटर्न में नहीं बंधते जिसे अलग से बताना ज़रूरी हो। अलग-अलग परिणाम मुख्य सारांश में देखे जा सकते हैं।",
+  "insights.noReport": "अभी कोई रिपोर्ट डेटा नहीं है",
+  "insights.noReportSub": "अपने असली परिणामों से पैटर्न देखने के लिए रिपोर्ट अपलोड या स्कैन करें।",
   "insights.failed": "इनसाइट्स सेवा तक नहीं पहुँच सके। जो उपलब्ध है वही दिखाया जा रहा है।",
   "insights.retry": "फिर से देखें",
   "insights.writtenBy": "MedGemma ने आपके परिणामों से समझाया",
@@ -545,6 +554,7 @@ const HI: Dict = {
   "compare.stable": "स्थिर",
   "compare.improved": "सुधार",
   "compare.worsened": "बिगड़ाव",
+  "compare.changed": "बदला — सीमा नहीं",
   "compare.summary":
     "पिछली रिपोर्ट की तुलना में आपका हीमोग्लोबिन घटा है, जबकि HbA1c और LDL बढ़े हैं।",
   "compare.older": "पुरानी रिपोर्ट",
@@ -688,6 +698,8 @@ const BN: Dict = {
   "insights.detecting": "আপনার ফলাফলের মধ্যে সংযোগ খোঁজা হচ্ছে…",
   "insights.noneFound": "এই রিপোর্টে উল্লেখযোগ্য কোনো সংযুক্ত প্যাটার্ন পাওয়া যায়নি।",
   "insights.noneFoundSub": "এই রিপোর্টের ফলাফলগুলি আলাদা করে জানানোর মতো কোনো প্যাটার্ন তৈরি করছে না। পৃথক ফলাফল সারসংক্ষেপে দেখা যাবে।",
+  "insights.noReport": "এখনও কোনো রিপোর্টের তথ্য নেই",
+  "insights.noReportSub": "আপনার আসল ফলাফল থেকে প্যাটার্ন দেখতে রিপোর্ট আপলোড বা স্ক্যান করুন।",
   "insights.failed": "ইনসাইট পরিষেবায় পৌঁছানো যায়নি। যা আছে তাই দেখানো হচ্ছে।",
   "insights.retry": "আবার দেখুন",
   "insights.writtenBy": "MedGemma আপনার ফলাফল থেকে ব্যাখ্যা করেছে",

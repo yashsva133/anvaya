@@ -19,16 +19,40 @@ import { BrainCircuit, ChevronRight, SearchX, ShieldCheck } from "lucide-react";
 import { AiLines, AiStages } from "@/components/ai-loading";
 import { TestIcon } from "@/components/core";
 import { useI18n } from "@/lib/i18n";
+import { useReportData } from "@/context/ReportDataContext";
 import { useAiInsights } from "@/lib/ai/useAiInsights";
 
 const STAGES = ["ai.load.connections", "ai.load.explaining"] as const;
 
 export function PatternTeaser() {
   const { t } = useI18n();
+  const { activeReport, loading: reportLoading } = useReportData();
   // One connection is all the teaser shows, so only one is generated here; the
   // Insights page asks for the full set.
   const { data, loading } = useAiInsights({ max: 1 });
   const top = data?.patterns[0];
+
+  if (!reportLoading && activeReport.entries.length === 0) {
+    return (
+      <section className="mt-10">
+        <div className="card-shadow flex flex-col gap-3 rounded-[2rem] border-2 border-dashed border-brand-200 bg-white p-6 md:flex-row md:items-center">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-mint-100 text-mint-700">
+            <SearchX className="h-7 w-7" />
+          </span>
+          <div className="flex-1">
+            <p className="text-base font-extrabold text-brand-950">{t("insights.noReport")}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">{t("insights.noReportSub")}</p>
+          </div>
+          <Link
+            href="/upload"
+            className="inline-flex min-h-10 items-center justify-center rounded-2xl bg-brand-700 px-4 text-xs font-extrabold text-white transition hover:bg-brand-600"
+          >
+            {t("upload.title")}
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   if (loading) {
     return (

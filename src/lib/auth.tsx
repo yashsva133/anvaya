@@ -125,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     const supabase = getSupabaseBrowserClient();
 
-    if (supabase) {
+    if (isConfigured && supabase) {
       // Real Supabase session
       const {
         data: { session },
@@ -176,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setLoading(false);
     }
-  }, [fetchUserData]);
+  }, [fetchUserData, isConfigured]);
 
   useEffect(() => {
     initAuth();
@@ -192,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithEmail = async (email: string, password: string) => {
     const supabase = getSupabaseBrowserClient();
 
-    if (supabase) {
+    if (isConfigured && supabase) {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
@@ -255,7 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ) => {
     const supabase = getSupabaseBrowserClient();
 
-    if (supabase) {
+    if (isConfigured && supabase) {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
@@ -327,7 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async () => {
     const supabase = getSupabaseBrowserClient();
 
-    if (supabase) {
+    if (isConfigured && supabase) {
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -388,7 +388,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetPassword = async (email: string) => {
     const supabase = getSupabaseBrowserClient();
 
-    if (supabase) {
+    if (isConfigured && supabase) {
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       const { error } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
@@ -410,7 +410,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     const supabase = getSupabaseBrowserClient();
 
-    if (supabase) {
+    if (isConfigured && supabase) {
       await supabase.auth.signOut();
     }
 
@@ -432,7 +432,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const supabase = getSupabaseBrowserClient();
 
-    if (supabase) {
+    if (isConfigured && supabase) {
       try {
         // 1. Update Profile
         await supabase
@@ -490,7 +490,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile_id: user.id,
       full_name: payload.fullName,
       sex: payload.gender,
-      age: payload.age || 42,
+      ...(payload.age ? { age: payload.age } : {}),
       preferred_language: payload.preferredLanguage,
       reading_level: payload.readingLevel || "standard",
       voice_enabled: payload.voiceEnabled ?? true,

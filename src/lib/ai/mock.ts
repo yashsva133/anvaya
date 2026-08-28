@@ -51,7 +51,12 @@ export function composeMockAnswer(ctx: MockContext): string {
   const lines: string[] = [];
   lines.push(p.intro(payload.report_date));
   for (const r of focus.slice(0, 3)) {
-    const rel = r.status === "normal" ? p.within : p.outside(r.ref_text);
+    const rel =
+      r.status_known === false
+        ? p.unassessed
+        : r.status === "normal"
+          ? p.within
+          : p.outside(r.ref_text);
     lines.push(`- **${r.label}** ${r.value} ${r.unit} — ${rel}.`);
   }
 
@@ -86,10 +91,13 @@ export function composeMockAnswer(ctx: MockContext): string {
 
 export class MockProvider implements Provider {
   readonly name = "mock";
-  constructor(
-    readonly model: string,
-    private ctx: MockContext
-  ) {}
+  readonly model: string;
+  private ctx: MockContext;
+
+  constructor(model: string, ctx: MockContext) {
+    this.model = model;
+    this.ctx = ctx;
+  }
 
   async generate(opts: GenerateOptions): Promise<GenerationOutput> {
     const started = Date.now();
