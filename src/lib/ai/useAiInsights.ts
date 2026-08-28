@@ -94,6 +94,20 @@ export function useAiInsights(options?: { max?: number }) {
       return;
     }
 
+    const cacheKey = `anvaya_insights_${activeReport.id}_${signature}_${historySignature}_${s.lang}_${s.mode}`;
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          setData(JSON.parse(cached));
+          setLoading(false);
+          return;
+        }
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setLoading(true);
@@ -112,6 +126,13 @@ export function useAiInsights(options?: { max?: number }) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as InsightsView;
       if (ctrl.signal.aborted) return;
+      
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify(json));
+        } catch (e) {}
+      }
+      
       setData(json);
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;

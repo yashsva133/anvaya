@@ -80,6 +80,16 @@ const RULES: { keys: RegExp; a: Answer }[] = [
       confidence: "high",
     },
   },
+  {
+    keys: /^(?:tell me about my )?(?:report|reports|अहवाल|रिपोर्ट|परिणाम|result|results)(?:s|बद्दल)?(?: सांग)?$/i,
+    a: {
+      matched: "report",
+      en: "I can see your report, but please ask about a specific test like Hemoglobin, HbA1c, or Cholesterol so I can give you detailed information. Alternatively, you can check the Insights tab for a full breakdown.",
+      hi: "मुझे आपकी रिपोर्ट दिख रही है, लेकिन कृपया हीमोग्लोबिन, HbA1c, या कोलेस्ट्रॉल जैसे किसी विशिष्ट परीक्षण के बारे में पूछें ताकि मैं आपको विस्तृत जानकारी दे सकूं। आप चाहें तो पूरी जानकारी के लिए Insights टैब भी देख सकते हैं।",
+      sources: 0,
+      confidence: "high",
+    },
+  },
 ];
 
 const FALLBACK: Answer = {

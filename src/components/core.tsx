@@ -779,7 +779,7 @@ export function Sheet({
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className={`fixed inset-x-0 bottom-0 z-[80] mx-auto max-h-[88vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 pb-10 shadow-2xl md:rounded-3xl md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:p-6 ${
+            className={`fixed inset-x-0 bottom-0 z-[80] mx-auto max-h-[88vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 pb-10 shadow-2xl md:rounded-3xl md:bottom-6 md:h-[max-content] md:p-6 ${
               wide ? "max-w-2xl" : "max-w-md"
             }`}
           >

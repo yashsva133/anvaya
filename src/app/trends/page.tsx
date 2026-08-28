@@ -187,7 +187,7 @@ export default function TrendsPage() {
     <AppShell>
       <SectionTitle icon={TrendingUp} title={t("trends.title")} sub={t("trends.sub")} />
 
-      <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {availableTests.map((id) => {
           const d = resolveTestDef(id, catalog, reports.flatMap((r) => r.entries).find((e) => e.test === id));
           const active = selectedId === id;

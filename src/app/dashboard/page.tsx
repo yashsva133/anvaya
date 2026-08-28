@@ -111,7 +111,6 @@ export default function DashboardPage() {
   const assessedEntries = entries.filter(reportStatusKnown);
   const attentionEntries = assessedEntries.filter((e) => e.status !== "normal");
   const priorityIds = (attentionEntries.length > 0 ? attentionEntries : assessedEntries)
-    .slice(0, 3)
     .map((e) => e.test);
 
   const fallbackBorderline = assessedEntries
@@ -134,32 +133,7 @@ export default function DashboardPage() {
     .join("")
     .toUpperCase() || "U";
 
-  if (!loading && reports.length === 0) {
-    return (
-      <AppShell>
-        <div className="flex h-[60vh] flex-col items-center justify-center text-center">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-brand-100 text-brand-600 mb-6">
-            <FilePlus2 className="h-12 w-12" />
-          </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-brand-950 md:text-4xl mb-3">
-            {hi ? "कोई डेटा नहीं" : "No data available"}
-          </h1>
-          <p className="max-w-md text-lg font-medium text-slate-500 mb-8">
-            {hi
-              ? "शुरू करने के लिए अपनी पहली लैब रिपोर्ट अपलोड करें।"
-              : "Upload your first lab report to get started."}
-          </p>
-          <Link
-            href="/upload"
-            className="inline-flex min-h-14 items-center gap-2 rounded-2xl bg-brand-700 px-8 text-lg font-extrabold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-brand-600 active:scale-95"
-          >
-            <FilePlus2 className="h-5 w-5" />
-            {t("footer.cta1")}
-          </Link>
-        </div>
-      </AppShell>
-    );
-  }
+
 
   return (
     <AppShell>
@@ -229,7 +203,7 @@ export default function DashboardPage() {
 
       {/* ---------------------------- What matters most ---------------------------- */}
       <section className="mt-10">
-        <SectionTitle icon={Sparkles} title={t("dash.mattersMost")} sub={t("dash.mattersSub")} />
+        <SectionTitle icon={Sparkles} title={attentionEntries.length > 0 ? (hi ? `${attentionEntries.length} ध्यान देने योग्य` : `${attentionEntries.length} Needs attention`) : t("dash.mattersMost")} sub={t("dash.mattersSub")} />
         {priorityIds.length > 0 ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {priorityIds.map((id, i) => {
@@ -245,25 +219,6 @@ export default function DashboardPage() {
               : "These results have no trusted reference range yet. Show the printed report to your doctor."}
           </div>
         )}
-      </section>
-
-      {/* ------------------------------ Pattern teaser ----------------------------- */}
-      {/* The strongest connection the rule engine found in THIS report, from the
-          same /api/insights call the AI Insights page uses. */}
-      <PatternTeaser />
-
-      {/* ------------------------------- All results ------------------------------- */}
-      <section className="mt-10">
-        <SectionTitle
-          icon={BookOpen}
-          title={t("dash.allResults")}
-          sub={`${entries.length} ${t("reports.tests")}${report?.date ? ` · ${pick(report.date, s.lang)}` : ""}`}
-        />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {entries.map((e) => (
-            <ResultCard key={e.test} entry={e} catalog={catalog} />
-          ))}
-        </div>
       </section>
 
       {/* --------------------------- Borderline section --------------------------- */}
@@ -303,10 +258,20 @@ export default function DashboardPage() {
             );
           })}
         </div>
-        <p className="mt-3 flex items-start gap-2 text-sm font-semibold text-slate-500">
-          <Stethoscope className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
-          {t("dash.closeNote")}
-        </p>
+      </section>
+
+      {/* ------------------------------- All results ------------------------------- */}
+      <section className="mt-10">
+        <SectionTitle
+          icon={BookOpen}
+          title={t("dash.allResults")}
+          sub={`${entries.length} ${t("reports.tests")}${report?.date ? ` · ${pick(report.date, s.lang)}` : ""}`}
+        />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {entries.map((e) => (
+            <ResultCard key={e.test} entry={e} catalog={catalog} />
+          ))}
+        </div>
       </section>
 
       {/* ------------------------------ Action banner ------------------------------ */}

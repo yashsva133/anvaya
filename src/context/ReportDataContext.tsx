@@ -108,10 +108,10 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
       if (cat) setCatalog(cat);
 
       // 3. Fetch historical reports from Supabase or local store
-      const rpts = await getPatientReports();
+      const rpts = await getPatientReports(p?.id);
       if (rpts && rpts.length > 0) {
         setReports(rpts);
-      } else if (session?.user) {
+      } else if (user) {
         setReports([]);
       } else {
         setReports(getStoredReportsHistory());

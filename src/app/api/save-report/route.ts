@@ -15,13 +15,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (isSupabaseConfigured()) {
-      if (!body.patient_id) {
-        return NextResponse.json(
-          { error: "patient_id is required for an authenticated report save." },
-          { status: 400 }
-        );
-      }
-
       const supabase = await getSupabaseServerClient();
       if (!supabase) {
         return NextResponse.json({ error: "Supabase is unavailable." }, { status: 503 });
@@ -34,20 +27,57 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Sign in before saving a report." }, { status: 401 });
       }
 
-      // The service-role writer below deliberately bypasses RLS for its child
-      // inserts. Prove ownership with the user's cookie-backed client first so
-      // a caller cannot submit another patient's UUID.
-      const { data: patient, error: patientError } = await supabase
-        .from("patients")
-        .select("id")
-        .eq("id", body.patient_id)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      if (patientError) {
-        return NextResponse.json({ error: patientError.message }, { status: 500 });
-      }
-      if (!patient) {
-        return NextResponse.json({ error: "That patient record is not yours." }, { status: 403 });
+      // Find or create the patient row for this user
+      let finalPatientId = body.patient_id;
+      if (!finalPatientId) {
+        const { data: patientRow, error: pErr } = await supabase
+          .from("patients")
+          .select("id")
+          .eq("profile_id", user.id)
+          .maybeSingle();
+          
+        if (patientRow?.id) {
+          finalPatientId = patientRow.id;
+        } else {
+          // Auto-create patient
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("full_name, email")
+            .eq("id", user.id)
+            .maybeSingle();
+            
+          const nameEn = prof?.full_name || user.email?.split("@")[0] || "User";
+          const { data: newPatient, error: insertErr } = await supabase
+            .from("patients")
+            .insert({
+              profile_id: user.id,
+              full_name: nameEn,
+              email: prof?.email || user.email || "",
+            })
+            .select("id")
+            .single();
+            
+          if (insertErr || !newPatient) {
+            return NextResponse.json({ error: "Failed to create patient record." }, { status: 500 });
+          }
+          finalPatientId = newPatient.id;
+        }
+        
+        // Mutate body so the underlying saveExtractedReportToDb has a patient_id
+        body.patient_id = finalPatientId;
+      } else {
+        const { data: patient, error: patientError } = await supabase
+          .from("patients")
+          .select("id")
+          .eq("id", body.patient_id)
+          .eq("profile_id", user.id)
+          .maybeSingle();
+        if (patientError) {
+          return NextResponse.json({ error: patientError.message }, { status: 500 });
+        }
+        if (!patient) {
+          return NextResponse.json({ error: "That patient record is not yours." }, { status: 403 });
+        }
       }
     }
 

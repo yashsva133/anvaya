@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 // Screen 9 ΓÇö "Ask About My Report" chat with suggested questions, typing
 // state, citations, confidence, listen + feedback. Answers via /api/answer.
@@ -87,18 +87,37 @@ export default function AskPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const hasReport = activeReport.entries.length > 0;
+    const savedMsgs = sessionStorage.getItem(`anvaya_chat_${sessionId}`);
+    if (savedMsgs) {
+      try {
+        const parsed = JSON.parse(savedMsgs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMsgs(parsed);
+          return; // Skip setting the default welcome message if we loaded history
+        }
+      } catch (e) {
+        console.error("Failed to parse chat history", e);
+      }
+    }
+
     const reportDate = hi ? activeReport.date.hi : activeReport.date.en;
     setMsgs([
       {
         role: "ai",
         text: hi
-          ? `αñ¿αñ«αñ╕αÑìαññαÑç! αñ«αÑêαñéαñ¿αÑç αñåαñ¬αñòαÑÇ **${reportDate}** αñòαÑÇ αñ░αñ┐αñ¬αÑïαñ░αÑìαñƒ αñ¬αñóαñ╝ αñ▓αÑÇ αñ╣αÑêαÑñ αñåαñ¬ αñàαñ¬αñ¿αÑç αñ¬αñ░αñ┐αñúαñ╛αñ«αÑïαñé αñòαÑç αñ¼αñ╛αñ░αÑç αñ«αÑçαñé αñòαÑüαñ¢ αñ¡αÑÇ αñ¬αÑéαñ¢ αñ╕αñòαññαÑç αñ╣αÑêαñé ΓÇö αñ╕αñ░αñ▓ αñ¡αñ╛αñ╖αñ╛ αñ«αÑçαñé, αñ»αñ╛ αñ¼αÑïαñ▓αñòαñ░αÑñ`
-          : `Hello! I've read your **${reportDate}** report. Ask anything about your results ΓÇö in simple words, or by voice.`,
+          ? `नमस्ते! मैंने आपकी **${reportDate}** की रिपोर्ट पढ़ ली है। आप अपने परिणामों के बारे में कुछ भी पूछ सकते हैं — सरल भाषा में।`
+          : `Hello! I've read your **${reportDate}** report. Ask anything about your results — in simple words.`,
         sources: 0,
       },
     ]);
-  }, [hi, activeReport.entries.length, activeReport.date.en, activeReport.date.hi]);
+  }, [activeReport, hi, sessionId]);
+
+  // Persist messages whenever they change (after the initial load)
+  useEffect(() => {
+    if (msgs.length > 0) {
+      sessionStorage.setItem(`anvaya_chat_${sessionId}`, JSON.stringify(msgs));
+    }
+  }, [msgs, sessionId]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -122,6 +141,7 @@ export default function AskPage() {
           ...(sessionId ? { session: sessionId } : {}),
           ...patientRef(patient),
           report: buildReportContext({ activeReport, reports, patient, lang: s.lang }),
+          history: msgs,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -184,14 +204,7 @@ export default function AskPage() {
       <div className="flex min-h-[calc(100dvh-220px)] flex-col">
         <SectionTitle icon={MessageCircleHeart} title={t("ask.title")} sub={t("ask.sub")} />
 
-        {/* voice entry */}
-        <button
-          onClick={() => setVoiceOpen(true)}
-          className="card-shadow mb-4 flex min-h-14 w-full items-center justify-center gap-2.5 rounded-3xl border-2 border-mint-600 bg-mint-600 px-4 text-base font-extrabold text-white shadow-mint-600/25 transition hover:bg-mint-500 active:scale-[0.99]"
-        >
-          <Mic className="h-5 w-5" />
-          {t("ask.tapMic")} ΓÇö {hi ? "αñ╣αñ┐αñ¿αÑìαñªαÑÇ αñ«αÑçαñé αñ¼αÑïαñ▓αÑçαñé" : "speak in Hindi"}
-        </button>
+
 
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-100 bg-brand-50/60 px-4 py-3">
           <div>

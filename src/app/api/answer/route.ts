@@ -49,6 +49,7 @@ interface AnswerBody {
   session?: unknown;
   report?: unknown;
   patientId?: unknown;
+  history?: unknown;
 }
 
 export async function POST(req: Request) {
@@ -87,6 +88,13 @@ export async function POST(req: Request) {
   // The trust boundary: anything the client claims about its report stops here.
   const report = parseClientReport(body.report);
 
+  const history = Array.isArray(body.history)
+    ? (body.history.filter((msg: any) => typeof msg === "object" && msg !== null && typeof msg.role === "string" && typeof msg.text === "string" && (msg.role === "user" || msg.role === "assistant" || msg.role === "ai")).map((msg: any) => ({
+        role: msg.role === "ai" ? "assistant" : msg.role,
+        text: msg.text,
+      })) as { role: "user" | "assistant"; text: string }[])
+    : undefined;
+
   const answer = await askAgent({
     question,
     lang,
@@ -95,6 +103,7 @@ export async function POST(req: Request) {
     readingLevel: reading,
     sessionId,
     report: report ?? undefined,
+    history,
   });
 
   // Best-effort persistence of the full turn. Never blocks correctness: the
