@@ -107,19 +107,18 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
       const cat = await getLabTestCatalog();
       if (cat) setCatalog(cat);
 
-      const rpts = p?.id ? await getPatientReports(p.id) : [];
-      const localReports = getStoredReportsHistory();
-      const nextReports = rpts.length > 0 ? rpts : localReports;
-      setReports(nextReports);
-      const storedActive = getStoredActiveReport();
-      const dbLatest = rpts[rpts.length - 1];
-      setActiveReport(
-        storedActive.entries.length > 0
-          ? storedActive
-          : dbLatest
-            ? { id: dbLatest.id, date: dbLatest.date, month: dbLatest.month, entries: dbLatest.entries }
-            : getEmptyActiveReport()
-      );
+      // 3. Fetch historical reports from Supabase or local store
+      const rpts = await getPatientReports();
+      if (rpts && rpts.length > 0) {
+        setReports(rpts);
+      } else if (session?.user) {
+        setReports([]);
+      } else {
+        setReports(getStoredReportsHistory());
+      }
+
+      // 4. Sync stored active report
+      setActiveReport(getStoredActiveReport());
     } catch (err) {
       console.warn("Could not load full live report data:", err);
       setActiveReport(getStoredActiveReport());

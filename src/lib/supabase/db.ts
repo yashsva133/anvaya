@@ -208,7 +208,7 @@ export async function getPatientReports(patientId?: string): Promise<Report[]> {
       }
 
       const { data, error } = await query;
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data.map((r: any) => {
           const dateObj = new Date(r.collected_on || Date.now());
           const dateStr = dateObj.toLocaleDateString("en-GB", {

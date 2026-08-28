@@ -258,8 +258,8 @@ function TurnCard({
                 {t("common.sources")}: {turn.citations?.length}
               </summary>
               <ul className="mt-1.5 space-y-1">
-                {turn.citations?.map((c) => (
-                  <li key={`${c.source}-${c.title}`} className="text-[11px] font-semibold text-slate-500">
+                {turn.citations?.map((c, idx) => (
+                  <li key={`${c.source}-${c.title}-${idx}`} className="text-[11px] font-semibold text-slate-500">
                     <a
                       href={c.url}
                       target="_blank"
