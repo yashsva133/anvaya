@@ -98,8 +98,6 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
         setPatient(EMPTY_PATIENT);
       }
 
-      // Fetch only this user's patient row. An unscoped query would leak the
-      // first patient in a shared database to a newly registered user.
       const profileId = user?.id;
       const p = profileId ? await getPatientProfile(profileId) : null;
       if (p) setPatient(p as PatientInfo);
@@ -108,17 +106,31 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
       if (cat) setCatalog(cat);
 
       // 3. Fetch historical reports from Supabase or local store
-      const rpts = await getPatientReports();
+      const rpts = await getPatientReports(profileId || patient.id);
       if (rpts && rpts.length > 0) {
         setReports(rpts);
+        const stored = getStoredActiveReport();
+        if (!stored || stored.entries.length === 0 || stored.id === "no-report") {
+          const newest = rpts[rpts.length - 1];
+          setActiveReport({
+            id: newest.id,
+            date: newest.date,
+            month: newest.month,
+            patient_summary: newest.patient_summary,
+            flagged_issues: newest.flagged_issues,
+            audio_script: newest.audio_script,
+            entries: newest.entries,
+          });
+        } else {
+          setActiveReport(stored);
+        }
       } else if (user) {
         setReports([]);
+        setActiveReport(getStoredActiveReport());
       } else {
         setReports(getStoredReportsHistory());
+        setActiveReport(getStoredActiveReport());
       }
-
-      // 4. Sync stored active report
-      setActiveReport(getStoredActiveReport());
     } catch (err) {
       console.warn("Could not load full live report data:", err);
       setActiveReport(getStoredActiveReport());
@@ -129,8 +141,6 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
   }, [user, profile]);
 
   useEffect(() => {
-    // Namespacing happens before reading local storage. A new account therefore
-    // starts with an empty report list even if another account used this browser.
     setReportStoreScope(user?.id);
     void loadData();
 
@@ -188,8 +198,6 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
         catalog,
         activeReport,
         reports,
-        // These are intentionally empty until a real report exists. The old
-        // static cards were another way fictional data leaked into new users.
         trends: [],
         patterns: [],
         loading,
