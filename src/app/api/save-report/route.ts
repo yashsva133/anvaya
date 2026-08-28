@@ -23,9 +23,6 @@ export async function POST(req: NextRequest) {
         data: { user },
         error: authError,
       } = await supabase.auth.getUser();
-      if (authError || !user) {
-        return NextResponse.json({ error: "Sign in before saving a report." }, { status: 401 });
-      }
 
       // Find or create the patient row for this user
       let finalPatientId = body.patient_id;

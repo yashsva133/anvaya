@@ -89,8 +89,6 @@ const NAV = [
 const MORE = [
   { href: "/doctor", icon: Stethoscope, en: "Patient Lab Summary", hi: "रोगी लैब सारांश" },
   { href: "/compare", icon: GitCompareArrows, en: "Compare Reports", hi: "रिपोर्ट तुलना" },
-  { href: "/how", icon: Workflow, en: "How It Works", hi: "यह कैसे काम करता है" },
-  { href: "/why", icon: LifeBuoy, en: "Why RxAnvaya", hi: "RxAnvaya क्यों" },
   { href: "/settings", icon: Settings, en: "Settings", hi: "सेटिंग्स" },
   { href: "/", icon: ArrowLeft, en: "Back to home", hi: "होम पर वापस" },
 ];
@@ -167,27 +165,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 >
                   <Icon className="h-5 w-5" strokeWidth={active ? 2.6 : 2.2} />
                   {t(item.key)}
-                </Link>
-              );
-            })}
-            {[
-              { href: "/how", icon: Workflow, key: "nav.how" },
-              { href: "/why", icon: LifeBuoy, key: "nav.why" },
-            ].map((x) => {
-              const Icon = x.icon;
-              const active = pathname === x.href;
-              return (
-                <Link
-                  key={x.href}
-                  href={x.href}
-                  className={`flex min-h-11 items-center gap-3 rounded-2xl px-4 text-sm font-bold transition ${
-                    active
-                      ? "bg-brand-100 text-brand-800"
-                      : "text-slate-500 hover:bg-slate-50 hover:text-brand-700"
-                  }`}
-                >
-                  <Icon className="h-[18px] w-[18px]" />
-                  {t(x.key)}
                 </Link>
               );
             })}

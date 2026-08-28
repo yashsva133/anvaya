@@ -96,8 +96,6 @@ export async function getPatientProfile(profileId?: string): Promise<any> {
         if (prof) {
           const nameEn = prof.full_name || prof.email?.split("@")[0] || "User";
           return {
-            // This is an auth profile, not a patients row. Do not reuse the
-            // profile UUID as a foreign-key patient_id when saving a report.
             name: { en: nameEn, hi: nameEn },
             nameShort: nameEn.split(" ")[0] || nameEn,
             age: 0,
@@ -111,7 +109,7 @@ export async function getPatientProfile(profileId?: string): Promise<any> {
     }
   }
 
-  return null; // Return null so the caller uses auth-derived data instead of hardcoded fallback
+  return null;
 }
 
 /**
@@ -184,13 +182,30 @@ export async function getLabTestCatalog(): Promise<Record<string, TestDef>> {
 /**
  * Fetch all reports for patient
  */
-export async function getPatientReports(patientId?: string): Promise<Report[]> {
-  // An omitted patient id means "no reports for this user", not "all reports".
-  if (!patientId) return [];
-
+export async function getPatientReports(patientIdOrProfileId?: string): Promise<Report[]> {
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseBrowserClient();
+      let targetPatientId = patientIdOrProfileId;
+
+      // If no ID passed or ID is a profile_id (auth user id), resolve the patient record ID
+      if (!targetPatientId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) targetPatientId = user.id;
+      }
+
+      if (targetPatientId) {
+        // Find patient row matching profile_id or id
+        const { data: pRow } = await supabase
+          .from("patients")
+          .select("id")
+          .or(`id.eq.${targetPatientId},profile_id.eq.${targetPatientId}`)
+          .maybeSingle();
+        if (pRow) {
+          targetPatientId = pRow.id;
+        }
+      }
+
       let query = supabase
         .from("lab_reports")
         .select(`
@@ -203,8 +218,8 @@ export async function getPatientReports(patientId?: string): Promise<Report[]> {
         `)
         .order("collected_on", { ascending: true });
 
-      if (patientId) {
-        query = query.eq("patient_id", patientId);
+      if (targetPatientId) {
+        query = query.eq("patient_id", targetPatientId);
       }
 
       const { data, error } = await query;
@@ -234,8 +249,6 @@ export async function getPatientReports(patientId?: string): Promise<Report[]> {
             const rawHigh = finiteNumber(tr.printed_ref_high);
             const suppliedRangeValid =
               rawLow === undefined || rawHigh === undefined || rawLow <= rawHigh;
-            // A reversed OCR range is not trusted. Known tests may use their
-            // catalogue default; unknown tests stay without numeric bounds.
             const low = suppliedRangeValid ? rawLow ?? known?.ref.low : known?.ref.low;
             const high = suppliedRangeValid ? rawHigh ?? known?.ref.high : known?.ref.high;
             let status: Status = "normal";
@@ -319,14 +332,11 @@ export async function saveExtractedReportToDb(
 
     console.log("[SUPABASE DB SAVE] Starting save for report collected on:", collectedOn);
 
-    // 1. Use the authenticated user's patient row. Never select an arbitrary
-    // patient and never create a fictional default record for a new account.
     const patientId = payload.patient_id;
     if (!patientId) {
       throw new Error("patient_id is required to save a report for this account.");
     }
 
-    // 2. Insert into lab_reports
     const { data: reportRow, error: reportErr } = await admin
       .from("lab_reports")
       .insert({
@@ -348,7 +358,6 @@ export async function saveExtractedReportToDb(
     const reportId = reportRow.id;
     console.log("[SUPABASE DB SAVE] Created lab_reports row id:", reportId);
 
-    // 3. Map parameters to lab_test_catalog and insert into test_results
     if (payload.chart_data && payload.chart_data.length > 0) {
       const { data: catalogRows, error: catErr } = await admin
         .from("lab_test_catalog")
@@ -430,23 +439,19 @@ export async function deleteReportFromDb(
   try {
     const admin = getSupabaseAdminClient();
 
-    // Delete child test results first if cascade is not enabled
     await admin.from("test_results").delete().eq("report_id", reportId);
     await admin.from("doctor_reviews").delete().eq("report_id", reportId);
     await admin.from("ai_explanations").delete().eq("subject_report_id", reportId);
-
-    // Delete the report record
     const { error } = await admin.from("lab_reports").delete().eq("id", reportId);
 
     if (error) {
-      console.warn("[SUPABASE DB DELETE] Error:", error.message);
+      console.error("[SUPABASE DB DELETE] Error deleting lab_reports row:", error);
       return { success: false, error: error.message };
     }
 
     return { success: true };
-  } catch (err: any) {
-    console.warn("[SUPABASE DB DELETE] Exception:", err);
-    return { success: false, error: err?.message || String(err) };
+  } catch (error: any) {
+    console.error("[SUPABASE DB DELETE FATAL ERROR]:", error);
+    return { success: false, error: error?.message || String(error) };
   }
 }
-

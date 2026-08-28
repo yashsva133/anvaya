@@ -36,8 +36,31 @@ import argparse
 import difflib
 import cv2
 import numpy as np
-import paddle
-from paddleocr import PaddleOCR
+
+HAS_RAPID_OCR = False
+HAS_PADDLE_OCR = False
+HAS_EASY_OCR = False
+
+try:
+    from rapidocr_onnxruntime import RapidOCR
+    HAS_RAPID_OCR = True
+except ImportError:
+    pass
+
+if not HAS_RAPID_OCR:
+    try:
+        import paddle
+        from paddleocr import PaddleOCR
+        HAS_PADDLE_OCR = True
+    except ImportError:
+        pass
+
+if not HAS_RAPID_OCR and not HAS_PADDLE_OCR:
+    try:
+        import easyocr
+        HAS_EASY_OCR = True
+    except ImportError:
+        pass
 
 # Ensure Windows terminal handles UTF-8 / unicode symbols gracefully
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
@@ -245,37 +268,81 @@ def parse_box_coords(box):
 def run_paddle_ocr(img: np.ndarray, lang: str = "en", min_confidence: float = 0.6,
                    use_gpu: bool = False):
     """
-    Runs PaddleOCR on the image and returns:
+    Runs available OCR engine (RapidOCR / PaddleOCR / EasyOCR) on the image and returns:
     1. structured_items: list of dicts with 'text', 'score', 'xmin', 'ymin', 'xmax', 'ymax', 'ymid'
     2. raw_lines: list of (text, confidence) tuples
     """
-    if use_gpu or (paddle.device.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0):
-        device = "gpu:0"
-    else:
-        device = "cpu"
-
-    ocr = PaddleOCR(
-        lang=lang,
-        device=device,
-        use_doc_orientation_classify=False,
-        use_doc_unwarping=False,
-        use_textline_orientation=True,
-    )
-    result = ocr.predict(input=img)
-
     structured_items = []
     raw_lines = []
 
-    for res in result:
-        texts = res.get("rec_texts", [])
-        scores = res.get("rec_scores", [])
-        boxes = res.get("rec_boxes", res.get("dt_polys", []))
+    if HAS_RAPID_OCR:
+        engine = RapidOCR()
+        result, _ = engine(img)
+        if result:
+            for box, text, score in result:
+                score = float(score)
+                text_str = str(text).strip()
+                raw_lines.append((text_str, score))
+                if score >= min_confidence and text_str:
+                    xmin, ymin, xmax, ymax = parse_box_coords(box)
+                    structured_items.append({
+                        "text": text_str,
+                        "score": score,
+                        "xmin": xmin,
+                        "ymin": ymin,
+                        "xmax": xmax,
+                        "ymax": ymax,
+                        "ymid": (ymin + ymax) / 2.0
+                    })
+        return structured_items, raw_lines
 
-        for text, score, box in zip(texts, scores, boxes):
+    if HAS_PADDLE_OCR:
+        import paddle
+        if use_gpu or (paddle.device.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0):
+            device = "gpu:0"
+        else:
+            device = "cpu"
+
+        ocr = PaddleOCR(
+            lang=lang,
+            device=device,
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=True,
+        )
+        result = ocr.predict(input=img)
+
+        for res in result:
+            texts = res.get("rec_texts", [])
+            scores = res.get("rec_scores", [])
+            boxes = res.get("rec_boxes", res.get("dt_polys", []))
+
+            for text, score, box in zip(texts, scores, boxes):
+                score = float(score)
+                text_str = str(text).strip()
+                raw_lines.append((text_str, score))
+
+                if score >= min_confidence and text_str:
+                    xmin, ymin, xmax, ymax = parse_box_coords(box)
+                    structured_items.append({
+                        "text": text_str,
+                        "score": score,
+                        "xmin": xmin,
+                        "ymin": ymin,
+                        "xmax": xmax,
+                        "ymax": ymax,
+                        "ymid": (ymin + ymax) / 2.0
+                    })
+        return structured_items, raw_lines
+
+    if HAS_EASY_OCR:
+        import easyocr
+        reader = easyocr.Reader(['en'], gpu=use_gpu)
+        result = reader.readtext(img)
+        for box, text, score in result:
             score = float(score)
             text_str = str(text).strip()
             raw_lines.append((text_str, score))
-
             if score >= min_confidence and text_str:
                 xmin, ymin, xmax, ymax = parse_box_coords(box)
                 structured_items.append({
@@ -287,8 +354,9 @@ def run_paddle_ocr(img: np.ndarray, lang: str = "en", min_confidence: float = 0.
                     "ymax": ymax,
                     "ymid": (ymin + ymax) / 2.0
                 })
+        return structured_items, raw_lines
 
-    return structured_items, raw_lines
+    raise ImportError("No OCR engine found. Please run: pip install rapidocr-onnxruntime opencv-python")
 
 
 # =================================================================
@@ -359,6 +427,18 @@ def match_whitelist(candidate_name: str):
     key_clean = raw_cleaned.lower()
     if key_clean in ALIAS_LOOKUP:
         return ALIAS_LOOKUP[key_clean]
+
+    # Strip parenthesized abbreviations e.g. "Hemoglobin (Hb)" -> "Hemoglobin", "Packed Cell Volume (PCV)" -> "Packed Cell Volume"
+    no_parens = re.sub(r'\s*\([^)]*\)', '', raw_cleaned).strip().lower()
+    if no_parens in ALIAS_LOOKUP:
+        return ALIAS_LOOKUP[no_parens]
+
+    # Also try just the abbreviation inside parens e.g. "Hemoglobin (Hb)" -> "hb"
+    in_parens_match = re.search(r'\(([^)]+)\)', raw_cleaned)
+    if in_parens_match:
+        inside = in_parens_match.group(1).strip().lower()
+        if inside in ALIAS_LOOKUP:
+            return ALIAS_LOOKUP[inside]
 
     norm = normalize_key(raw_cleaned)
     if norm in ALIAS_LOOKUP:

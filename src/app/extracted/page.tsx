@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { BadgeCheck, ChevronDown, Keyboard, PencilLine, ShieldQuestion } from "lucide-react";
+import { BadgeCheck, Calendar, ChevronDown, Keyboard, PencilLine, ShieldQuestion } from "lucide-react";
 import { FlowShell } from "@/components/shell";
 import { useI18n, pick } from "@/lib/i18n";
 import { Sheet, StatusPill, TestIcon, useToast } from "@/components/core";
@@ -39,6 +39,7 @@ export default function ExtractedPage() {
   const [editEntry, setEditEntry] = useState<ReportEntry | null>(null);
   const [editVal, setEditVal] = useState("");
   const [fixed, setFixed] = useState<Record<string, number>>({});
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
     const id = setTimeout(() => setLoading(false), 800);
@@ -96,6 +97,29 @@ export default function ExtractedPage() {
             <p className="text-base font-extrabold text-mint-900">
               {t("extract.question")}
             </p>
+          </div>
+
+          {/* Report Date Selector */}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-slate-200 bg-white p-4 card-shadow">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
+                <Calendar className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs font-extrabold text-brand-900 uppercase tracking-wider">
+                  {s.lang === "hi" ? "रिपोर्ट संग्रह तिथि" : "Report Collection Date"}
+                </p>
+                <p className="text-xs font-semibold text-slate-500">
+                  {s.lang === "hi" ? "डेटाबेस में सेव करने के लिए तारीख चुनें" : "Select date to record in health database"}
+                </p>
+              </div>
+            </div>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="rounded-2xl border-2 border-slate-200 bg-slate-50 px-3.5 py-2 text-sm font-extrabold text-brand-950 outline-none focus:border-brand-500"
+            />
           </div>
 
           {/* result cards */}
@@ -184,7 +208,7 @@ export default function ExtractedPage() {
                   };
                 });
 
-                const collectedOn = new Date();
+                const collectedOn = selectedDate ? new Date(selectedDate + "T00:00:00") : new Date();
                 const dateEn = collectedOn.toLocaleDateString("en-GB", {
                   day: "2-digit",
                   month: "short",
@@ -212,7 +236,7 @@ export default function ExtractedPage() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                       patient_id: patient.id,
-                      collected_on: new Date().toISOString().split("T")[0],
+                      collected_on: selectedDate || new Date().toISOString().split("T")[0],
                       chart_data: chartData,
                     }),
                   });
@@ -221,13 +245,7 @@ export default function ExtractedPage() {
                     console.warn("[EXTRACTED SAVE] DB Warning:", saveJson.error);
                     toast(saveJson.error ? `DB: ${saveJson.error}` : t("extract.correctToast"), "info");
                   } else {
-                    // Replace the temporary browser id with the database id so
-                    // later refreshes and deletes address the same real report.
                     if (saveJson.reportId && saveJson.reportId !== savedReport.id) {
-                      // The first local save used a temporary id so the
-                      // confirmation screen could render immediately. Replace
-                      // that history row rather than leaving duplicate reports
-                      // when the database returns its canonical id.
                       deleteStoredReport(savedReport.id);
                       setStoredActiveReport({ ...savedReport, id: saveJson.reportId });
                     }
