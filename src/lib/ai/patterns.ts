@@ -135,6 +135,42 @@ const RULES: Rule[] = [
     minFlagged: 1,
     sourceId: "medlineplus-hgb",
   },
+  {
+    id: "pattern-liver",
+    title: {
+      en: "Liver function markers are related",
+      hi: "लिवर से जुड़े परिणाम आपस में जुड़े हैं",
+      bn: "লিভার সম্পর্কিত ফলাফলগুলি পরস্পর যুক্ত",
+    },
+    tests: ["alt", "ast", "alp", "bilirubin", "total_protein", "albumin"],
+    anchors: ["alt", "ast", "bilirubin"],
+    minFlagged: 1,
+    sourceId: "medlineplus-creatinine",
+  },
+  {
+    id: "pattern-thyroid",
+    title: {
+      en: "Thyroid function tests move together",
+      hi: "थायरॉयड के परिणाम आपस में जुड़े हैं",
+      bn: "থাইরয়েড সম্পর্কিত ফলাফলগুলি পরস্পর যুক্ত",
+    },
+    tests: ["tsh", "t3", "t4"],
+    anchors: ["tsh"],
+    minFlagged: 1,
+    sourceId: "medlineplus-creatinine",
+  },
+  {
+    id: "pattern-iron",
+    title: {
+      en: "Iron and blood-cell results are related",
+      hi: "आयरन और रक्त कोशिकाओं के परिणाम जुड़े हैं",
+      bn: "আয়রন এবং রক্তকণিকার ফলাফলগুলি যুক্ত",
+    },
+    tests: ["hemoglobin", "mcv", "iron", "ferritin", "tibc"],
+    anchors: ["hemoglobin", "iron", "ferritin"],
+    minFlagged: 1,
+    sourceId: "medlineplus-hgb",
+  },
 ];
 
 /** Where the value sits relative to its reference range. */

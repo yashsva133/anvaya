@@ -46,11 +46,11 @@ export default function ReportPage() {
   const borderlineEntries = report.entries.filter((e) => reportStatusKnown(e) && e.status === "borderline");
   const normalEntries = report.entries.filter((e) => !reportStatusKnown(e) || e.status === "normal");
 
-  const renderGroup = (title: string, entries: typeof report.entries) => {
+  const renderGroup = (titleKey: string, entries: typeof report.entries) => {
     if (entries.length === 0) return null;
     return (
       <div className="mb-8">
-        <h2 className="text-xl font-bold text-slate-800 mb-4">{title}</h2>
+        <h2 className="text-xl font-bold text-slate-800 mb-4">{t(titleKey as any) || titleKey}</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {entries.map((e, index) => {
             const def = resolveTestDef(e.test, catalog, e);
@@ -136,11 +136,11 @@ export default function ReportPage() {
         <OverviewSummaryCard reportId={id} />
       </section>
 
-      <section className="mt-8">
-        {renderGroup(s.lang === "hi" ? "गंभीर और सीमा से बाहर" : "Critical & Out of Range", criticalEntries)}
-        {renderGroup(s.lang === "hi" ? "सीमा के पास (बॉर्डरलाइन)" : "Near Limit (Borderline)", borderlineEntries)}
-        {renderGroup(s.lang === "hi" ? "सामान्य" : "Normal", normalEntries)}
-      </section>
+      <div className="mt-8">
+        {renderGroup("dash.mattersMost", criticalEntries)}
+        {renderGroup("dash.closeToLimit", borderlineEntries)}
+        {renderGroup("dash.normal", normalEntries)}
+      </div>
     </AppShell>
   );
 }

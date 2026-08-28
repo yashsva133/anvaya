@@ -141,7 +141,7 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-brand-950 md:text-4xl">
-            {t("dash.title")}
+            {hi ? "स्वास्थ्य अवलोकन" : "Health Overview"}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-bold text-slate-500">
             <span className="flex items-center gap-1.5">
@@ -201,9 +201,15 @@ export default function DashboardPage() {
           from the same numbers when no model is reachable. */}
       <OverviewSummaryCard />
 
-      {/* ---------------------------- What matters most ---------------------------- */}
       <section className="mt-10">
-        <SectionTitle icon={Sparkles} title={attentionEntries.length > 0 ? (hi ? `${attentionEntries.length} ध्यान देने योग्य` : `${attentionEntries.length} Needs attention`) : t("dash.mattersMost")} sub={t("dash.mattersSub")} />
+        {(() => {
+          const criticalEntries = attentionEntries.filter(e => e.status === 'high' || e.status === 'low' || e.status === 'critical');
+          const sectionTitle = criticalEntries.length > 0
+            ? (hi ? `${criticalEntries.length} गंभीर & सीमा के बाहर` : `${criticalEntries.length} Critical & Out of Range`)
+            : t("dash.mattersMost");
+          const sectionSub = hi ? "सामान्य सीमा से बाहर के परिणाम — डॉक्टर के साथ चर्चा करें।" : "Results outside the usual range — discuss with your doctor.";
+          return <SectionTitle icon={Sparkles} title={sectionTitle} sub={sectionSub} />;
+        })()}
         {priorityIds.length > 0 ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {priorityIds.map((id, i) => {
@@ -223,41 +229,40 @@ export default function DashboardPage() {
 
       {/* --------------------------- Borderline section --------------------------- */}
       <section className="mt-10">
-        <SectionTitle icon={BadgeInfo} title={t("dash.closeToLimit")} sub={t("dash.closeNote")} />
-        <div className="grid gap-4 md:grid-cols-2">
-          {fallbackBorderline.slice(0, 2).map((id) => {
-            const e = entries.find((x) => x.test === id);
-            if (!e) return null;
-            const def = resolveTestDef(id, catalog, e);
-            return (
-              <div
-                key={id}
-                className="card-shadow flex items-center gap-4 rounded-3xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-white p-5"
-              >
-                <TestIcon testId={id} size={54} />
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-lg font-extrabold text-slate-800">
-                      {pick(def.name, s.lang)}
+        <SectionTitle icon={BadgeInfo} title={hi ? "सीमा के नज़दीक (Borderline)" : "Near Limit (Borderline)"} sub={hi ? "ये परिणाम सीमा के पास हैं — नज़र रखें।" : "These results are close to the limit — keep an eye on them."} />
+        {fallbackBorderline.length === 0 ? (
+          <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white p-5 text-sm font-semibold text-slate-500">
+            {hi ? "इस रिपोर्ट में कोई borderline परिणाम नहीं है।" : "No borderline results in this report."}
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {fallbackBorderline.map((id) => {
+              const e = entries.find((x) => x.test === id);
+              if (!e) return null;
+              const def = resolveTestDef(id, catalog, e);
+              return (
+                <div key={id} className="card-shadow flex items-center gap-4 rounded-3xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-white p-5">
+                  <Link href={`/trends?test=${id}`} className="shrink-0 transition-transform hover:scale-110" title={hi ? "रुझान देखें" : "View Trends"}>
+                    <TestIcon testId={id} size={54} />
+                  </Link>
+                  <Link href={`/test/${id}`} className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-lg font-extrabold text-slate-800">{pick(def.name, s.lang)}</p>
+                      <StatusPill status="borderline" size="sm" />
+                    </div>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">
+                      {hi ? "यह परिणाम पसंदीदा सीमा से थोड़ा बाहर है।" : "Slightly outside the preferred range."}
                     </p>
-                    <StatusPill status="borderline" size="sm" />
+                  </Link>
+                  <div className="text-right shrink-0">
+                    <p className="tabular text-3xl font-extrabold text-amber-700">{fmtValue(e.value)}</p>
+                    <p className="text-[11px] font-bold text-slate-400">{def.unit}</p>
                   </div>
-                  <p className="mt-1 text-sm font-semibold text-slate-500">
-                    {hi
-                      ? "यह परिणाम पसंदीदा सीमा से थोड़ा ऊपर है, पर बहुत अधिक नहीं।"
-                      : "This result is slightly outside the preferred range."}
-                  </p>
                 </div>
-                <div className="text-right">
-                  <p className="tabular text-3xl font-extrabold text-amber-700">
-                    {fmtValue(e.value)}
-                  </p>
-                  <p className="text-[11px] font-bold text-slate-400">{def.unit}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* ------------------------------- All results ------------------------------- */}
@@ -384,34 +389,37 @@ function ResultCard({ entry, catalog }: { entry: ReportEntry; catalog: any }) {
   const name = s.mode === "advanced" ? pick(def.name, s.lang) : pick(def.simple, s.lang);
 
   return (
-    <Link
-      href={`/test/${entry.test}`}
-      className={`card-shadow group rounded-3xl border bg-white p-4 transition hover:-translate-y-0.5 hover:border-brand-300 ${c.border}`}
-    >
+    <div className={`card-shadow group rounded-3xl border bg-white p-4 transition hover:-translate-y-0.5 hover:border-brand-300 ${c.border}`}>
       <div className="flex items-center gap-3.5">
-        <TestIcon testId={entry.test} size={simple ? 56 : 44} />
-        <div className="min-w-0 flex-1">
+        <Link href={`/trends?test=${entry.test}`} className="shrink-0 transition-transform hover:scale-110" title={s.lang === "hi" ? "रुझान देखें" : "View Trends"}>
+          <TestIcon testId={entry.test} size={simple ? 56 : 44} />
+        </Link>
+        <Link href={`/test/${entry.test}`} className="min-w-0 flex-1">
           <p className={`truncate font-extrabold text-slate-800 ${simple ? "text-lg" : "text-[15px]"}`}>
             {name}
           </p>
           {!simple && (
             <p className="text-[11px] font-bold text-slate-400">{def.ref.text}</p>
           )}
+        </Link>
+        <Link href={`/test/${entry.test}`} className="shrink-0">
+          <ChevronRight className="h-5 w-5 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-600" />
+        </Link>
+      </div>
+      <Link href={`/test/${entry.test}`}>
+        <div className="mt-3 flex items-end justify-between gap-2">
+          <p className={`tabular font-extrabold text-brand-900 ${simple ? "text-3xl" : "text-2xl"}`}>
+            {fmtValue(entry.value)}
+            <span className="ml-1 text-xs font-bold text-slate-400">{def.unit}</span>
+          </p>
+          <StatusPill status={entry.status} known={reportStatusKnown(entry)} size="sm" />
         </div>
-        <ChevronRight className="h-5 w-5 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-600" />
-      </div>
-      <div className="mt-3 flex items-end justify-between gap-2">
-        <p className={`tabular font-extrabold text-brand-900 ${simple ? "text-3xl" : "text-2xl"}`}>
-          {fmtValue(entry.value)}
-          <span className="ml-1 text-xs font-bold text-slate-400">{def.unit}</span>
-        </p>
-        <StatusPill status={entry.status} known={reportStatusKnown(entry)} size="sm" />
-      </div>
-      {simple && (
-        <p className="mt-2 text-sm font-semibold text-slate-500">
-          {pick({ en: def.what.vs_en, hi: def.what.vs_hi }, s.lang)}
-        </p>
-      )}
-    </Link>
+        {simple && (
+          <p className="mt-2 text-sm font-semibold text-slate-500">
+            {pick({ en: def.what.vs_en, hi: def.what.vs_hi }, s.lang)}
+          </p>
+        )}
+      </Link>
+    </div>
   );
 }

@@ -178,8 +178,8 @@ export function OverviewSummaryCard({ reportId }: { reportId?: string }) {
           ? t("dash.someAttention")
           : t("dash.allFine"));
 
-  const counts = data?.counts ?? local;
-  const unknownCount = counts.unknown ?? local.unknown;
+  const counts = local;
+  const unknownCount = counts.unknown;
 
   const speech =
     data?.speech ||
