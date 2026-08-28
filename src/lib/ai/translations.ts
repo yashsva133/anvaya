@@ -43,6 +43,32 @@ export interface SafetyStrings {
 /** Languages whose safety copy was reviewed with the clinical content. */
 export const REVIEWED_LANGUAGES: readonly AnswerLang[] = ["en", "hi"];
 
+/**
+ * Canonical model closing line. The English version is masked during output
+ * translation and replaced with the reviewed/localized equivalent below. That
+ * makes a translation provider dropping a disclaimer a hard failure instead
+ * of silently weakening the safety boundary.
+ */
+export const STANDARD_SAFETY_FOOTER =
+  "This is not a diagnosis. Please discuss these results with your doctor.";
+
+const SAFETY_FOOTERS: Record<AnswerLang, string> = {
+  en: STANDARD_SAFETY_FOOTER,
+  hi: "यह निदान नहीं है। कृपया इन परिणामों पर अपने डॉक्टर से चर्चा करें।",
+  bn: "এটি রোগ নির্ণয় নয়। অনুগ্রহ করে এই ফলাফলগুলি আপনার চিকিৎসকের সঙ্গে আলোচনা করুন।",
+  ta: "இது நோயறிதல் அல்ல. தயவுசெய்து இந்த முடிவுகளை உங்கள் மருத்துவருடன் கலந்துரையாடுங்கள்.",
+  te: "ఇది వ్యాధి నిర్ధారణ కాదు. దయచేసి ఈ ఫలితాలను మీ డాక్టర్‌తో చర్చించండి.",
+  mr: "हे निदान नाही. कृपया या निकालांबद्दल तुमच्या डॉक्टरांशी चर्चा करा.",
+  gu: "આ નિદાન નથી. કૃપા કરીને આ પરિણામો વિશે તમારા ડોક્ટર સાથે ચર્ચા કરો.",
+  kn: "ಇದು ರೋಗನಿರ್ಣಯವಲ್ಲ. ದಯವಿಟ್ಟು ಈ ಫಲಿತಾಂಶಗಳನ್ನು ನಿಮ್ಮ ವೈದ್ಯರೊಂದಿಗೆ ಚರ್ಚಿಸಿ.",
+  ml: "ഇത് രോഗനിർണയമല്ല. ദയവായി ഈ ഫലങ്ങൾ നിങ്ങളുടെ ഡോക്ടറുമായി ചർച്ച ചെയ്യുക.",
+  pa: "ਇਹ ਨਿਦਾਨ ਨਹੀਂ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਇਨ੍ਹਾਂ ਨਤੀਜਿਆਂ ਬਾਰੇ ਆਪਣੇ ਡਾਕਟਰ ਨਾਲ ਗੱਲ ਕਰੋ।",
+  ur: "یہ تشخیص نہیں ہے۔ براہ کرم ان نتائج پر اپنے ڈاکٹر سے بات کریں۔",
+  or: "ଏହା ରୋଗ ନିର୍ଣ୍ଣୟ ନୁହେଁ। ଦୟାକରି ଏହି ଫଳାଫଳଗୁଡ଼ିକ ବିଷୟରେ ଆପଣଙ୍କ ଡାକ୍ତରଙ୍କ ସହ ଆଲୋଚନା କରନ୍ତୁ।",
+  as: "এইটো ৰোগ নিৰ্ণয় নহয়। অনুগ্ৰহ কৰি এই ফলাফলবোৰ আপোনাৰ চিকিৎসকৰ সৈতে আলোচনা কৰক।",
+  ne: "यो रोग पहिचान होइन। कृपया यी नतिजाहरूबारे आफ्नो डाक्टरसँग छलफल गर्नुहोस्।",
+};
+
 const STRINGS: Record<AnswerLang, SafetyStrings> = {
   en: {
     redirect:
@@ -147,6 +173,11 @@ export function safeRedirect(lang: AnswerLang): string {
 
 export function emergencyText(lang: AnswerLang): string {
   return STRINGS[lang].emergency;
+}
+
+/** Localized equivalent of the canonical model safety closing line. */
+export function safetyFooter(lang: AnswerLang): string {
+  return SAFETY_FOOTERS[lang];
 }
 
 // ---------------------------------------------------------------------------

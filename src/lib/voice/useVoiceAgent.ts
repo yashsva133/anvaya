@@ -83,7 +83,7 @@ export interface VoiceTurn {
   languageNote?: string | null;
   sources?: number;
   confidence?: "high" | "moderate";
-  engine?: "medgemma" | "rules" | "fallback";
+  engine?: "medgemma" | "mock" | "rules" | "fallback";
   model?: string | null;
   citations?: VoiceCitation[];
   /** True once this answer has been played aloud. */
@@ -98,7 +98,7 @@ interface AnswerResponse {
   answer: string;
   sources: number;
   confidence: "high" | "moderate";
-  engine?: "medgemma" | "rules" | "fallback";
+  engine?: "medgemma" | "mock" | "rules" | "fallback";
   model?: string | null;
   answer_lang?: AnswerLang;
   language_note?: string | null;

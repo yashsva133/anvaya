@@ -3,15 +3,15 @@
 What was built, how it wires into the existing frontend and database, and what
 is still required to run it against a real model.
 
-**Scope:** the AI backend only. PaddleOCR / report ingestion is untouched, and
-`src/app/api/process-report/route.ts` was not modified.
+**Scope:** the AI backend, the report-aware dashboard callers, and the explicit
+structured-upload boundary. Image/PDF ingestion still uses PaddleOCR, while
+`src/lib/reportCsv.ts` parses an explicitly uploaded CSV before OCR is invoked.
 
-**Since this was written:** a multilingual voice agent was built on top of this
-pipeline — 14 answer languages, browser speech in/out, and the same
-`/api/answer` endpoint. See `AI_VOICE_AGENT_RUNBOOK.md`. The `/api/answer`
-contract below is unchanged; the new fields (`answerLang`, `channel` in,
-`answer_lang`, `language_note`, `channel` out) are additive, and the prompt
-version is now `2026-08-27.2`.
+**Current release:** the multilingual bridge and empty-account behavior are part
+of the same pipeline. See `AI_VOICE_AGENT_RUNBOOK.md` for browser speech. The
+`/api/answer` contract remains additive; the new fields (`answerLang`, `channel`
+in, `answer_lang`, `translation`, `language_note`, `channel` out) do not expose
+server credentials. The prompt version is `2026-08-28.3`.
 
 ---
 
@@ -27,14 +27,19 @@ src/lib/ai/
                   user's own report via clientReport.ts
   rag.ts          retrieval over the 5 seeded guideline sources; falls back to
                   the user's abnormal-result topics on generic questions
-  prompts.ts      versioned system prompt + sha256
+  prompts.ts      versioned English-boundary system prompt + sha256
   guardrails.ts   input screening, output screening, trust score, renderer normalisation
+  conversation.ts localized greetings, capability replies, no-report and out-of-scope copy
+  languages.ts    supported answer languages, script detection and request parsing
+  translate.ts    server-only translation adapter + protected-token round trips
   providers.ts    ollama / openai-compatible / vertex clients (no SDK, just fetch)
   mock.ts         provider for pipeline testing without a GPU
-  rules.ts        the prototype's rule answers, extracted verbatim — now the fallback
-  agent.ts        the pipeline: anonymise -> retrieve -> prompt -> generate -> guard
+  rules.ts        the prototype's static rules, not a source of patient values
+  agent.ts        the pipeline: classify -> anonymise -> retrieve -> English model -> guard -> translate
   persistence.ts  writes voice_sessions / qa_messages / ai_generations /
                   ai_explanations / explanation_citations / answer_feedback
+
+src/lib/reportCsv.ts explicit CSV parser; never calls OCR and never trusts a CSV status column
 
 src/app/api/
   answer/route.ts     rewired to the agent; response shape UNCHANGED
@@ -51,8 +56,9 @@ scripts/fake-ollama.mjs  a stand-in `ollama serve` speaking /api/chat +
                       machine with no GPU
 ```
 
-Nothing else changed. `src/components/*`, `src/lib/data.ts` and the whole `db/`
-directory are as they were.
+The existing dashboard, report store and auth boundaries now consume the
+empty/report-scoped state and expose engine provenance; database migrations are
+unchanged. Browser components still never receive provider credentials.
 
 ---
 
@@ -71,13 +77,17 @@ else in the response (`engine`, `model`, `personalized`, `citations`,
 is additive and older callers ignore it.
 
 The request body gained **optional** fields, so an old caller sending only
-`{ q, lang }` still works and is answered about the seeded demo report:
+`{ q, lang }` still works. It receives a conversational/no-report response when
+it sends no report; seeded demo values are never an implicit fallback. A sample
+report is available only from the explicit demo action:
 
 ```ts
 {
   q: string;              // required
-  lang?: "en" | "hi" | "bn";
-  reading?: "simple" | "advanced";   // the settings reading mode
+  lang?: "en" | "hi" | "bn";       // UI language
+  answerLang?: AnswerLang;            // requested output language, e.g. "ta"
+  channel?: "text" | "voice";
+  reading?: "simple" | "advanced" | "very"; // the settings reading mode
   session?: string;       // stable per-browser id (multi-turn memory)
   report?: {              // PERSONALIZATION — see §2.5
     reportId?: string;
@@ -94,11 +104,12 @@ The request body gained **optional** fields, so an old caller sending only
 
 ## 2.5 Personalization — whose report the model explains
 
-Before this, the pipeline could only explain the fictional demo patient in
-`src/lib/data.ts`. Now the chat UI sends the report the user is actually
-looking at — their upload (extracted by `/api/process-report` and held in
-`ReportDataContext`), or the demo fallback — and answers are about *their*
-values, trends and patterns.
+The chat UI sends the report the user is actually looking at — an upload or
+scan held in `ReportDataContext` — and answers are about *their* values, trends
+and patterns. A new account sends an empty report. The fictional report in
+`src/lib/data.ts` is reachable only through the explicit “Try sample report”
+demo action; it is never a fallback for OCR failure, a missing account report,
+or an ordinary chat turn.
 
 Flow:
 
@@ -127,8 +138,8 @@ The trust boundary rules (`clientReport.ts`), in order of importance:
 
 The client deliberately sends values only — not even its own status strings —
 because the server re-derives them. `personalized: true` in the response says
-the user's report was used; `false` means the demo data answered (no valid
-`report` in the request).
+the user's report was used; `false` means the answer used an empty report
+context. No valid `report` means no patient values, not demo data.
 
 Retrieval is personalized too: a question that names no test ("explain my
 report") retrieves nothing on its own, so the agent seeds the topic match with
@@ -172,9 +183,11 @@ Three properties are worth knowing before changing it:
    model error, a timeout, or a generation the guardrails reject, the response
    is the deterministic summary composed from the same payload — returned with
    `engine: "rules"` and a `fallback_reason`, and the card's footer says the
-   text came from the report data rather than from MedGemma. The chat can show
-   a "please ask your doctor" redirect in place of an unsafe answer; an opening
-   summary cannot, so it falls back instead of refusing.
+   text came from the report data rather than from MedGemma. `AI_PROVIDER=mock`
+   is a separate `engine: "mock"` provenance when its generation is returned;
+   it is not marked live. The chat can show a "please ask your doctor" redirect
+   in place of an unsafe answer; an opening summary cannot, so it falls back
+   instead of refusing.
 3. **It regenerates on the inputs that change it** — report, language, reading
    level — and only on those: an object-identity change from a context
    re-render must not spend a model call.
@@ -469,8 +482,8 @@ and everything downstream stay identical.
 
 | Check | Command | Result |
 |---|---|---|
-| Types (whole repo) | `npx tsc --noEmit` | clean (including 9 pre-existing errors in extracted/upload/db.ts, fixed — see §9) |
-| Pipeline, 74 assertions | compiled `src/lib/ai/*` and ran against the real modules | 74 passed, 0 failed |
+| Types (whole repo) | `npm run typecheck` | clean |
+| Pipeline tests | `npm test` through `scripts/test-loader.mjs` | 16 passed, 0 failed, including multilingual safety, CSV parsing, protected-token/footer loss, translation failure, refusal fallback, no-report isolation and mock provenance |
 | Ollama protocol path | `scripts/fake-ollama.mjs` speaking `/api/chat` + `/api/tags` | system prompt + payload transmitted, tokens parsed, `engine=medgemma` |
 | **Personalization over HTTP** | `curl -X POST /api/answer` with `report.results` hemoglobin 9.1 | answer quotes **9.1 g/dL** (not the demo 10.5), `personalized: true`, 3 citations |
 | Personalized RAG | `q="explain my report"` with hba1c 7.5 + hemoglobin 9.1 | 3 sources retrieved from the user's abnormal-result topics |
@@ -521,11 +534,11 @@ project can install and build:
 omitted the display-only `icon/tint/ink/conf` fields). All three were fixed so
 `tsc --noEmit` and `next build` pass; no behaviour changed.
 
-**c. `next build` cannot complete in a sandbox without outbound access to
-`fonts.googleapis.com`.** `src/app/layout.tsx` uses `next/font/google`, which
-fetches at build time. `next dev` degrades to a fallback font and serves pages
-fine; `next build` treats it as fatal. This is environmental, not a code defect —
-it will build normally on a machine with internet access.
+**c. The current validation environment:** `next build` now completes
+successfully, including route compilation and static page generation. A live
+browser still needs to exercise microphone capture, speech synthesis and browser
+speech recognition; those device APIs are not covered by the headless test
+suite.
 
 ---
 
@@ -630,3 +643,73 @@ lab_ocr_paddleocr.py  --csv-->  POST /api/reports (backend person)
 to read `v_patient_latest_results` is the whole integration — nothing downstream
 changes, because the payload shape is already the de-identified form the model
 consumes.
+
+### 11.5 Explicit CSV uploads and the empty-account path
+
+`POST /api/process-report` now checks an explicitly uploaded `.csv` (or a
+`text/csv` file with the canonical header) immediately after reading the bytes.
+`src/lib/reportCsv.ts` accepts the canonical columns
+`report_date,test_name,value,unit,ref_low,ref_high,ref_text`, handles quoted
+commas and CRLF, copies the real value/unit/range, and derives only a status
+that follows from a usable supplied bound. A CSV `status` column is ignored.
+A malformed explicit CSV returns HTTP 422; it is never sent to OCR and never
+becomes the sample report. Image/PDF files continue to the PaddleOCR path, and
+OCR failure returns HTTP 422 rather than fictional values.
+
+The upload/scan confirmation page writes the extracted values to the scoped
+browser report store and then attempts the database save. The Overview reads
+that same active report after refresh. On a new account, the store and Supabase
+provider return an empty report/history; Overview, Trends, Compare and Insights
+show a no-data/upload-or-scan state. `getDefaultActiveReport()` and the sample
+button are demo-only opt-in actions.
+
+---
+
+## 12. Multilingual English-boundary pipeline and failure modes
+
+For a requested language `L` other than English, `/api/answer` follows:
+
+```
+question in L → server Translation API → English classification/model boundary
+             → MedGemma (or mock) → English guardrails
+             → protected-token server translation → answer in L
+```
+
+`GOOGLE_TRANSLATE_API_KEY` is read only by `src/lib/ai/env.ts` and used only in
+`src/lib/ai/translate.ts`; the browser receives no key. Set
+`TRANSLATION_PROVIDER=google` when using the bridge. If no translation provider
+is configured, the deterministic report fallback still uses the requested
+language's phrasebook rather than silently returning seeded data or an English
+lab template.
+
+Before output translation, the server masks every report value, unit, test name,
+reference range and the exact English safety footer. Missing markers, an
+English/script mismatch, a dropped footer, or a newly introduced number rejects
+the translation. The output then restores the original tokens and swaps the
+canonical footer for the reviewed localized equivalent. A model refusal is
+handled even more strictly: it bypasses translation and returns the curated
+localized safe redirect, preserving `refusal_detected` and its safety flags.
+
+Failure behavior is intentional:
+
+| Failure | Patient-facing result |
+| --- | --- |
+| Input translation unavailable | localized safe translation-failure or report fallback; no model call with untranslated context |
+| Output translation unavailable/invalid | localized, report-grounded deterministic summary; never a translated refusal or unrelated sample |
+| Model refuses or violates diagnosis/dosing guardrails | localized safe redirect; refusal flag retained |
+| Ordinary “hi”, “how are you?”, “can you help me” | natural localized conversation copy; no report payload/context |
+| No report and report question | localized no-report upload/scan guidance; no patient values |
+| `AI_PROVIDER=mock` | engine `mock` only when its generated answer is returned; `mode` remains `demo`, not `live` |
+| `AI_PROVIDER=none` / missing provider | engine `rules`/`fallback`; model metadata is `null` |
+
+Run the focused checks with:
+
+```bash
+npm test       # 16 tests: language requests, CSV, token/footer loss, refusals, fallbacks
+npm run typecheck
+```
+
+The authoritative model/pipeline provenance is in `engine`, `model`,
+`translation`, and `safety_flags`. In particular, `/api/answer` does not report
+`env.ai.model` for a rules/conversation/fallback answer unless a mock or real
+model generation actually occurred.

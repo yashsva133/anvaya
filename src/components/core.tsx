@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 // RxAnvaya — shared UI atoms: brand, status system, voice, charts, overlays.
 
@@ -67,9 +67,7 @@ import {
 } from "recharts";
 import { useI18n, pick } from "@/lib/i18n";
 import {
-  TESTS,
-  TREND_DATES,
-  trendSeries,
+  resolveTestDef,
   type Status,
   type TestDef,
 } from "@/lib/data";
@@ -189,13 +187,24 @@ export function statusClasses(s: Status): {
 export function StatusPill({
   status,
   size = "md",
+  known = true,
 }: {
   status: Status;
   size?: "sm" | "md" | "lg";
+  /** False when no trusted report range was available for this result. */
+  known?: boolean;
 }) {
   const { t } = useI18n();
-  const Icon = STATUS_ICONS[status];
-  const c = statusClasses(status);
+  const Icon = known ? STATUS_ICONS[status] : Info;
+  const c = known
+    ? statusClasses(status)
+    : {
+        pill: "bg-slate-50 text-slate-600 border-slate-200",
+        dot: "bg-slate-400",
+        text: "text-slate-600",
+        bg: "bg-slate-50",
+        border: "border-slate-200",
+      };
   const sizes =
     size === "lg"
       ? "px-4 py-2 text-base gap-2"
@@ -207,7 +216,7 @@ export function StatusPill({
       className={`inline-flex items-center rounded-full border font-bold ${c.pill} ${sizes}`}
     >
       <Icon className={size === "lg" ? "h-5 w-5" : "h-4 w-4"} strokeWidth={2.5} />
-      {t(`status.${status}`)}
+      {known ? t(`status.${status}`) : t("status.unassessed")}
     </span>
   );
 }
@@ -253,8 +262,7 @@ export function TestIcon({
   size?: number;
   className?: string;
 }) {
-  const def = TESTS[testId];
-  if (!def) return null;
+  const def = resolveTestDef(testId);
   const Icon = ICONS[def.icon] ?? Activity;
   return (
     <span
@@ -408,6 +416,14 @@ export function ConfBar({
 export function RangeBar({ test, value }: { test: TestDef; value: number }) {
   const { t } = useI18n();
   const { low, high } = test.ref;
+  if (low == null && high == null) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+        {t("test.rangeUnavailable")}
+      </div>
+    );
+  }
+
   let loZone = low;
   let hiZone = high;
   let min: number;
@@ -417,15 +433,19 @@ export function RangeBar({ test, value }: { test: TestDef; value: number }) {
     min = Math.min(low - span * 0.7, value);
     max = Math.max(high + span * 0.7, value);
   } else if (high != null) {
-    loZone = Math.max(0, high * 0.55);
+    // A one-sided range means "below high"; do not invent a lower bound.
+    loZone = undefined;
     hiZone = high;
     min = 0;
     max = Math.max(high * 1.7, value * 1.15);
   } else {
-    loZone = low ?? 0;
-    hiZone = (low ?? 1) * 1.45;
-    min = Math.min((low ?? 1) * 0.35, value * 0.5);
-    max = Math.max((low ?? 1) * 1.8, value * 1.2);
+    // A one-sided range means "above low"; do not invent an upper bound.
+    const lower = low;
+    if (lower == null) return null;
+    loZone = lower;
+    hiZone = undefined;
+    min = Math.min(lower * 0.35, value * 0.5);
+    max = Math.max(lower * 1.8, value * 1.2);
   }
   const pct = (x: number) =>
     `${Math.max(0, Math.min(100, ((x - min) / (max - min)) * 100)).toFixed(1)}%`;
@@ -496,12 +516,13 @@ export interface TrendPoint {
   value: number;
 }
 
-export function trendPoints(testId: string): TrendPoint[] {
-  const vals = trendSeries(testId);
-  return vals.map((v, i) => ({
-    label: TREND_DATES[i]?.en ?? String(i),
-    value: v,
-  }));
+/**
+ * Kept as a compatibility helper for older callers, but it intentionally has
+ * no seeded fallback. Report-aware screens must pass their real points to
+ * TrendChart.
+ */
+export function trendPoints(_testId: string): TrendPoint[] {
+  return [];
 }
 
 const chartTip = (props: {
@@ -513,7 +534,7 @@ const chartTip = (props: {
   if (active !== true || !payload?.length) return null;
   return (
     <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-center shadow-lg">
-      <p className="text-[11px] font-bold text-slate-500">{String(label ?? "")} 2026</p>
+      <p className="text-[11px] font-bold text-slate-500">{String(label ?? "")}</p>
       <p className="tabular text-lg font-extrabold text-brand-800">
         {String(payload[0].value ?? "")}
       </p>
@@ -525,21 +546,25 @@ export function TrendChart({
   testId,
   height = 260,
   color = "#1d4a75",
+  data = [],
 }: {
   testId: string;
   height?: number;
   color?: string;
+  /** Real report points supplied by a report-aware screen. */
+  data?: TrendPoint[];
 }) {
-  const test = TESTS[testId];
-  const data = trendPoints(testId);
+  const test = resolveTestDef(testId);
   const { low, high } = test.ref;
   const values = data.map((d) => d.value);
-  let lo: number | undefined = low;
-  let hi: number | undefined = high;
-  if (lo == null && hi != null) lo = Math.max(0, hi * 0.55);
-  if (hi == null && lo != null) hi = lo * 1.45;
-  const minV = Math.min(...values, lo ?? Infinity);
-  const maxV = Math.max(...values, hi ?? -Infinity);
+  // Do not invent the missing side of a one-sided laboratory range. A
+  // ReferenceArea is drawn only when the report/catalogue supplies both bounds.
+  const lo: number | undefined = low;
+  const hi: number | undefined = high;
+  const dataMin = values.length > 0 ? Math.min(...values) : 0;
+  const dataMax = values.length > 0 ? Math.max(...values) : 1;
+  const minV = Math.min(dataMin, lo ?? dataMin);
+  const maxV = Math.max(dataMax, hi ?? dataMax);
   const pad = (maxV - minV) * 0.35 || 1;
 
   return (

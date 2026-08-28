@@ -30,7 +30,7 @@ import {
   TrendChart,
 } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
-import { SOURCES, TESTS, fmtValue, type ReportEntry } from "@/lib/data";
+import { SOURCES, fmtValue, reportStatusKnown, resolveTestDef, type ReportEntry } from "@/lib/data";
 import { useReportData } from "@/context/ReportDataContext";
 
 const LEVELS = [
@@ -42,23 +42,34 @@ export default function TestDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { t, s, set } = useI18n();
-  const { activeReport, catalog } = useReportData();
+  const { activeReport, catalog, reports, loading } = useReportData();
 
   const testId = params.id?.toLowerCase() || "";
-  const def = catalog[testId] || TESTS[testId];
-  if (!def) {
-    router.replace("/dashboard");
-    return null;
+  const activeEntry = activeReport?.entries.find((e) => e.test.toLowerCase() === testId);
+  // Unknown tests are still real report data. Use only their recorded label,
+  // unit and printed range; never borrow another test's clinical definition.
+  const def = resolveTestDef(testId, catalog, activeEntry);
+  const hi = s.lang === "hi";
+
+  if (loading || !activeEntry) {
+    return (
+      <AppShell>
+        <section className="card-shadow mt-8 rounded-[2rem] border-2 border-dashed border-brand-200 bg-white p-8 text-center">
+          <h1 className="text-2xl font-extrabold text-brand-950">
+            {loading ? (hi ? "रिपोर्ट लोड हो रही है…" : "Loading your report…") : (hi ? "इस जाँच का परिणाम अभी नहीं है" : "No saved result for this test yet")}
+          </h1>
+          <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-relaxed text-slate-500">
+            {hi ? "अपनी लैब रिपोर्ट अपलोड या स्कैन करें। यहाँ केवल आपकी saved रिपोर्ट का परिणाम दिखता है।" : "Upload or scan your laboratory report. This page shows only a result from your saved report."}
+          </p>
+          <Link href="/upload" className="mt-5 inline-flex min-h-12 items-center rounded-2xl bg-brand-700 px-6 text-sm font-extrabold text-white hover:bg-brand-600">
+            {hi ? "रिपोर्ट अपलोड करें" : "Upload report"}
+          </Link>
+        </section>
+      </AppShell>
+    );
   }
 
-  const activeEntry = activeReport?.entries.find((e) => e.test.toLowerCase() === testId);
-  const entry: ReportEntry = activeEntry || {
-    test: testId,
-    value: def.ref.low ? (def.ref.low + (def.ref.high ? (def.ref.high - def.ref.low) / 2 : 0)) : 10,
-    status: "normal",
-  };
-
-  const hi = s.lang === "hi";
+  const entry: ReportEntry = activeEntry;
   const level = s.mode;
   const whatText =
     level === "advanced" ? (def.what.med || (hi ? def.what.hi : def.what.en)) : hi ? def.what.vs_hi : def.what.vs_en;
@@ -111,7 +122,7 @@ export default function TestDetailPage() {
                 {fmtValue(entry.value)}
                 <span className="ml-1.5 text-lg font-bold text-slate-400">{def.unit}</span>
               </p>
-              <StatusPill status={entry.status} size="lg" />
+              <StatusPill status={entry.status} known={reportStatusKnown(entry)} size="lg" />
             </div>
 
             <div className="mt-5">
@@ -215,7 +226,17 @@ export default function TestDetailPage() {
               {t("test.yourTrend")}
             </p>
             <div className="mt-2">
-              <TrendChart testId={def.id} height={190} color="#dc2626" />
+              <TrendChart
+                testId={def.id}
+                height={190}
+                color="#dc2626"
+                data={reports.flatMap((report) => {
+                  const value = report.entries.find((item) => item.test === def.id)?.value;
+                  return value === undefined
+                    ? []
+                    : [{ label: pick(report.month, s.lang), value }];
+                })}
+              />
             </div>
             <Link
               href="/trends"
@@ -241,9 +262,10 @@ export default function TestDetailPage() {
               <div className="mt-3 space-y-2">
                 {def.related.map((rid) => {
                   const re = activeReport?.entries.find((x) => x.test === rid);
-                  const rd = catalog[rid] || TESTS[rid];
+                  const rd = resolveTestDef(rid, catalog, re);
                   if (!rd) return null;
-                  const val = re?.value ?? 0;
+                  if (!re) return null;
+                  const val = re.value;
                   return (
                     <Link
                       key={rid}

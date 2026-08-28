@@ -223,7 +223,9 @@ export function detectPatterns(payload: AnonymisedPayload, lang: LangCode): Dete
   const out: DetectedPattern[] = [];
 
   for (const rule of RULES) {
-    const present = rule.tests.map((id) => byTest.get(id)).filter((r): r is AnonymisedResult => !!r);
+    const present = rule.tests
+      .map((id) => byTest.get(id))
+      .filter((r): r is AnonymisedResult => !!r && r.status_known !== false);
     if (present.length < 2) continue;
 
     // An anchor must be present AND flagged, otherwise the cluster is just a

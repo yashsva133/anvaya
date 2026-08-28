@@ -8,18 +8,25 @@
 //
 // The rules are the ones the server enforces in src/lib/ai/clientReport.ts;
 // this module exists so the client does not have to guess them:
-//   - test ids and numeric values only
-//   - NO statuses, units or reference ranges (the server re-derives them from
-//     the catalogue, so a client cannot claim one)
-//   - NO name, no lab, no free text beyond the two date labels
+//   - test ids and numeric values only for catalogued tests
+//   - a bounded printed label, unit and reference range may accompany an
+//     uncatalogued test so the app can preserve what the report actually said;
+//     the server still validates every field and re-derives the status
+//   - NO name, no lab, no free text beyond those bounded report fields and the
+//     two date labels
 // ---------------------------------------------------------------------------
 
-import type { LangCode } from "@/lib/data";
+import type { LangCode, ReportTestMetadata } from "@/lib/data";
+
+export interface ContextResult extends ReportTestMetadata {
+  test: string;
+  value: number;
+}
 
 export interface ContextReport {
   id: string;
   date: { en: string; hi: string };
-  entries: { test: string; value: number }[];
+  entries: ContextResult[];
 }
 
 export interface ContextPatient {
@@ -53,15 +60,15 @@ export interface ReportContextPayload {
   dateLabel: string;
   age: number;
   gender: string;
-  results: { test: string; value: number }[];
-  previous?: { dateLabel: string; results: { test: string; value: number }[] };
+  results: ContextResult[];
+  previous?: { dateLabel: string; results: ContextResult[] };
   /**
    * Every earlier report on file, oldest first. The server computes the trend
    * directions from these (src/lib/ai/anonymizer.ts), which is what lets the
    * Overview summary talk about where things are heading rather than only
    * where they stand today.
    */
-  history?: { dateLabel: string; results: { test: string; value: number }[] }[];
+  history?: { dateLabel: string; results: ContextResult[] }[];
 }
 
 /** How many earlier reports are worth sending. Beyond this it is prompt budget
@@ -78,8 +85,22 @@ export function buildReportContext(args: {
   const hi = lang === "hi";
   const idx = reports.findIndex((r) => r.id === activeReport.id);
   const prev = idx > 0 ? reports[idx - 1] : undefined;
-  const values = (entries: { test: string; value: number }[]) =>
-    entries.map((e) => ({ test: e.test, value: e.value }));
+  const values = (entries: ContextResult[]): ContextResult[] =>
+    entries.map((e) => ({
+      test: e.test,
+      value: e.value,
+      ...(e.label ? { label: e.label } : {}),
+      ...(e.unit ? { unit: e.unit } : {}),
+      ...(e.reference
+        ? {
+            reference: {
+              ...(e.reference.low !== undefined ? { low: e.reference.low } : {}),
+              ...(e.reference.high !== undefined ? { high: e.reference.high } : {}),
+              ...(e.reference.text ? { text: e.reference.text } : {}),
+            },
+          }
+        : {}),
+    }));
   // Everything before the active report. When the active report is not in the
   // list at all (a fresh upload that has not been filed yet) the whole list is
   // history, which is exactly right.

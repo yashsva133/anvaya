@@ -5,6 +5,7 @@ import fs from "fs/promises";
 import path from "path";
 import { exec } from "child_process";
 import util from "util";
+import { parseCsvToReportData } from "@/lib/reportCsv";
 
 const execPromise = util.promisify(exec);
 
@@ -21,70 +22,6 @@ let lastRequestTime = 0;
 const requestTimestamps: number[] = [];
 const MAX_REQUESTS_PER_MINUTE = 15;
 const MIN_INTERVAL_MS = 1000;
-
-function parseCsvToReportData(csvText: string) {
-  const lines = csvText.trim().split("\n");
-  if (lines.length <= 1) return null;
-  const header = lines[0].split(",").map((h) => h.trim().toLowerCase());
-  const nameIdx = header.indexOf("test_name");
-  const valIdx = header.indexOf("value");
-  const unitIdx = header.indexOf("unit");
-  const lowIdx = header.indexOf("ref_low");
-  const highIdx = header.indexOf("ref_high");
-  const statusIdx = header.indexOf("status");
-
-  const chart_data: any[] = [];
-  const flagged_issues: string[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(",").map((c) => c.trim());
-    if (cols.length < 3) continue;
-    const name = cols[nameIdx >= 0 ? nameIdx : 1] || "";
-    const val = parseFloat(cols[valIdx >= 0 ? valIdx : 2] || "0");
-    const unit = cols[unitIdx >= 0 ? unitIdx : 3] || "";
-    const low = parseFloat(cols[lowIdx >= 0 ? lowIdx : 4] || "0");
-    const high = parseFloat(cols[highIdx >= 0 ? highIdx : 5] || "100");
-    const rawStatus = (cols[statusIdx >= 0 ? statusIdx : 6] || "Normal").toLowerCase();
-    const status =
-      rawStatus === "low"
-        ? "low"
-        : rawStatus === "high"
-        ? "high"
-        : rawStatus === "critical"
-        ? "critical"
-        : "normal";
-
-    if (name) {
-      chart_data.push({
-        parameter: name,
-        value: isNaN(val) ? 0 : val,
-        normal_min: isNaN(low) ? 0 : low,
-        normal_max: isNaN(high) ? 100 : high,
-        unit,
-        status,
-      });
-      if (status !== "normal") {
-        flagged_issues.push(`${name} (${val} ${unit}) is ${status}`);
-      }
-    }
-  }
-
-  if (chart_data.length === 0) return null;
-
-  const patient_summary =
-    flagged_issues.length > 0
-      ? `We found ${chart_data.length} test results. ${flagged_issues.length} values are outside standard reference ranges (${flagged_issues.slice(0, 2).join(", ")}) and should be reviewed with your doctor.`
-      : `All ${chart_data.length} test results on your report are within standard reference ranges.`;
-
-  const audio_script = `Hello. Your lab report has been read. ${patient_summary}`;
-
-  return {
-    patient_summary,
-    flagged_issues,
-    chart_data,
-    audio_script,
-  };
-}
 
 const DEFAULT_SAMPLE_REPORT = {
   patient_summary:
@@ -137,13 +74,16 @@ export async function POST(req: NextRequest) {
     }
     requestTimestamps.push(Date.now());
 
-    if (
-      isSample ||
-      !file ||
-      file.name === "sample-report.svg" ||
-      file.name === "sample"
-    ) {
+    if (isSample) {
+      // The sample is an explicit demo action, never an error fallback.
       return NextResponse.json({ ...DEFAULT_SAMPLE_REPORT, cached: true }, { status: 200 });
+    }
+
+    if (!file) {
+      return NextResponse.json(
+        { error: "Please upload or scan a laboratory report." },
+        { status: 400 }
+      );
     }
 
     const bytes = await file.arrayBuffer();
@@ -155,9 +95,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ...cached.data, cached: true }, { status: 200 });
     }
 
+    // A structured CSV is an explicit upload format, not an OCR image. Parse
+    // it before touching the OCR executable so a valid CSV remains usable on a
+    // host that has no Python/PaddleOCR installation.
+    const uploadedText = buffer.toString("utf8");
+    const firstLine = uploadedText.split(/\r?\n/, 1)[0].toLowerCase();
+    const looksLikeCsv =
+      /\.csv$/i.test(file.name) ||
+      /(?:^|\/)(?:text|application)\/csv(?:$|;)/i.test(file.type) ||
+      (/\b(?:test_name|parameter|test)\b/.test(firstLine) &&
+        /\b(?:value|result|reading)\b/.test(firstLine));
+    if (looksLikeCsv) {
+      const parsedCsv = parseCsvToReportData(uploadedText);
+      if (!parsedCsv || parsedCsv.chart_data.length === 0) {
+        return NextResponse.json(
+          { error: "We could not read this CSV report. Check that it includes test names and numeric values." },
+          { status: 422 }
+        );
+      }
+      reportCache.set(hash, { data: parsedCsv, timestamp: Date.now() });
+      return NextResponse.json(parsedCsv, { status: 200 });
+    }
+
     // Try PaddleOCR
     const tmpDir = os.tmpdir();
-    const tempInPath = path.join(tmpDir, `upload_${Date.now()}_${file.name}`);
+    const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "report";
+    const tempInPath = path.join(tmpDir, `upload_${Date.now()}_${safeFileName}`);
     const tempOutCsv = path.join(tmpDir, `output_${Date.now()}.csv`);
 
     await fs.writeFile(tempInPath, buffer);
@@ -171,15 +134,11 @@ export async function POST(req: NextRequest) {
         "python3",
       ];
 
-      let ranOcr = false;
       for (const py of candidates) {
         try {
           await execPromise(`"${py}" lab_ocr_paddleocr.py --image "${tempInPath}" --out "${tempOutCsv}"`);
           csvData = await fs.readFile(tempOutCsv, "utf8");
-          if (csvData.trim()) {
-            ranOcr = true;
-            break;
-          }
+          if (csvData.trim()) break;
         } catch {
           // Try next candidate
         }
@@ -191,61 +150,29 @@ export async function POST(req: NextRequest) {
       await fs.unlink(tempOutCsv).catch(() => {});
     }
 
-    // If CSV data was extracted from PaddleOCR, try MedGemma or parse directly
+    // Prefer the structured OCR output. Do not ask a language model to infer a
+    // missing or contradictory reference range: an invented interval can turn
+    // a real result into a false normal/high/low status. Rows without numeric
+    // bounds remain visible and are marked unassessed by mapChartDataToEntries.
     if (csvData && csvData.trim()) {
       const parsedDirectly = parseCsvToReportData(csvData);
-
-      // Attempt Ollama enrichment if available
-      try {
-        const ollamaUrl = process.env.AI_BASE_URL || "http://127.0.0.1:11434";
-        const ollamaModel = process.env.AI_MODEL || "medgemma:4b";
-
-        const ollamaResponse = await fetch(`${ollamaUrl}/api/generate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: ollamaModel,
-            prompt: `Analyze this clinical CSV data extracted from a lab report and output strict JSON matching the schema.\nCSV Data:\n${csvData}`,
-            system: `You are an expert clinical laboratory report analysis assistant.
-1. Extract medical test parameters, measured values, units, and normal reference ranges (normal_min and normal_max) from the provided CSV data.
-2. Compute status: 'normal', 'borderline', 'high', 'low', or 'critical'.
-3. 2-sentence patient summary.
-4. List flagged issues.
-5. Provide an audio script.
-Respond ONLY with JSON: {"patient_summary":"string","flagged_issues":["string"],"chart_data":[{"parameter":"string","value":number,"normal_min":number,"normal_max":number,"unit":"string","status":"normal|borderline|high|low|critical"}],"audio_script":"string"}`,
-            format: "json",
-            stream: false,
-            options: { temperature: 0.2 },
-          }),
-          signal: AbortSignal.timeout(12000),
-        });
-
-        if (ollamaResponse.ok) {
-          const ollamaJson = await ollamaResponse.json();
-          const rawText = ollamaJson.response;
-          if (rawText) {
-            const data = JSON.parse(rawText);
-            if (data?.chart_data?.length > 0) {
-              reportCache.set(hash, { data, timestamp: Date.now() });
-              return NextResponse.json(data, { status: 200 });
-            }
-          }
-        }
-      } catch {
-        // Ollama not reachable, fall through to directly parsed CSV
-      }
-
       if (parsedDirectly && parsedDirectly.chart_data.length > 0) {
         reportCache.set(hash, { data: parsedDirectly, timestamp: Date.now() });
         return NextResponse.json(parsedDirectly, { status: 200 });
       }
     }
 
-    // Fallback: return default structured sample report so UI never crashes
-    reportCache.set(hash, { data: DEFAULT_SAMPLE_REPORT, timestamp: Date.now() });
-    return NextResponse.json(DEFAULT_SAMPLE_REPORT, { status: 200 });
+    // A failed OCR/model pass must not turn into somebody else's fictional
+    // results. Let the client show a retry/upload message instead.
+    return NextResponse.json(
+      { error: "We could not read this report. Please try a clearer photo or PDF." },
+      { status: 422 }
+    );
   } catch (error: any) {
     console.error("Error processing medical report:", error);
-    return NextResponse.json(DEFAULT_SAMPLE_REPORT, { status: 200 });
+    return NextResponse.json(
+      { error: "We could not process this report. Please try again." },
+      { status: 500 }
+    );
   }
 }

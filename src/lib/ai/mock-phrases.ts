@@ -10,8 +10,8 @@
 // exercisable offline, and every number in the output still comes from the
 // payload so the numeric-grounding guardrail passes for the right reason.
 //
-// It is deliberately NOT a translation engine. It is four fixed sentences with
-// slots, which is all a mock needs. Real answers come from the model.
+// It is deliberately NOT a translation engine. It is a small set of fixed
+// sentences with slots, which is all a mock needs. Real answers come from the model.
 // ---------------------------------------------------------------------------
 
 import type { AnswerLang } from "./languages";
@@ -23,6 +23,8 @@ export interface MockPhrases {
   within: string;
   /** "... outside its printed range ({ref})." */
   outside: (ref: string) => string;
+  /** A result that has no printed range and therefore cannot be classified. */
+  unassessed: string;
   /** The closing not-a-diagnosis line. */
   disclaimer: string;
 }
@@ -32,84 +34,98 @@ const PHRASES: Record<AnswerLang, MockPhrases> = {
     intro: (d) => `From your report dated **${d}**, about these results:`,
     within: "within its printed range",
     outside: (r) => `outside its printed range (${r})`,
-    disclaimer: "This is not a diagnosis — please discuss these results with your doctor.",
+    unassessed: "the report did not include a reference range, so this result was not classified",
+    disclaimer: "This is not a diagnosis. Please discuss these results with your doctor.",
   },
   hi: {
     intro: (d) => `आपकी **${d}** की रिपोर्ट से, इन परिणामों के बारे में:`,
     within: "सामान्य सीमा के भीतर",
     outside: (r) => `सामान्य सीमा (${r}) से बाहर`,
+    unassessed: "रिपोर्ट में संदर्भ सीमा नहीं थी, इसलिए इस परिणाम का वर्गीकरण नहीं किया गया",
     disclaimer: "यह निदान नहीं है — कृपया इन परिणामों पर अपने डॉक्टर से चर्चा करें।",
   },
   bn: {
     intro: (d) => `আপনার **${d}** তারিখের রিপোর্ট থেকে, এই ফলাফলগুলো সম্পর্কে:`,
     within: "নির্দিষ্ট সীমার মধ্যে",
     outside: (r) => `নির্দিষ্ট সীমা (${r}) এর বাইরে`,
+    unassessed: "রিপোর্টে কোনো স্বাভাবিক সীমা ছিল না, তাই এই ফলাফল শ্রেণিবদ্ধ করা হয়নি",
     disclaimer: "এটি রোগ নির্ণয় নয় — অনুগ্রহ করে এই ফলাফলগুলো আপনার চিকিৎসকের সাথে আলোচনা করুন।",
   },
   ta: {
     intro: (d) => `உங்கள் **${d}** தேதியிட்ட அறிக்கையிலிருந்து, இந்த முடிவுகளைப் பற்றி:`,
     within: "அச்சிட்ட வரம்பிற்குள்",
     outside: (r) => `அச்சிட்ட வரம்புக்கு (${r}) வெளியே`,
+    unassessed: "அறிக்கையில் குறிப்பு வரம்பு இல்லை; எனவே இந்த முடிவு வகைப்படுத்தப்படவில்லை",
     disclaimer: "இது நோய்க்கண்டறிதல் அல்ல — தயவுசெய்து இந்த முடிவுகளை உங்கள் மருத்துவருடன் விவாதிக்கவும்.",
   },
   te: {
     intro: (d) => `మీ **${d}** తేదీ నివేదిక నుండి, ఈ ఫలితాల గురించి:`,
     within: "ముద్రిత పరిధి లోపు",
     outside: (r) => `ముద్రిత పరిధి (${r}) వెలుపల`,
+    unassessed: "నివేదికలో సూచన పరిధి లేదు, కాబట్టి ఈ ఫలితం వర్గీకరించబడలేదు",
     disclaimer: "ఇది వ్యాధి నిర్ధారణ కాదు — దయచేసి ఈ ఫలితాలను మీ డాక్టర్‌తో చర్చించండి.",
   },
   mr: {
     intro: (d) => `तुमच्या **${d}** च्या अहवालातून, या निकालांबद्दल:`,
     within: "छापलेल्या श्रेणीच्या आत",
     outside: (r) => `छापलेल्या श्रेणीच्या (${r}) बाहेर`,
+    unassessed: "अहवालात संदर्भ श्रेणी नव्हती, त्यामुळे हा निकाल वर्गीकृत केलेला नाही",
     disclaimer: "हे निदान नाही — कृपया या निकालांबद्दल तुमच्या डॉक्टरांशी चर्चा करा.",
   },
   gu: {
     intro: (d) => `તમારા **${d}** ના રિપોર્ટમાંથી, આ પરિણામો વિશે:`,
     within: "છપાયેલી શ્રેણીની અંદર",
     outside: (r) => `છપાયેલી શ્રેણી (${r}) ની બહાર`,
+    unassessed: "રિપોર્ટમાં સંદર્ભ શ્રેણી ન હતી, તેથી આ પરિણામનું વર્ગીકરણ થયું નથી",
     disclaimer: "આ નિદાન નથી — કૃપા કરીને આ પરિણામો વિશે તમારા ડોક્ટર સાથે ચર્ચા કરો.",
   },
   kn: {
     intro: (d) => `ನಿಮ್ಮ **${d}** ದಿನಾಂಕದ ವರದಿಯಿಂದ, ಈ ಫಲಿತಾಂಶಗಳ ಬಗ್ಗೆ:`,
     within: "ಮುದ್ರಿತ ಶ್ರೇಣಿಯೊಳಗೆ",
     outside: (r) => `ಮುದ್ರಿತ ಶ್ರೇಣಿಯ (${r}) ಹೊರಗೆ`,
+    unassessed: "ವರದಿಯಲ್ಲಿ ಉಲ್ಲೇಖ ಶ್ರೇಣಿ ಇರಲಿಲ್ಲ, ಆದ್ದರಿಂದ ಈ ಫಲಿತಾಂಶವನ್ನು ವರ್ಗೀಕರಿಸಲಾಗಿಲ್ಲ",
     disclaimer: "ಇದು ರೋಗ ನಿರ್ಧಾರವಲ್ಲ — ದಯವಿಟ್ಟು ಈ ಫಲಿತಾಂಶಗಳ ಬಗ್ಗೆ ನಿಮ್ಮ ವೈದ್ಯರೊಂದಿಗೆ ಚರ್ಚಿಸಿ.",
   },
   ml: {
     intro: (d) => `നിങ്ങളുടെ **${d}** തീയതിയിലുള്ള റിപ്പോർട്ടിൽ നിന്ന്, ഈ ഫലങ്ങളെക്കുറിച്ച്:`,
     within: "രേഖപ്പെടുത്തിയ പരിധിക്കുള്ളിൽ",
     outside: (r) => `രേഖപ്പെടുത്തിയ പരിധിക്ക് (${r}) പുറത്ത്`,
+    unassessed: "റിപ്പോർട്ടിൽ റഫറൻസ് പരിധി നൽകിയിട്ടില്ല; അതിനാൽ ഈ ഫലം വർഗ്ഗീകരിച്ചിട്ടില്ല",
     disclaimer: "ഇത് രോഗനിർണയമല്ല — ദയവായി ഈ ഫലങ്ങൾ നിങ്ങളുടെ ഡോക്ടറുമായി ചർച്ച ചെയ്യുക.",
   },
   pa: {
     intro: (d) => `ਤੁਹਾਡੀ **${d}** ਦੀ ਰਿਪੋਰਟ ਤੋਂ, ਇਨ੍ਹਾਂ ਨਤੀਜਿਆਂ ਬਾਰੇ:`,
     within: "ਛਪੀ ਹੋਈ ਸੀਮਾ ਦੇ ਅੰਦਰ",
     outside: (r) => `ਛਪੀ ਹੋਈ ਸੀਮਾ (${r}) ਤੋਂ ਬਾਹਰ`,
+    unassessed: "ਰਿਪੋਰਟ ਵਿੱਚ ਹਵਾਲਾ ਸੀਮਾ ਨਹੀਂ ਸੀ, ਇਸ ਲਈ ਇਹ ਨਤੀਜਾ ਵਰਗੀਕ੍ਰਿਤ ਨਹੀਂ ਕੀਤਾ ਗਿਆ",
     disclaimer: "ਇਹ ਨਿਦਾਨ ਨਹੀਂ ਹੈ — ਕਿਰਪਾ ਕਰਕੇ ਇਨ੍ਹਾਂ ਨਤੀਜਿਆਂ ਬਾਰੇ ਆਪਣੇ ਡਾਕਟਰ ਨਾਲ ਗੱਲ ਕਰੋ।",
   },
   ur: {
     intro: (d) => `آپ کی **${d}** کی رپورٹ سے، ان نتائج کے بارے میں:`,
     within: "اپنی مقررہ حد کے اندر",
     outside: (r) => `مقررہ حد (${r}) سے باہر`,
+    unassessed: "رپورٹ میں حوالہ حد نہیں تھی، اس لیے اس نتیجے کی درجہ بندی نہیں کی گئی",
     disclaimer: "یہ تشخیص نہیں ہے — براہ کرم ان نتائج پر اپنے ڈاکٹر سے بات کریں۔",
   },
   or: {
     intro: (d) => `ଆପଣଙ୍କ **${d}** ରିପୋର୍ଟରୁ, ଏହି ଫଳାଫଳ ବିଷୟରେ:`,
     within: "ଛପା ଯାଇଥିବା ସୀମା ମଧ୍ୟରେ",
     outside: (r) => `ଛପା ଯାଇଥିବା ସୀମା (${r}) ବାହାରେ`,
+    unassessed: "ରିପୋର୍ଟରେ ସନ୍ଦର୍ଭ ସୀମା ନଥିଲା, ତେଣୁ ଏହି ଫଳାଫଳକୁ ବର୍ଗୀକୃତ କରାଯାଇନାହିଁ",
     disclaimer: "ଏହା ରୋଗ ନିର୍ଣ୍ଣୟ ନୁହେଁ — ଅନୁଗ୍ରହ କରି ଏହି ଫଳାଫଳ ବିଷୟରେ ଆପଣଙ୍କ ଡାକ୍ତରଙ୍କ ସହ ଆଲୋଚନା କରନ୍ତୁ।",
   },
   as: {
     intro: (d) => `আপোনাৰ **${d}** তাৰিখৰ ৰিপৰ্টৰ পৰা, এই ফলাফলবোৰৰ বিষয়ে:`,
     within: "ছপা সীমাৰ ভিতৰত",
     outside: (r) => `ছপা সীমাৰ (${r}) বাহিৰত`,
+    unassessed: "ৰিপৰ্টত কোনো সন্দৰ্ভ সীমা নাছিল, সেয়ে এই ফলাফল শ্ৰেণীবদ্ধ কৰা হোৱা নাই",
     disclaimer: "এইটো ৰোগ নিৰ্ণয় নহয় — অনুগ্ৰহ কৰি এই ফলাফলবোৰ আপোনাৰ চিকিৎসকৰ সৈতে আলোচনা কৰক।",
   },
   ne: {
     intro: (d) => `तपाईंको **${d}** मितिको रिपोर्टबाट, यी नतिजाहरूबारे:`,
     within: "छपाइएको दायराभित्र",
     outside: (r) => `छपाइएको दायरा (${r}) भन्दा बाहिर`,
+    unassessed: "रिपोर्टमा सन्दर्भ दायरा थिएन, त्यसैले यो नतिजा वर्गीकृत गरिएको छैन",
     disclaimer: "यो रोग पहिचान होइन — कृपया यी नतिजाहरूबारे आफ्नो डाक्टरसँग छलफल गर्नुहोस्।",
   },
 };

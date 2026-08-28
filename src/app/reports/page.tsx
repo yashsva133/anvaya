@@ -24,24 +24,20 @@ import {
   useToast,
 } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
-import { TESTS, fmtValue } from "@/lib/data";
+import { fmtValue, reportStatusKnown, resolveTestDef } from "@/lib/data";
 import { useReportData } from "@/context/ReportDataContext";
 
 export default function ReportsPage() {
   const { t, s } = useI18n();
   const toast = useToast();
   const { reports, catalog, deleteReport } = useReportData();
-  const [open, setOpen] = useState<string | null>(reports[reports.length - 1]?.id || "aug26");
+  const [open, setOpen] = useState<string | null>(reports[reports.length - 1]?.id ?? null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const latest = reports[reports.length - 1] || reports[0];
   const hi = s.lang === "hi";
 
   const handleDelete = async (reportId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (reports.length <= 1) {
-      toast(hi ? "कम से कम एक रिपोर्ट रखनी आवश्यक है" : "At least one report must remain", "warn");
-      return;
-    }
     setDeletingId(reportId);
     await deleteReport(reportId);
     setDeletingId(null);
@@ -54,7 +50,7 @@ export default function ReportsPage() {
         <SectionTitle
           icon={FolderOpen}
           title={t("reports.title")}
-          sub={`${reports.length} ${hi ? "रिपोर्ट्स" : "reports"} · 2026`}
+          sub={`${reports.length} ${hi ? "रिपोर्ट्स" : "reports"}`}
         />
         <div className="flex gap-2">
           <Link
@@ -227,7 +223,7 @@ export default function ReportsPage() {
                                   </p>
                                   <p className="text-[10px] font-bold text-slate-400 mt-0.5">{def.unit}</p>
                                 </div>
-                                <StatusPill status={e.status} size="sm" />
+                                <StatusPill status={e.status} known={reportStatusKnown(e)} size="sm" />
                               </div>
                             </Link>
                           );
@@ -257,7 +253,7 @@ export default function ReportsPage() {
                             </Link>
                           ) : (
                             <Link
-                              href={`/compare?old=${r.id}&new=${latest?.id || "aug26"}`}
+                              href={`/compare?old=${r.id}&new=${latest?.id ?? ""}`}
                               className="inline-flex min-h-11 items-center gap-2 rounded-2xl border-2 border-brand-200 bg-white px-5 text-sm font-extrabold text-brand-700 transition hover:border-brand-400 active:scale-95"
                             >
                               <GitCompareArrows className="h-4 w-4" />

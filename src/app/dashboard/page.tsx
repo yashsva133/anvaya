@@ -37,12 +37,7 @@ import { PatternTeaser } from "@/components/pattern-teaser";
 import { OverviewSummaryCard } from "@/components/summary-card";
 import { useI18n, pick } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
-import {
-  PATTERNS,
-  TESTS,
-  fmtValue,
-  type ReportEntry,
-} from "@/lib/data";
+import { fmtValue, reportStatusKnown, resolveTestDef, type ReportEntry } from "@/lib/data";
 import { useReportData } from "@/context/ReportDataContext";
 
 const MODES = [
@@ -57,35 +52,87 @@ export default function DashboardPage() {
   const { activeReport, patient: dbPatient, catalog, reports, loading } = useReportData();
   const hi = s.lang === "hi";
 
-  const [hasReports, setHasReports] = useState<boolean>(true);
-
   const report = activeReport;
   const entries = report?.entries || [];
 
-  // Determine top priority cards from actual report entries
-  const attentionEntries = entries.filter((e) => e.status !== "normal");
-  const priorityIds = attentionEntries.length > 0
-    ? attentionEntries.slice(0, 3).map((e) => e.test)
-    : ["hemoglobin", "hba1c", "ldl"];
+  if (loading || entries.length === 0) {
+    return (
+      <AppShell>
+        <section className="card-shadow mt-8 overflow-hidden rounded-[2rem] border-2 border-dashed border-brand-200 bg-gradient-to-br from-brand-50 via-white to-mint-50 p-8 text-center md:p-12">
+          {loading ? (
+            <>
+              <div className="mx-auto h-12 w-12 animate-pulse rounded-2xl bg-brand-100" />
+              <h1 className="mt-5 text-2xl font-extrabold text-brand-950">
+                {hi ? "आपकी रिपोर्ट्स लोड हो रही हैं…" : "Loading your reports…"}
+              </h1>
+            </>
+          ) : (
+            <>
+              <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-mint-100 text-mint-700">
+                <FilePlus2 className="h-8 w-8" />
+              </span>
+              <p className="mt-5 text-xs font-extrabold uppercase tracking-[0.18em] text-mint-700">
+                {hi ? "आपका ओवरव्यू" : "Your overview"}
+              </p>
+              <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-brand-950 md:text-3xl">
+                {hi ? "अभी कोई रिपोर्ट नहीं है" : "No report uploaded yet"}
+              </h1>
+              <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-relaxed text-slate-500 md:text-base">
+                {hi
+                  ? "अपनी लैब रिपोर्ट अपलोड करें या कैमरे से स्कैन करें। रिपोर्ट मिलने के बाद यहाँ आपके असली परिणाम और उनका ओवरव्यू दिखेगा।"
+                  : "Upload your lab report or scan it with your camera. Your overview will appear here using your own results — not sample data."}
+              </p>
+              <div className="mt-6 flex flex-wrap justify-center gap-3">
+                <Link
+                  href="/upload"
+                  className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-brand-700 px-6 text-sm font-extrabold text-white shadow-md transition hover:bg-brand-600 active:scale-95"
+                >
+                  <UploadCloud className="h-5 w-5" />
+                  {hi ? "रिपोर्ट अपलोड करें" : "Upload report"}
+                </Link>
+                <Link
+                  href="/scan"
+                  className="inline-flex min-h-12 items-center gap-2 rounded-2xl border-2 border-mint-200 bg-white px-6 text-sm font-extrabold text-mint-800 transition hover:border-mint-400 hover:bg-mint-50 active:scale-95"
+                >
+                  <Camera className="h-5 w-5" />
+                  {hi ? "स्कैन करें" : "Scan with camera"}
+                </Link>
+              </div>
+            </>
+          )}
+        </section>
+      </AppShell>
+    );
+  }
 
-  const borderline = entries.filter((e) => e.status === "borderline").map((e) => e.test);
-  const fallbackBorderline = borderline.length > 0 ? borderline : ["glucose", "triglycerides"];
+  // Determine top priority cards from assessed report entries only. An
+  // uncatalogued value without a printed range is shown below, but must not be
+  // presented as normal or abnormal by borrowing another test's definition.
+  const assessedEntries = entries.filter(reportStatusKnown);
+  const attentionEntries = assessedEntries.filter((e) => e.status !== "normal");
+  const priorityIds = (attentionEntries.length > 0 ? attentionEntries : assessedEntries)
+    .slice(0, 3)
+    .map((e) => e.test);
+
+  const fallbackBorderline = assessedEntries
+    .filter((e) => e.status === "borderline")
+    .map((e) => e.test);
 
   const displayName =
-    dbPatient?.name ? (hi ? dbPatient.name.hi : dbPatient.name.en) :
-    profile?.full_name ||
-    user?.user_metadata?.full_name ||
-    (hi ? "राहुल सिंह" : "Rahul Singh");
-
-  const displayAge = dbPatient?.age || 42;
-  const displayGender = dbPatient?.gender ? (hi ? dbPatient.gender.hi : dbPatient.gender.en) : (hi ? "पुरुष" : "Male");
+    (dbPatient?.name?.en || profile?.full_name || user?.user_metadata?.full_name || "Your profile").trim();
+  const displayAge = dbPatient?.age > 0 ? dbPatient.age : null;
+  const displayGender = dbPatient?.gender?.en
+    ? hi
+      ? dbPatient.gender.hi
+      : dbPatient.gender.en
+    : null;
 
   const initials = displayName
     .split(" ")
     .map((n: string) => n[0])
     .slice(0, 2)
     .join("")
-    .toUpperCase() || "RS";
+    .toUpperCase() || "U";
 
   if (!loading && reports.length === 0) {
     return (
@@ -127,12 +174,16 @@ export default function DashboardPage() {
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-700 text-[10px] font-extrabold text-white">
                 {initials}
               </span>
-              {displayName} · {displayAge} yrs ({displayGender})
+              {displayName}
+              {displayAge !== null && ` · ${displayAge} yrs`}
+              {displayGender && ` (${displayGender})`}
             </span>
-            <span className="flex items-center gap-1.5">
-              <CalendarDays className="h-4 w-4" />
-              {report?.date ? pick(report.date, s.lang) : "27 Aug 2026"}
-            </span>
+            {report?.date && (
+              <span className="flex items-center gap-1.5">
+                <CalendarDays className="h-4 w-4" />
+                {pick(report.date, s.lang)}
+              </span>
+            )}
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
               {hi ? "Rxअन्वय लाइव रिपोर्ट" : "RxAnvaya Live Report"}
             </span>
@@ -179,14 +230,21 @@ export default function DashboardPage() {
       {/* ---------------------------- What matters most ---------------------------- */}
       <section className="mt-10">
         <SectionTitle icon={Sparkles} title={t("dash.mattersMost")} sub={t("dash.mattersSub")} />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {priorityIds.map((id, i) => {
-            const e = entries.find((x) => x.test === id) || { test: id, value: 0, status: "normal" as const };
-            return (
-              <PriorityCard key={id} entry={e} index={i} hi={hi} catalog={catalog} />
-            );
-          })}
-        </div>
+        {priorityIds.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {priorityIds.map((id, i) => {
+              const e = entries.find((x) => x.test === id);
+              if (!e) return null;
+              return <PriorityCard key={id} entry={e} index={i} hi={hi} catalog={catalog} />;
+            })}
+          </div>
+        ) : (
+          <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white p-5 text-sm font-semibold text-slate-500">
+            {hi
+              ? "इन परिणामों के लिए विश्वसनीय संदर्भ सीमा उपलब्ध नहीं है। छपी हुई रिपोर्ट डॉक्टर को दिखाएँ।"
+              : "These results have no trusted reference range yet. Show the printed report to your doctor."}
+          </div>
+        )}
       </section>
 
       {/* ------------------------------ Pattern teaser ----------------------------- */}
@@ -199,7 +257,7 @@ export default function DashboardPage() {
         <SectionTitle
           icon={BookOpen}
           title={t("dash.allResults")}
-          sub={`${entries.length} ${t("reports.tests")} · ${report?.date ? pick(report.date, s.lang) : "27 Aug 2026"}`}
+          sub={`${entries.length} ${t("reports.tests")}${report?.date ? ` · ${pick(report.date, s.lang)}` : ""}`}
         />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {entries.map((e) => (
@@ -213,8 +271,9 @@ export default function DashboardPage() {
         <SectionTitle icon={BadgeInfo} title={t("dash.closeToLimit")} sub={t("dash.closeNote")} />
         <div className="grid gap-4 md:grid-cols-2">
           {fallbackBorderline.slice(0, 2).map((id) => {
-            const e = entries.find((x) => x.test === id) || { test: id, value: 0, status: "borderline" as const };
-            const def = catalog[id] || TESTS[id] || TESTS.hemoglobin;
+            const e = entries.find((x) => x.test === id);
+            if (!e) return null;
+            const def = resolveTestDef(id, catalog, e);
             return (
               <div
                 key={id}
@@ -302,7 +361,7 @@ function PriorityCard({
   catalog: any;
 }) {
   const { t } = useI18n();
-  const def = catalog?.[entry.test] || TESTS[entry.test] || TESTS.hemoglobin;
+  const def = resolveTestDef(entry.test, catalog, entry);
   const line = entry.status === "high"
     ? { en: `${def.name.en} is above the usual range.`, hi: `${def.name.hi} सामान्य सीमा से अधिक है।` }
     : entry.status === "low"
@@ -319,7 +378,7 @@ function PriorityCard({
     >
       <div className="flex items-start justify-between gap-3">
         <TestIcon testId={entry.test} size={50} />
-        <StatusPill status={entry.status} size="sm" />
+        <StatusPill status={entry.status} known={reportStatusKnown(entry)} size="sm" />
       </div>
       <p className="mt-3 text-lg font-extrabold text-slate-800">
         {pick(def.name, hi ? "hi" : "en")}
@@ -354,7 +413,7 @@ function PriorityCard({
 
 function ResultCard({ entry, catalog }: { entry: ReportEntry; catalog: any }) {
   const { t, s } = useI18n();
-  const def = catalog?.[entry.test] || TESTS[entry.test] || TESTS.hemoglobin;
+  const def = resolveTestDef(entry.test, catalog, entry);
   const simple = s.mode === "simple";
   const c = statusClasses(entry.status);
   const name = s.mode === "advanced" ? pick(def.name, s.lang) : pick(def.simple, s.lang);
@@ -381,7 +440,7 @@ function ResultCard({ entry, catalog }: { entry: ReportEntry; catalog: any }) {
           {fmtValue(entry.value)}
           <span className="ml-1 text-xs font-bold text-slate-400">{def.unit}</span>
         </p>
-        <StatusPill status={entry.status} size="sm" />
+        <StatusPill status={entry.status} known={reportStatusKnown(entry)} size="sm" />
       </div>
       {simple && (
         <p className="mt-2 text-sm font-semibold text-slate-500">

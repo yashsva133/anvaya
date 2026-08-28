@@ -156,8 +156,10 @@ export function buildSummaryPrompt(opts: {
 interface Copy {
   headlineAllFine: (n: number) => string;
   headlineAttention: (n: number, total: number) => string;
+  headlineUnknown: (n: number, total: number) => string;
   outside: (label: string, value: string, unit: string, ref: string) => string;
   borderline: (label: string, value: string, unit: string) => string;
+  unknown: (label: string, value: string, unit: string) => string;
   worsened: (label: string, from: string, to: string, since: string) => string;
   improved: (label: string, from: string, to: string, since: string) => string;
   steady: (n: number) => string;
@@ -171,10 +173,14 @@ const COPY: Record<LangCode, Copy> = {
     headlineAllFine: (n) => `All ${n} results in this report are within their normal ranges.`,
     headlineAttention: (n, total) =>
       `${n} of your ${total} results need a closer look; the rest are in range.`,
+    headlineUnknown: (n, total) =>
+      `${n} of your ${total} results have no reported range, so they need clinical review.`,
     outside: (label, value, unit, ref) =>
       `**${label}** is ${value} ${unit}, outside the usual range of ${ref}.`,
     borderline: (label, value, unit) =>
       `**${label}** is ${value} ${unit} — just at the edge of its normal range.`,
+    unknown: (label, value, unit) =>
+      `**${label}** is recorded as ${value} ${unit}, but no reference range was reported.`,
     worsened: (label, from, to, since) =>
       `**${label}** has moved further from its normal range, from ${from} on ${since} to ${to} now.`,
     improved: (label, from, to, since) =>
@@ -188,10 +194,14 @@ const COPY: Record<LangCode, Copy> = {
     headlineAllFine: (n) => `इस रिपोर्ट के सभी ${n} परिणाम सामान्य सीमा में हैं।`,
     headlineAttention: (n, total) =>
       `आपके ${total} में से ${n} परिणामों पर ध्यान देना है; बाकी सामान्य हैं।`,
+    headlineUnknown: (n, total) =>
+      `आपके ${total} में से ${n} परिणामों की संदर्भ सीमा नहीं मिली; डॉक्टर से समीक्षा करें।`,
     outside: (label, value, unit, ref) =>
       `**${label}** ${value} ${unit} है, जो सामान्य सीमा ${ref} से बाहर है।`,
     borderline: (label, value, unit) =>
       `**${label}** ${value} ${unit} है — सामान्य सीमा के बिल्कुल किनारे पर।`,
+    unknown: (label, value, unit) =>
+      `**${label}** ${value} ${unit} दर्ज है, लेकिन संदर्भ सीमा नहीं मिली।`,
     worsened: (label, from, to, since) =>
       `**${label}** सामान्य सीमा से और दूर गया है — ${since} को ${from} से अब ${to}।`,
     improved: (label, from, to, since) =>
@@ -205,10 +215,14 @@ const COPY: Record<LangCode, Copy> = {
     headlineAllFine: (n) => `এই রিপোর্টের সব ${n}টি ফলাফল স্বাভাবিক সীমার মধ্যে আছে।`,
     headlineAttention: (n, total) =>
       `আপনার ${total}টির মধ্যে ${n}টি ফলাফলে নজর দেওয়া দরকার; বাকিগুলি ঠিক আছে।`,
+    headlineUnknown: (n, total) =>
+      `আপনার ${total}টি ফলাফলের মধ্যে ${n}টির স্বাভাবিক সীমা নেই; চিকিৎসকের পর্যালোচনা দরকার।`,
     outside: (label, value, unit, ref) =>
       `**${label}** ${value} ${unit}, যা স্বাভাবিক সীমা ${ref}-এর বাইরে।`,
     borderline: (label, value, unit) =>
       `**${label}** ${value} ${unit} — স্বাভাবিক সীমার একেবারে কিনারায়।`,
+    unknown: (label, value, unit) =>
+      `**${label}** ${value} ${unit} হিসাবে নথিভুক্ত, কিন্তু কোনো স্বাভাবিক সীমা দেওয়া হয়নি।`,
     worsened: (label, from, to, since) =>
       `**${label}** স্বাভাবিক সীমা থেকে আরও দূরে গেছে — ${since}-এ ${from} থেকে এখন ${to}।`,
     improved: (label, from, to, since) =>
@@ -228,13 +242,26 @@ const fmt = (n: number) => (Number.isInteger(n) ? String(n) : String(Math.round(
  * the model's output has to pass.
  */
 export function deterministicSummary(payload: AnonymisedPayload, lang: LangCode): string {
+  if (payload.results.length === 0) {
+    return lang === "hi"
+      ? "अभी कोई रिपोर्ट नहीं है।\n\n- अपनी लैब रिपोर्ट अपलोड या स्कैन करें।\n- रिपोर्ट मिलने के बाद यहाँ आपके असली परिणामों का सारांश दिखेगा।\n- यह निदान नहीं है; ज़रूरी बातों पर डॉक्टर से चर्चा करें।"
+      : lang === "bn"
+        ? "এখনও কোনো রিপোর্ট নেই।\n\n- একটি ল্যাব রিপোর্ট আপলোড বা স্ক্যান করুন।\n- রিপোর্ট পাওয়ার পর এখানে আপনার আসল ফলাফলের সারাংশ দেখা যাবে।\n- এটি রোগ নির্ণয় নয়; গুরুত্বপূর্ণ বিষয় চিকিৎসকের সঙ্গে আলোচনা করুন।"
+        : "There is no report data yet.\n\n- Upload or scan a laboratory report.\n- Once it is available, this box will summarise your actual results.\n- This is not a diagnosis; discuss important findings with your doctor.";
+  }
   const c = COPY[lang] ?? COPY.en;
   const total = payload.results.length;
-  const abnormal = payload.results.filter((r) => r.status !== "normal");
-  const normal = total - abnormal.length;
+  const unassessed = payload.results.filter((r) => r.status_known === false);
+  const assessed = payload.results.filter((r) => r.status_known !== false);
+  const abnormal = assessed.filter((r) => r.status !== "normal");
+  const normal = assessed.length - abnormal.length;
 
   const headline =
-    abnormal.length === 0 ? c.headlineAllFine(total) : c.headlineAttention(abnormal.length, total);
+    unassessed.length > 0
+      ? c.headlineUnknown(unassessed.length, total)
+      : abnormal.length === 0
+        ? c.headlineAllFine(total)
+        : c.headlineAttention(abnormal.length, total);
 
   const bullets: string[] = [];
 
@@ -246,6 +273,9 @@ export function deterministicSummary(payload: AnonymisedPayload, lang: LangCode)
         ? c.borderline(r.label, fmt(r.value), r.unit)
         : c.outside(r.label, fmt(r.value), r.unit, r.ref_text)
     );
+  }
+  for (const r of unassessed.slice(0, 1)) {
+    bullets.push(c.unknown(r.label, fmt(r.value), r.unit));
   }
 
   // Direction of travel across the earlier reports.
@@ -262,11 +292,11 @@ export function deterministicSummary(payload: AnonymisedPayload, lang: LangCode)
   if (payload.trends.length === 0) {
     bullets.push(c.firstReport);
   } else {
-    const steady = payload.trends.filter((t) => t.direction === "flat").length;
+    const steady = payload.trends.filter((t) => t.status_known && t.direction === "flat").length;
     if (steady > 0 && bullets.length < 4) bullets.push(c.steady(steady));
   }
 
-  if (normal > 0 && bullets.length < 4) bullets.push(c.normalCount(normal, total));
+  if (normal > 0 && bullets.length < 4) bullets.push(c.normalCount(normal, assessed.length));
   bullets.push(c.close);
 
   return `${headline}\n\n${bullets.slice(0, 6).map((b) => `- ${b}`).join("\n")}`;
@@ -285,7 +315,7 @@ export interface OverviewSummary {
   text: string;
   /** A version with no markdown, for the Listen button. */
   speech: string;
-  engine: "medgemma" | "rules";
+  engine: "medgemma" | "mock" | "rules";
   model: string | null;
   confidence: GuardResult["confidence"];
   trust_score: number;
@@ -293,7 +323,7 @@ export interface OverviewSummary {
   /** Why the deterministic text was used, when it was. */
   fallback_reason?: string;
   language: LangCode;
-  counts: { total: number; normal: number; borderline: number; out: number };
+  counts: { total: number; normal: number; borderline: number; out: number; unknown: number };
   /** Compact trend digest the UI renders as chips next to the summary. */
   trend_chips: {
     test: string;
@@ -390,15 +420,50 @@ export async function generateOverviewSummary(opts: SummaryOptions): Promise<Ove
 
   const counts = {
     total: payload.results.length,
-    normal: payload.results.filter((r) => r.status === "normal").length,
-    borderline: payload.results.filter((r) => r.status === "borderline").length,
-    out: payload.results.filter((r) => r.status !== "normal" && r.status !== "borderline").length,
+    normal: payload.results.filter((r) => r.status_known !== false && r.status === "normal").length,
+    borderline: payload.results.filter((r) => r.status_known !== false && r.status === "borderline").length,
+    out: payload.results.filter(
+      (r) => r.status_known !== false && r.status !== "normal" && r.status !== "borderline"
+    ).length,
+    unknown: payload.results.filter((r) => r.status_known === false).length,
   };
+
+  // This guard intentionally comes before retrieval, provider construction and
+  // generation. An empty account is a product state, not an AI request.
+  if (payload.results.length === 0) {
+    const prompt = buildSummaryPrompt({ payload, lang, readingLevel, matches: [] });
+    const text = deterministicSummary(payload, lang);
+    const { headline, body } = splitHeadline(text);
+    return {
+      headline,
+      body,
+      text,
+      speech: toSpeech(text),
+      engine: "rules",
+      model: null,
+      confidence: "moderate",
+      trust_score: 0,
+      safety_flags: [],
+      fallback_reason: "no_results",
+      language: lang,
+      counts,
+      trend_chips: [],
+      sources: 0,
+      citations: [],
+      prompt_key: prompt.prompt_key,
+      prompt_version: prompt.prompt_version,
+      system_prompt_sha256: prompt.system_prompt_sha256,
+      latency_ms: Date.now() - startedAt,
+      payload,
+    };
+  }
 
   // Retrieval is seeded with the flagged tests plus the ones that are moving:
   // an overview is precisely the case where there is no question to retrieve on.
   const focus = [
-    ...payload.results.filter((r) => r.status !== "normal").map((r) => r.test),
+    ...payload.results
+      .filter((r) => r.status_known !== false && r.status !== "normal")
+      .map((r) => r.test),
     ...payload.trends.filter((t) => t.worsening).map((t) => t.test),
   ].slice(0, 5);
 
@@ -426,7 +491,10 @@ export async function generateOverviewSummary(opts: SummaryOptions): Promise<Ove
       text: args.text,
       speech: toSpeech(args.text),
       engine: args.engine,
-      model: args.generation?.model ?? (args.engine === "medgemma" ? env.ai.model : null),
+      model:
+        args.engine === "medgemma" || args.engine === "mock"
+          ? args.generation?.model ?? env.ai.model
+          : null,
       confidence: args.guard?.confidence ?? "moderate",
       trust_score: args.guard?.trust_score ?? 0,
       safety_flags: args.guard?.safety_flags ?? [],
@@ -459,10 +527,6 @@ export async function generateOverviewSummary(opts: SummaryOptions): Promise<Ove
       generation,
       fallbackReason: reason,
     });
-
-  // An empty report has nothing to summarise; the deterministic text says so
-  // honestly rather than sending an empty RESULTS block to a model.
-  if (payload.results.length === 0) return fallback("no_results");
 
   const provider: Provider | null =
     env.ai.provider === "mock"
@@ -514,5 +578,10 @@ export async function generateOverviewSummary(opts: SummaryOptions): Promise<Ove
     return out;
   }
 
-  return finish({ text: guard.final_text, engine: "medgemma", guard, generation });
+  return finish({
+    text: guard.final_text,
+    engine: env.ai.provider === "mock" ? "mock" : "medgemma",
+    guard,
+    generation,
+  });
 }

@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as InsightsBody;
   } catch {
-    /* an empty body analyses the seeded demo report */
+    /* malformed input is handled as an empty report */
   }
 
   const lang: LangCode = body.lang === "hi" || body.lang === "bn" ? body.lang : "en";
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
   // test_results), and each narrative as an ai_explanations row against the
   // finding. Never blocks the response.
   let persisted: Awaited<ReturnType<typeof persistInsights>> | undefined;
-  if (env.persistence) {
+  if (env.persistence && result.payload.results.length > 0 && report) {
     persisted = await persistInsights({
       db: env.db,
       insights: result,

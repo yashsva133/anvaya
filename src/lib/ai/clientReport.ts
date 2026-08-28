@@ -8,20 +8,23 @@
 // untrusted JSON body into a payload the pipeline can rely on.
 //
 // Rules, in order of importance:
-// 1. NOTHING free-text crosses this boundary except two short display labels
-//    (report date, previous report date), sanitised and length-capped. There
-//    is deliberately no field for a name, lab, doctor or notes — so a client
-//    cannot put PHI into the payload even by trying.
-// 2. Test ids are whitelist-matched against the TESTS catalogue. Unknown ids
-//    are dropped, not passed through.
-// 3. Units and reference ranges come from the catalogue, never the client.
-// 4. Status (normal/borderline/high/low) is computed here from the catalogue
-//    range — the same borderline fraction (10%) the seeded
-//    lab_test_thresholds use — because the spec (§10.4) says the LLM must
-//    never be the source of truth for it, and a client's label is no better.
+// 1. Nothing identifying crosses this boundary. The only free-text fields are
+//    short, control-character-free report labels, units and printed reference
+//    text, plus two short date labels. There is no field for a name, lab,
+//    doctor or notes, and every accepted text field is length-capped.
+// 2. Catalogue ids are canonicalised. A stable `report_...` id is also accepted
+//    for an uncatalogued result so the app can preserve a real extracted value
+//    without borrowing another test's definition.
+// 3. Known-test metadata is replaced by catalogue defaults when the report did
+//    not print it; supplied printed units and ranges are retained when present.
+//    Unknown-test metadata is the only source for its label/unit/range.
+// 4. Status (normal/borderline/high/low) is computed here from the retained
+//    range — the same borderline fraction (10%) the seeded lab_test_thresholds
+//    use. A result with no range is marked `statusKnown: false`, never treated
+//    as clinically normal.
 // ---------------------------------------------------------------------------
 
-import { TESTS, type Status, type TestDef } from "@/lib/data";
+import { TESTS, type ReportTestMetadata, type Status, type TestDef } from "@/lib/data";
 
 export const BORDERLINE_FRACTION = 0.1;
 
@@ -43,9 +46,14 @@ export interface ClientReportInput {
 }
 
 /** One earlier report kept for trend context. */
+export interface ClientReportResult extends ReportTestMetadata {
+  test: string;
+  value: number;
+}
+
 export interface ClientHistoryPoint {
   dateLabel?: string;
-  results: { test: string; value: number }[];
+  results: ClientReportResult[];
 }
 
 /** The validated, sanitised report context the agent is allowed to use. */
@@ -55,14 +63,14 @@ export interface ClientReport {
   dateLabel?: string;
   ageBand?: string;
   sex: "female" | "male" | "other" | "unspecified";
-  results: { test: string; value: number }[];
-  previous?: { dateLabel?: string; results: { test: string; value: number }[] };
+  results: ClientReportResult[];
+  previous?: { dateLabel?: string; results: ClientReportResult[] };
   /** Earlier reports, oldest first (the immediately previous one included). */
   history?: ClientHistoryPoint[];
 }
 
 const MAX_RESULTS = 40;
-const MAX_LABEL = 48;
+const MAX_LABEL = 96;
 /** Enough to show a direction of travel; more only costs prompt budget. */
 const MAX_HISTORY = 8;
 
@@ -87,18 +95,65 @@ function finiteValue(v: unknown): number | undefined {
   return Math.round(n * 100) / 100;
 }
 
-function validResults(v: unknown): { test: string; value: number }[] {
+function finiteBound(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  if (!Number.isFinite(n) || n < -1_000_000 || n > 1_000_000) return undefined;
+  return Math.round(n * 100) / 100;
+}
+
+function canonicalTest(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const value = v.trim().toLowerCase();
+  if (TESTS[value]) return value;
+  // The browser creates these ids only for uncatalogued report rows. Keeping
+  // the shape strict prevents arbitrary prompt keys from entering the model.
+  return /^report_[a-z0-9_-]{1,60}$/.test(value) ? value : undefined;
+}
+
+function reportMetadata(item: Record<string, unknown>): ReportTestMetadata {
+  const rawReference = item.reference;
+  const reference = typeof rawReference === "object" && rawReference !== null
+    ? (rawReference as Record<string, unknown>)
+    : undefined;
+  const reportLabel = label(item.label);
+  const reportUnit = label(item.unit)?.slice(0, 32);
+  const rawLow = finiteBound(reference?.low);
+  const rawHigh = finiteBound(reference?.high);
+  // A reversed pair is not a usable clinical range. Preserve its printed text
+  // for display, but drop both numeric bounds so it cannot create a false
+  // normal/high/low classification downstream.
+  const validPair = rawLow === undefined || rawHigh === undefined || rawLow <= rawHigh;
+  const low = validPair ? rawLow : undefined;
+  const high = validPair ? rawHigh : undefined;
+  const text = label(reference?.text);
+  return {
+    ...(reportLabel ? { label: reportLabel } : {}),
+    ...(reportUnit ? { unit: reportUnit } : {}),
+    ...(low !== undefined || high !== undefined || text
+      ? {
+          reference: {
+            ...(low !== undefined ? { low } : {}),
+            ...(high !== undefined ? { high } : {}),
+            ...(text ? { text } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function validResults(v: unknown): ClientReportResult[] {
   if (!Array.isArray(v)) return [];
-  const out: { test: string; value: number }[] = [];
+  const out: ClientReportResult[] = [];
   const seen = new Set<string>();
   for (const item of v.slice(0, MAX_RESULTS)) {
     if (typeof item !== "object" || item === null) continue;
-    const { test, value } = item as { test?: unknown; value?: unknown };
-    if (typeof test !== "string" || !TESTS[test] || seen.has(test)) continue;
-    const val = finiteValue(value);
+    const record = item as Record<string, unknown>;
+    const test = canonicalTest(record.test);
+    if (!test || seen.has(test)) continue;
+    const val = finiteValue(record.value);
     if (val === undefined) continue;
     seen.add(test);
-    out.push({ test, value: val });
+    out.push({ test, value: val, ...reportMetadata(record) });
   }
   return out;
 }
@@ -118,31 +173,35 @@ function validHistory(v: unknown): ClientHistoryPoint[] {
 }
 
 /**
- * Deterministic status from the catalogue range — the single source of truth.
- * Public so tests and the anonymizer use the identical rule.
+ * Deterministic status from a retained report range — the single source of
+ * truth. Public so the anonymizer and tests use the identical rule.
  */
-export function computeStatus(def: TestDef, value: number): Status {
-  const { low, high } = def.ref;
+export function computeStatusForRange(value: number, low?: number, high?: number): Status {
+  if (low !== undefined && high !== undefined && low > high) return "normal";
   if (low !== undefined && high !== undefined) {
-    const margin = (high - low) * BORDERLINE_FRACTION;
+    const margin = Math.max(0, high - low) * BORDERLINE_FRACTION;
     if (value < low) return "low";
     if (value > high) return "high";
     if (value <= low + margin || value >= high - margin) return "borderline";
     return "normal";
   }
   if (high !== undefined) {
-    const margin = high * BORDERLINE_FRACTION;
+    const margin = Math.abs(high) * BORDERLINE_FRACTION;
     if (value > high) return "high";
     if (value >= high - margin) return "borderline";
     return "normal";
   }
   if (low !== undefined) {
-    const margin = low * BORDERLINE_FRACTION;
+    const margin = Math.abs(low) * BORDERLINE_FRACTION;
     if (value < low) return "low";
     if (value <= low + margin) return "borderline";
     return "normal";
   }
   return "normal";
+}
+
+export function computeStatus(def: TestDef, value: number): Status {
+  return computeStatusForRange(value, def.ref.low, def.ref.high);
 }
 
 /** Age → band, mirroring anonymization_records.age_band. Never an exact age. */
@@ -162,18 +221,19 @@ export function clientAgeBand(v: unknown): string | undefined {
 }
 
 export function clientSex(v: unknown): ClientReport["sex"] {
-  const g = typeof v === "string" ? v.toLowerCase() : "";
-  if (g.startsWith("m") || g.includes("पुरुष") || g.includes("male")) return "male";
-  if (g.startsWith("f") || g.includes("स्त्री") || g.includes("महिला") || g.includes("female"))
-    return "female";
+  const g = typeof v === "string" ? v.toLowerCase().trim() : "";
+  // Check female first: the word "female" contains the substring "male".
+  if (g.startsWith("f") || g.includes("स्त्री") || g.includes("महिला") || g === "female") return "female";
+  if (g.startsWith("m") || g.includes("पुरुष") || g === "male") return "male";
   if (g.startsWith("o") || g.includes("other")) return "other";
   return "unspecified";
 }
 
 /**
  * Parse the request body's `report` field. Returns null when there is nothing
- * usable (absent, not an object, or no valid results) — the agent then falls
- * back to the seeded demo report exactly as before.
+ * usable (absent, not an object, or no valid results) — the agent then uses an
+ * empty report context. A demo report is available only through an explicit
+ * sample/demo action.
  */
 export function parseClientReport(raw: unknown): ClientReport | null {
   if (typeof raw !== "object" || raw === null) return null;

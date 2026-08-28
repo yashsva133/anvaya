@@ -29,12 +29,12 @@ import {
   Workflow,
   X,
 } from "lucide-react";
-import { useI18n, pick } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
 import { Logo, Sheet } from "@/components/core";
 import { AuthGuard } from "@/components/auth-guard";
 import { VoiceSheet } from "@/components/voice";
-import { PATIENT } from "@/lib/data";
+
 
 /* ------------------------------ LANGUAGE SWITCH ----------------------------- */
 
@@ -117,23 +117,22 @@ export function AppShell({ children }: { children: ReactNode }) {
     patient?.full_name ||
     profile?.full_name ||
     user?.user_metadata?.full_name ||
-    pick(PATIENT.name, s.lang);
+    user?.email?.split("@")[0] ||
+    (s.lang === "hi" ? "आपकी प्रोफ़ाइल" : "Your profile");
 
   const getInitials = (name: string) => {
     const parts = name.trim().split(/\s+/);
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
-    return (name.slice(0, 2) || "RS").toUpperCase();
+    return (name.slice(0, 2) || "U").toUpperCase();
   };
 
   const initials = getInitials(displayName);
 
   const displaySub = patient?.age
-    ? `${patient.age} · ${patient.sex ? (s.lang === "hi" && patient.sex === "male" ? "पुरुष" : s.lang === "hi" && patient.sex === "female" ? "महिला" : patient.sex) : pick(PATIENT.gender, s.lang)}`
-    : user?.email
-      ? user.email
-      : `${PATIENT.age} · ${pick(PATIENT.gender, s.lang)}`;
+    ? `${patient.age} · ${patient.sex ? (s.lang === "hi" && patient.sex === "male" ? "पुरुष" : s.lang === "hi" && patient.sex === "female" ? "महिला" : patient.sex) : ""}`
+    : user?.email || (s.lang === "hi" ? "रिपोर्ट अपलोड नहीं हुई" : "No report uploaded yet");
 
   const handleSignOut = async () => {
     await signOut();
@@ -244,7 +243,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <footer className="print:hidden mx-auto mt-6 w-full max-w-6xl pt-2">
             <p className="text-center text-xs text-slate-400 md:text-left">
-              RxAnvaya prototype · SIH 2026 · {pick(PATIENT.fictionalNote, s.lang)}
+              RxAnvaya · {s.lang === "hi" ? "आपकी रिपोर्ट, आपकी समझ" : "Your report, easier to understand"}
             </p>
           </footer>
         </main>

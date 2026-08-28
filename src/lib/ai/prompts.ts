@@ -13,9 +13,9 @@ import { languageOf, type AnswerLang } from "./languages";
 import { safeRedirect } from "./translations";
 
 export const PROMPT_KEY = "qa_answer";
-// .2 — the user turn now carries an answer language independent of the UI
-// language, and a channel (text | voice) that changes the formatting rules.
-export const PROMPT_VERSION = "2026-08-27.2";
+// .3 — the English model boundary now ends with a canonical safety footer;
+// the server validates/masks that line before any answer-language translation.
+export const PROMPT_VERSION = "2026-08-28.3";
 
 /**
  * How a language is named inside the prompt.
@@ -96,7 +96,7 @@ HOW YOU FORMAT
 - Keep the whole answer under 180 words.
 
 HOW YOU CLOSE
-End every answer with one short line telling the person this is not a diagnosis and to discuss it with their doctor. Write that line in the answer language.`;
+End every English-boundary answer with exactly this line, after the answer body: This is not a diagnosis. Please discuss these results with your doctor.`;
 
 export interface PromptBundle {
   system: string;
