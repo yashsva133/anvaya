@@ -2415,7 +2415,7 @@ questions, and `AI_RULES_FIRST=1` so frequent questions never touch the model at
 all.
 </details>
 
-### 🔴 B-B13. Spot the bug: `/api/process-report` returns a hard-coded report with invented values when OCR fails. Why is this the worst bug in the codebase, and how do you fix it?
+### 🔴 B-B13. ~~Spot the bug~~ *(fixed — keep it as a case study)*: `/api/process-report` returned a hard-coded report with invented values when OCR failed. Why was this the worst bug in the codebase, and what did the fix look like?
 
 <details>
 <summary>Answer</summary>
@@ -2434,6 +2434,13 @@ return NextResponse.json(fallbackReport, { status: 200 });
 where `fallbackReport` is a literal object with invented clinical values —
 *"Hemoglobin is low (12.5 g/dL) and Packed Cell Volume (PCV) is elevated
 (57.5%)…"* — plus a `chart_data[]` array of ten fabricated results.
+
+> ✅ **Status: fixed.** The fabricated fallback is deleted. An unreadable
+> upload now returns **422** with an actionable message and `results: 0`, and
+> the decision lives in `src/lib/reportExtraction.ts` behind 14 regression
+> tests (including two source-level guards that fail if a hard-coded
+> `fallbackReport` ever reappears). The analysis below is kept because *why*
+> it was dangerous is the interviewable part.
 
 **Why this is the worst bug here, not just a code smell:**
 
@@ -2454,25 +2461,50 @@ where `fallbackReport` is a literal object with invented clinical values —
    that an answer's numbers match the payload — but the payload itself is
    fictional, so the check passes while the whole interaction is unsound.
 
-**The fix, in order:**
+**The fix (applied):**
 
-1. **Delete the fallback.** Return `422` with an actionable message, exactly as
-   the CSV branch already does: *"We could not read this report. Try a clearer
-   photo, or enter the values manually."* A visible failure is safe; a fake
-   success is not.
-2. **Never invent clinical values anywhere in the codebase.** Make it a lint/architecture
-   rule: the only source of a result value is an extraction or a human.
-3. **Preserve the demo path explicitly.** If you want a sample report for demos,
-   require the explicit `isSample` flag (which already exists and returns
-   `DEFAULT_SAMPLE_REPORT` with `cached: true`) — never as the fallthrough for a
-   real upload.
-4. **Add a manual-entry path**, which is the genuinely useful fallback: if OCR
-   fails, let the person type the few values they care about.
-5. **Make failure observable.** Increment a metric on every extraction failure
-   and alert on the rate; OCR failures are expected sometimes, a spike means your
-   preprocessing broke.
-6. **Add a test** asserting that an unparseable image returns 4xx and contains no
-   `chart_data`.
+1. **Deleted the fallback.** The route now returns **422** with an actionable
+   message and `results: 0`. A visible failure is safe; a fake success is not.
+2. **Moved the decision into `src/lib/reportExtraction.ts`** with an explicit
+   invariant in the file header: *"This module can only return values that came
+   out of the file the person uploaded. It holds no sample report, no seed
+   report and no fallback report."* `outcomeFromCsv()` has exactly two branches
+   — parsed data, or a 422 — so there is nowhere for a third, invented branch to
+   hide. Keeping it out of the route also means it is testable without importing
+   `next/server` (the same reason `reportCsv.ts` lives where it does).
+3. **Made the OCR subprocess injectable** (`runOcr({ run })`) and honest: it
+   returns `""` when every interpreter fails or the output is empty, never
+   content of its own making.
+4. **Tagged the remaining demo data.** `DEFAULT_SAMPLE_REPORT` is now returned
+   only by the explicit `isSample=true` path and carries `sample: true`, so
+   nothing downstream can mistake it for a real parse.
+5. **Stopped caching failures** — the old code cached the fabricated report
+   under the file hash, so the lie was sticky for an hour.
+6. **Added 14 regression tests** (`scripts/test-report-extraction.mjs`, wired
+   into `npm test`): every unreadable input yields 422 with no `chart_data`;
+   every returned value is traceable to the uploaded text; `runOcr` returns `""`
+   on failure and stops at the first working interpreter; and two
+   **source-level guards** assert the route contains no `fallbackReport` and
+   that no `200` response is unsourced. Verified by mutation testing —
+   reintroducing the fallback fails two tests.
+
+**Verified against a running server** (`POST /api/process-report`):
+
+| Upload | Before | After |
+|---|---|---|
+| Valid CSV | 200, 2 results | 200, 2 results |
+| Unreadable CSV | 422 | 422 |
+| **Image, no OCR available** | **200 + invented values** | **422, `results: 0`** |
+| `isSample=true` | 200 | 200 + `sample: true` |
+| No file | 400 | 400 |
+
+**Still outstanding** (the genuinely useful follow-ups):
+- **A manual-entry path** — if OCR fails, let the person type the few values
+  they care about. That is the real fallback, and it is missing.
+- **Make failure observable** — increment a metric on every extraction failure
+  and alert on the rate (the route only `console.warn`s today).
+- **Async extraction** — the OCR output is still produced inside the request
+  (§ B-B9).
 
 **Two adjacent findings worth raising in the same breath:**
 
@@ -3576,7 +3608,7 @@ Open-book exercises. Each names the files you'll need.
 | 8 | Move extraction to a queue: job row, worker, status endpoint, retry + DLQ; delete the `exec` path. | The core scalability fix |
 | 9 | Add claim-level citations: force `{ claim, source_id }` output, verify each id, and render the chain from `v_citation_trail`. | Turns answer-level into sentence-level attribution |
 | 10 | Delete-a-patient drill-down: run `hard_delete_patient()` and enumerate what remains (backups, logs, AI rows, storage objects, third parties). | Where compliance claims meet reality |
-| 11 | Find and fix the fabricated-report fallback in `/api/process-report` (§ B-B13), with a regression test asserting no `chart_data` on failure. | The difference between a demo shortcut and a patient-safety defect |
+| 11 | Add a **manual-entry fallback**: when `/api/process-report` returns 422, let the person type the values themselves — and add a metric + alert on the extraction-failure rate. | The fix removed the fake data; this adds the path that actually helps the user |
 
 ---
 
