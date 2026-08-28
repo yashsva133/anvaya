@@ -1,9 +1,9 @@
 "use client";
 
-// Screen 8 — trend analysis: charts, what-changed insight, report timeline.
-// Connected to dynamic Supabase reports data.
+// Screen 8 — trends and report timeline. Every number on this screen comes
+// from the signed-in person's saved reports; an empty account stays empty.
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -13,6 +13,7 @@ import {
   ChevronRight,
   CircleAlert,
   GitCommitVertical,
+  SearchX,
   Sparkles,
   TrendingDown,
   TrendingUp,
@@ -26,91 +27,176 @@ import {
   TrendDirIcon,
 } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
-import {
-  TESTS,
-  TREND_CARDS,
-  fmtValue,
-} from "@/lib/data";
+import { fmtValue, reportStatusKnown, resolveTestDef, type Report, type TestDef } from "@/lib/data";
 import { useReportData } from "@/context/ReportDataContext";
 
-const SELECTABLE = [
-  "hemoglobin",
-  "hba1c",
-  "glucose",
-  "ldl",
-  "hdl",
-  "triglycerides",
-  "creatinine",
-  "platelets",
-];
+interface Point {
+  label: string;
+  value: number;
+  reportId: string;
+}
+
+function pointsFor(reports: Report[], testId: string, lang: "en" | "hi" | "bn"): Point[] {
+  return reports.flatMap((report) => {
+    const entry = report.entries.find((item) => item.test === testId);
+    if (!entry) return [];
+    return [{ label: pick(report.month, lang), value: entry.value, reportId: report.id }];
+  });
+}
+
+function deviation(def: TestDef, value: number): number {
+  if (def.ref.low !== undefined && value < def.ref.low) return def.ref.low - value;
+  if (def.ref.high !== undefined && value > def.ref.high) return value - def.ref.high;
+  return 0;
+}
+
+function statusFor(def: TestDef, value: number): "normal" | "borderline" | "high" | "low" {
+  if (def.ref.low !== undefined && value < def.ref.low) return "low";
+  if (def.ref.high !== undefined && value > def.ref.high) return "high";
+  const span =
+    def.ref.low !== undefined && def.ref.high !== undefined
+      ? def.ref.high - def.ref.low
+      : (def.ref.high ?? def.ref.low ?? 1) * 0.1;
+  if (
+    (def.ref.low !== undefined && value <= def.ref.low + span * 0.1) ||
+    (def.ref.high !== undefined && value >= def.ref.high - span * 0.1)
+  ) {
+    return "borderline";
+  }
+  return "normal";
+}
 
 export default function TrendsPage() {
   const { t, s } = useI18n();
-  const { reports, catalog } = useReportData();
+  const { reports, catalog, loading } = useReportData();
   const hi = s.lang === "hi";
-  const [selected, setSelected] = useState("hemoglobin");
-  const def = catalog[selected] || TESTS[selected] || TESTS.hemoglobin;
 
-  // Derive series from dynamic reports
-  const series = reports.map((r) => {
-    const entry = r.entries.find((e) => e.test.toLowerCase() === selected.toLowerCase());
-    return entry ? entry.value : (def.ref.low ?? 10);
+  const availableTests = useMemo(
+    () =>
+      [...new Set(reports.flatMap((report) => report.entries.map((entry) => entry.test)))]
+        .slice(0, 24),
+    [reports]
+  );
+  const [selected, setSelected] = useState("");
+
+  useEffect(() => {
+    if (availableTests.length > 0 && !availableTests.includes(selected)) {
+      setSelected(availableTests[0]);
+    }
+  }, [availableTests, selected]);
+
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="card-shadow mt-8 rounded-[2rem] border border-slate-100 bg-white p-8">
+          <div className="skeleton h-8 w-56 rounded-xl" />
+          <div className="skeleton mt-5 h-64 rounded-3xl" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (reports.length === 0 || availableTests.length === 0) {
+    return (
+      <AppShell>
+        <SectionTitle icon={TrendingUp} title={t("trends.title")} sub={t("trends.sub")} />
+        <section className="card-shadow mt-5 rounded-[2rem] border-2 border-dashed border-brand-200 bg-gradient-to-br from-brand-50 via-white to-mint-50 p-8 text-center md:p-12">
+          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-mint-100 text-mint-700">
+            <SearchX className="h-8 w-8" />
+          </span>
+          <h1 className="mt-5 text-2xl font-extrabold text-brand-950">
+            {hi ? "अभी कोई रिपोर्ट नहीं है" : "No trend data yet"}
+          </h1>
+          <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-relaxed text-slate-500">
+            {hi
+              ? "अपनी लैब रिपोर्ट अपलोड या स्कैन करें। असली परिणाम मिलने के बाद यहाँ रुझान दिखाई देंगे।"
+              : "Upload or scan a laboratory report. Trends will appear here after your actual results are saved."}
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Link href="/upload" className="inline-flex min-h-12 items-center rounded-2xl bg-brand-700 px-6 text-sm font-extrabold text-white hover:bg-brand-600">
+              {hi ? "रिपोर्ट अपलोड करें" : "Upload report"}
+            </Link>
+            <Link href="/scan" className="inline-flex min-h-12 items-center rounded-2xl border-2 border-mint-200 bg-white px-6 text-sm font-extrabold text-mint-800 hover:bg-mint-50">
+              {hi ? "स्कैन करें" : "Scan report"}
+            </Link>
+          </div>
+        </section>
+      </AppShell>
+    );
+  }
+
+  const selectedId = selected || availableTests[0];
+  const def = resolveTestDef(selectedId, catalog, reports.flatMap((r) => r.entries).find((e) => e.test === selectedId));
+  // Unknown report entries are intentionally kept; resolveTestDef gives them
+  // only their recorded label/unit/range instead of another test's metadata.
+  if (!def) return null;
+
+  const selectedEntry = reports
+    .flatMap((report) => report.entries)
+    .find((entry) => entry.test === selectedId);
+  const statusKnown = selectedEntry ? reportStatusKnown(selectedEntry) : def.ref.low !== undefined || def.ref.high !== undefined;
+  const points = pointsFor(reports, selectedId, s.lang);
+  const first = points[0];
+  const last = points[points.length - 1] ?? first;
+  const direction: "up" | "down" | "flat" =
+    !first || !last || last.value === first.value ? "flat" : last.value > first.value ? "up" : "down";
+  const status = last ? statusFor(def, last.value) : "normal";
+  const movingAway = first && last ? deviation(def, last.value) > deviation(def, first.value) : false;
+  const change = first && last ? Math.round((last.value - first.value) * 100) / 100 : 0;
+  const changeHead =
+    points.length < 2
+      ? hi
+        ? "यह आपकी पहली saved reading है।"
+        : "This is the first saved reading for this test."
+      : direction === "flat"
+        ? hi
+          ? `${pick(def.name, "hi")} में कोई बदलाव नहीं हुआ।`
+          : `${def.name.en} has not changed between these reports.`
+        : hi
+          ? `${pick(def.name, "hi")} ${fmtValue(first.value)} से ${fmtValue(last.value)} हुआ।`
+          : `${def.name.en} moved from ${fmtValue(first.value)} to ${fmtValue(last.value)}.`;
+  const changeSub =
+    !statusKnown
+      ? hi
+        ? "इस जाँच की संदर्भ सीमा नहीं मिली, इसलिए चिकित्सकीय दिशा तय नहीं की गई है।"
+        : "No trusted reference range was reported, so the app cannot assign a clinical direction."
+      : points.length < 2
+        ? hi
+          ? "एक और रिपोर्ट आने पर समय के साथ तुलना दिखाई जाएगी।"
+          : "A second report will let you compare the change over time."
+        : movingAway
+          ? hi
+          ? "यह मान अपनी संदर्भ सीमा से और दूर जा रहा है। डॉक्टर से चर्चा करें।"
+          : "This reading is moving farther from its reference range. Discuss it with your doctor."
+        : hi
+          ? "यह रुझान डॉक्टर के लिए उपयोगी संदर्भ दे सकता है।"
+          : "This trend can give your doctor useful context.";
+
+  const trendCards = availableTests.map((id) => {
+    const d = resolveTestDef(id, catalog, reports.flatMap((r) => r.entries).find((e) => e.test === id));
+    const values = pointsFor(reports, id, s.lang);
+    const a = values[0];
+    const b = values[values.length - 1] ?? a;
+    const dir: "up" | "down" | "flat" = !a || !b || a.value === b.value ? "flat" : b.value > a.value ? "up" : "down";
+    const st = b ? statusFor(d, b.value) : "normal";
+    const known = d.ref.low !== undefined || d.ref.high !== undefined;
+    return { id, def: d, values, dir, status: st, statusKnown: known, change: a && b ? Math.round((b.value - a.value) * 100) / 100 : 0 };
   });
-
-  const first = series[0] ?? (def.ref.low ?? 10);
-  const last = series[series.length - 1] ?? first;
-  const dir: "up" | "down" | "flat" =
-    last > first ? "up" : last < first ? "down" : "flat";
-
-  const changeCopy =
-    selected === "hemoglobin"
-      ? { head: t("trends.hbChange"), sub: t("trends.hbSimple"), bad: true }
-      : selected === "hba1c"
-        ? {
-            head: hi ? "HbA1c 6 महीनों में 5.9% से बढ़कर 7.2% हुआ।" : "HbA1c rose from 5.9% to 7.2% over 6 months.",
-            sub: hi ? "आपकी औसत शुगर धीरे-धीरे बढ़ रही है।" : "Your average sugar has been rising steadily.",
-            bad: true,
-          }
-        : selected === "creatinine"
-          ? {
-              head: hi ? "क्रिएटिनिन स्थिर है (0.9 → 1.0)।" : "Creatinine is stable (0.9 → 1.0).",
-              sub: hi ? "इस मान में कोई अर्थपूर्ण बदलाव नहीं हुआ।" : "No meaningful change in this value.",
-              bad: false,
-            }
-          : {
-              head: hi ? `${pick(def.name, "hi")} 6 महीनों में ${fmtValue(first)} से ${fmtValue(last)} हुआ।` : `${def.name.en} moved from ${fmtValue(first)} to ${fmtValue(last)} over 6 months.`,
-              sub: hi ? "यह जानकारी डॉक्टर के लिए उपयोगी है।" : "Useful information for your doctor.",
-              bad: dir !== "flat",
-            };
-
-  const getReportVal = (reportId: string, testId: string) => {
-    const rep = reports.find((r) => r.id === reportId);
-    return rep?.entries.find((e) => e.test === testId)?.value;
-  };
 
   return (
     <AppShell>
-      <SectionTitle
-        icon={TrendingUp}
-        title={t("trends.title")}
-        sub={t("trends.sub")}
-      />
+      <SectionTitle icon={TrendingUp} title={t("trends.title")} sub={t("trends.sub")} />
 
-      {/* selector chips */}
-      <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        {SELECTABLE.map((id) => {
-          const d = catalog[id] || TESTS[id] || TESTS.hemoglobin;
-          const active = selected === id;
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {availableTests.map((id) => {
+          const d = resolveTestDef(id, catalog, reports.flatMap((r) => r.entries).find((e) => e.test === id));
+          const active = selectedId === id;
           return (
             <button
               key={id}
               onClick={() => setSelected(id)}
               aria-pressed={active}
-              className={`flex min-h-14 shrink-0 items-center gap-2.5 rounded-2xl border-2 px-4 text-sm font-extrabold transition active:scale-95 ${
-                active
-                  ? "border-brand-700 bg-brand-700 text-white shadow-md"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-brand-300"
-              }`}
+              className={`flex min-h-14 shrink-0 items-center gap-2.5 rounded-2xl border-2 px-4 text-sm font-extrabold transition ${active ? "border-brand-700 bg-brand-700 text-white shadow-md" : "border-slate-200 bg-white text-slate-600 hover:border-brand-300"}`}
             >
               <TestIcon testId={id} size={30} />
               {pick(d.name, s.lang)}
@@ -119,306 +205,152 @@ export default function TrendsPage() {
         })}
       </div>
 
-      {/* main chart */}
-      <motion.div
-        key={selected}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="card-shadow mt-5 rounded-[2rem] border border-slate-100 bg-white p-6 md:p-7"
-      >
+      <motion.div key={selectedId} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card-shadow mt-5 rounded-[2rem] border border-slate-100 bg-white p-6 md:p-7">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-lg font-extrabold text-brand-950">
-              {pick(def.name, s.lang)}
-            </p>
-            <p className="text-xs font-bold text-slate-400">
-              {hi ? "सामान्य सीमा" : "Reference"}: {def.ref.text}
-            </p>
+            <p className="text-lg font-extrabold text-brand-950">{pick(def.name, s.lang)}</p>
+            <p className="text-xs font-bold text-slate-400">{hi ? "सामान्य सीमा" : "Reference"}: {def.ref.text}</p>
           </div>
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-extrabold ${
-              dir === "flat"
-                ? "bg-emerald-50 text-emerald-700"
-                : "bg-rose-50 text-rose-700"
-            }`}
-          >
-            <TrendDirIcon dir={dir} className="h-4 w-4" />
-            {fmtValue(first)} → {fmtValue(last)} {def.unit}
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-extrabold ${!statusKnown ? "bg-slate-50 text-slate-600" : status === "normal" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+            <TrendDirIcon dir={direction} className="h-4 w-4" />
+            {first && last ? `${fmtValue(first.value)} → ${fmtValue(last.value)} ${def.unit}` : hi ? "डेटा नहीं" : "No saved reading"}
           </span>
         </div>
         <div className="mt-2">
-          <TrendChart testId={selected} height={280} />
+          <TrendChart
+            testId={selectedId}
+            height={280}
+            data={points.map(({ label, value }) => ({ label, value }))}
+          />
         </div>
         <p className="mt-1 text-center text-[11px] font-bold text-slate-400">
-          {hi ? "हरा क्षेत्र = सामान्य सीमा · फ़रवरी → अगस्त 2026" : "Green band = usual range · Feb → Aug 2026"}
+          {def.ref.low !== undefined && def.ref.high !== undefined
+            ? hi
+              ? `हरा क्षेत्र = सामान्य सीमा · ${first?.label ?? ""} → ${last?.label ?? ""}`
+              : `Green band = usual range · ${first?.label ?? ""} → ${last?.label ?? ""}`
+            : def.ref.low !== undefined || def.ref.high !== undefined
+              ? hi
+                ? `रिपोर्ट में एक तरफ़ की सीमा है; चिकित्सकीय तुलना डॉक्टर करें · ${first?.label ?? ""} → ${last?.label ?? ""}`
+                : `Only one printed bound is available; discuss clinical meaning with your doctor · ${first?.label ?? ""} → ${last?.label ?? ""}`
+              : hi
+                ? `संदर्भ सीमा उपलब्ध नहीं · ${first?.label ?? ""} → ${last?.label ?? ""}`
+                : `Reference range not reported · ${first?.label ?? ""} → ${last?.label ?? ""}`}
         </p>
 
-        {/* what changed */}
         <div className="mt-5 grid gap-3 md:grid-cols-2">
-          <div
-            className={`rounded-2xl border p-4 ${
-              changeCopy.bad
-                ? "border-rose-200 bg-rose-50"
-                : "border-emerald-200 bg-emerald-50"
-            }`}
-          >
+          <div className={`rounded-2xl border p-4 ${movingAway ? "border-rose-200 bg-rose-50" : "border-emerald-200 bg-emerald-50"}`}>
             <p className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-slate-500">
-              {changeCopy.bad ? (
-                <CircleAlert className="h-4 w-4 text-rose-600" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              )}
+              {movingAway ? <CircleAlert className="h-4 w-4 text-rose-600" /> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
               {t("trends.whatChanged")}
             </p>
-            <p className={`mt-2 text-base font-extrabold ${changeCopy.bad ? "text-rose-800" : "text-emerald-800"}`}>
-              {changeCopy.head}
-            </p>
-            <p className="mt-1 text-sm font-bold text-slate-600">{changeCopy.sub}</p>
-            <div className="mt-3">
-              <ListenBtn compact text={`${changeCopy.head} ${changeCopy.sub}`} />
-            </div>
+            <p className={`mt-2 text-base font-extrabold ${movingAway ? "text-rose-800" : "text-emerald-800"}`}>{changeHead}</p>
+            <p className="mt-1 text-sm font-bold text-slate-600">{changeSub}</p>
+            <div className="mt-3"><ListenBtn compact text={`${changeHead} ${changeSub}`} /></div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-extrabold uppercase tracking-widest text-slate-500">
-              {t("trends.whyMatters")}
-            </p>
-            <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
-              {t("trends.whyText")}
-            </p>
+            <p className="text-xs font-extrabold uppercase tracking-widest text-slate-500">{t("trends.whyMatters")}</p>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">{t("trends.whyText")}</p>
+            {points.length > 1 && <p className="mt-2 text-xs font-bold text-slate-400">Change: {change > 0 ? "+" : ""}{change} {def.unit}</p>}
           </div>
         </div>
       </motion.div>
 
-      {/* trend cards */}
       <section className="mt-10">
-        <SectionTitle
-          icon={TrendingDown}
-          title={hi ? "सभी रुझान एक नज़र में" : "All trends at a glance"}
-        />
+        <SectionTitle icon={TrendingDown} title={hi ? "सभी रुझान एक नज़र में" : "All trends at a glance"} />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {TREND_CARDS.map((c, i) => {
-            const d = catalog[c.test] || TESTS[c.test] || TESTS.hemoglobin;
-            const tone = !c.attention
-              ? "border-emerald-200 bg-white"
-              : c.dir === "flat"
-                ? "border-emerald-200 bg-white"
-                : "border-rose-200 bg-white";
-            return (
-              <motion.button
-                key={c.test}
-                initial={{ opacity: 0, y: 10 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.04 }}
-                onClick={() => {
-                  setSelected(c.test);
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                className={`card-shadow rounded-3xl border-2 p-4 text-left transition hover:-translate-y-0.5 ${tone}`}
-              >
-                <div className="flex items-center justify-between">
-                  <TestIcon testId={c.test} size={42} />
-                  <span
-                    className={`flex h-9 w-9 items-center justify-center rounded-full ${
-                      !c.attention
-                        ? "bg-emerald-50 text-emerald-600"
-                        : "bg-rose-50 text-rose-600"
-                    }`}
-                  >
-                    <TrendDirIcon dir={c.dir} />
-                  </span>
-                </div>
-                <p className="mt-3 text-[15px] font-extrabold text-slate-800">
-                  {pick(d.name, s.lang)}
-                </p>
-                <p className={`text-sm font-extrabold ${!c.attention ? "text-emerald-600" : "text-rose-600"}`}>
-                  {pick(c.label, s.lang)}
-                </p>
-                <p className="mt-0.5 text-[11px] font-bold text-slate-400">{c.delta}</p>
-              </motion.button>
-            );
-          })}
+          {trendCards.map((card, i) => (
+            <motion.button
+              key={card.id}
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.04 }}
+              onClick={() => setSelected(card.id)}
+              className={`card-shadow rounded-3xl border-2 p-4 text-left transition hover:-translate-y-0.5 ${!card.statusKnown ? "border-slate-200 bg-white" : card.status === "normal" ? "border-emerald-200 bg-white" : "border-amber-200 bg-white"}`}
+            >
+              <div className="flex items-center justify-between">
+                <TestIcon testId={card.id} size={42} />
+                <span className={`flex h-9 w-9 items-center justify-center rounded-full ${!card.statusKnown ? "bg-slate-50 text-slate-500" : card.status === "normal" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}><TrendDirIcon dir={card.dir} /></span>
+              </div>
+              <p className="mt-3 text-[15px] font-extrabold text-slate-800">{pick(card.def.name, s.lang)}</p>
+              <p className={`text-sm font-extrabold ${!card.statusKnown ? "text-slate-600" : card.status === "normal" ? "text-emerald-600" : "text-amber-600"}`}>
+                {!card.statusKnown
+                  ? hi
+                    ? "संदर्भ सीमा नहीं मिली"
+                    : "Reference range not reported"
+                  : card.values.length < 2
+                    ? hi
+                      ? "पहली reading"
+                      : "First reading"
+                    : card.dir === "flat"
+                      ? hi
+                        ? "स्थिर"
+                        : "Stable"
+                      : card.dir === "up"
+                        ? hi
+                          ? "बढ़ा"
+                          : "Increased"
+                        : hi
+                          ? "घटा"
+                          : "Decreased"}
+              </p>
+              <p className="mt-0.5 text-[11px] font-bold text-slate-400">
+                {card.values.length > 1 ? `${card.change > 0 ? "+" : ""}${card.change} ${card.def.unit}` : (hi ? "तुलना के लिए और रिपोर्ट चाहिए" : "Need another report to compare")}
+              </p>
+            </motion.button>
+          ))}
         </div>
       </section>
 
-      {/* report timeline compare */}
       <section className="mt-10">
-        <SectionTitle
-          icon={CalendarDays}
-          title={t("trends.timeline")}
-          sub={hi ? "समय के साथ आपकी सभी रिपोर्ट्स का विस्तृत तुलनात्मक सफ़रनामा" : "Your chronological journey across all laboratory reports"}
-        />
-
+        <SectionTitle icon={CalendarDays} title={t("trends.timeline")} sub={hi ? "समय के साथ आपकी saved रिपोर्ट्स" : "Your saved laboratory reports in date order"} />
         <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-7 md:p-8">
-          <div className="relative border-l-[3px] border-dashed border-brand-200 ml-4 sm:ml-6 pl-6 sm:pl-8 space-y-6 sm:space-y-7">
-            {[...reports].reverse().map((r, idx) => {
-              const isLatest = idx === 0;
-              const warn = r.attention > 0;
-              const hb = getReportVal(r.id, "hemoglobin");
-              const a1c = getReportVal(r.id, "hba1c");
-              const ldl = getReportVal(r.id, "ldl");
-              const prevReport = [...reports].reverse()[idx + 1] ?? reports[0];
-
+          <div className="relative ml-4 space-y-6 border-l-[3px] border-dashed border-brand-200 pl-6 sm:ml-6 sm:space-y-7 sm:pl-8">
+            {[...reports].reverse().map((report, index) => {
+              const isLatest = index === 0;
+              const warn = report.attention > 0;
+              const previous = [...reports].reverse()[index + 1];
+              const keyTests = report.entries.slice(0, 6);
               return (
-                <motion.div
-                  key={r.id}
-                  initial={{ opacity: 0, x: -12 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.08 }}
-                  className="relative"
-                >
-                  <span
-                    className={`absolute -left-[39px] sm:-left-[47px] top-1.5 flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-2xl border-4 border-white text-xs font-black text-white shadow-md transition-all ${
-                      isLatest
-                        ? "bg-brand-700 ring-4 ring-brand-100"
-                        : warn
-                          ? "bg-amber-500 ring-2 ring-amber-100"
-                          : "bg-emerald-500 ring-2 ring-emerald-100"
-                    }`}
-                  >
-                    {isLatest ? (
-                      <Sparkles className="h-4 w-4" />
-                    ) : (
-                      <GitCommitVertical className="h-4 w-4" />
-                    )}
+                <motion.div key={report.id} initial={{ opacity: 0, x: -12 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.08 }} className="relative">
+                  <span className={`absolute -left-[39px] top-1.5 flex h-9 w-9 items-center justify-center rounded-2xl border-4 border-white text-xs font-black text-white shadow-md sm:-left-[47px] sm:h-10 sm:w-10 ${isLatest ? "bg-brand-700 ring-4 ring-brand-100" : warn ? "bg-amber-500 ring-2 ring-amber-100" : "bg-emerald-500 ring-2 ring-emerald-100"}`}>
+                    {isLatest ? <Sparkles className="h-4 w-4" /> : <GitCommitVertical className="h-4 w-4" />}
                   </span>
-
-                  <div
-                    className={`card-shadow group rounded-3xl border-2 p-5 sm:p-6 transition-all hover:border-brand-300 hover:shadow-md ${
-                      isLatest
-                        ? "border-brand-200 bg-gradient-to-br from-brand-50/50 via-white to-white"
-                        : "border-slate-100 bg-white"
-                    }`}
-                  >
+                  <div className={`card-shadow rounded-3xl border-2 p-5 transition-all hover:border-brand-300 sm:p-6 ${isLatest ? "border-brand-200 bg-gradient-to-br from-brand-50/50 via-white to-white" : "border-slate-100 bg-white"}`}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-base sm:text-lg font-extrabold text-brand-950">
-                            {pick(r.date, s.lang)}
-                          </h3>
-                          {isLatest && (
-                            <span className="rounded-full bg-brand-700 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-sm">
-                              {t("reports.latest")}
-                            </span>
-                          )}
-                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500">
-                            {r.testsCount} {t("reports.tests")}
-                          </span>
+                          <h3 className="text-base font-extrabold text-brand-950 sm:text-lg">{pick(report.date, s.lang)}</h3>
+                          {isLatest && <span className="rounded-full bg-brand-700 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">{t("reports.latest")}</span>}
+                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500">{report.testsCount} {t("reports.tests")}</span>
                         </div>
-                        <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-500">
-                          {warn ? (
-                            <span className="text-amber-700 font-extrabold">
-                              ⚠ {r.attention} {t("reports.needAttention")}
-                            </span>
-                          ) : (
-                            <span className="text-emerald-700 font-extrabold">
-                              ✓ {t("reports.allWithin")}
-                            </span>
-                          )}
-                        </p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">{warn ? <span className="font-extrabold text-amber-700">⚠ {report.attention} {t("reports.needAttention")}</span> : <span className="font-extrabold text-emerald-700">✓ {t("reports.allWithin")}</span>}</p>
                       </div>
-
-                      <Link
-                        href={
-                          isLatest
-                            ? `/compare?old=${prevReport?.id || "apr26"}&new=${r.id}`
-                            : `/compare?old=${r.id}&new=${reports[reports.length - 1]?.id || "aug26"}`
-                        }
-                        className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-brand-100/90 px-4 py-2 text-xs font-extrabold text-brand-800 transition hover:bg-brand-200 active:scale-95 shrink-0"
-                      >
-                        {isLatest
-                          ? hi
-                            ? "पिछली रिपोर्ट से तुलना"
-                            : "Compare with previous"
-                          : hi
-                            ? "नवीनतम से तुलना"
-                            : "Compare with latest"}
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </Link>
+                      {previous && (
+                        <Link href={`/compare?old=${previous.id}&new=${report.id}`} className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full bg-brand-100/90 px-4 py-2 text-xs font-extrabold text-brand-800 hover:bg-brand-200">
+                          {hi ? "तुलना करें" : "Compare reports"}<ChevronRight className="h-3.5 w-3.5" />
+                        </Link>
+                      )}
                     </div>
-
-                    <div className="mt-4 flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
-                      <span className="text-xs font-bold text-slate-400 mr-1">
-                        {hi ? "मुख्य मान:" : "Key markers:"}
-                      </span>
-                      {hb != null && (
-                        <span className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold shadow-sm ring-1 ring-slate-100 ${
-                          hb < 12.0 ? "bg-rose-50 text-rose-800" : "bg-slate-50 text-slate-700"
-                        }`}>
-                          <TestIcon testId="hemoglobin" size={18} />
-                          Hb: <span className="tabular">{hb}</span> g/dL
-                        </span>
-                      )}
-                      {a1c != null && (
-                        <span className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold shadow-sm ring-1 ring-slate-100 ${
-                          a1c >= 6.5 ? "bg-rose-50 text-rose-800" : a1c >= 5.7 ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-700"
-                        }`}>
-                          <TestIcon testId="hba1c" size={18} />
-                          HbA1c: <span className="tabular">{a1c}%</span>
-                        </span>
-                      )}
-                      {ldl != null && (
-                        <span className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold shadow-sm ring-1 ring-slate-100 ${
-                          ldl > 130 ? "bg-rose-50 text-rose-800" : "bg-slate-50 text-slate-700"
-                        }`}>
-                          <TestIcon testId="ldl" size={18} />
-                          LDL: <span className="tabular">{ldl}</span> mg/dL
-                        </span>
-                      )}
+                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                      {keyTests.map((entry) => {
+                        const entryDef = resolveTestDef(entry.test, catalog, entry);
+                        if (!entryDef) return null;
+                        return <span key={entry.test} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-1.5 text-xs font-extrabold text-slate-700 ring-1 ring-slate-100"><TestIcon testId={entry.test} size={18} />{pick(entryDef.name, s.lang)}: <span className="tabular">{fmtValue(entry.value)} {entryDef.unit}</span></span>;
+                      })}
                     </div>
                   </div>
                 </motion.div>
               );
             })}
           </div>
-
-          {/* HbA1c Long-term Trajectory Highlight */}
-          <div className="mt-8 rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-violet-50/70 via-white to-white p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm">
-                  <TrendingUp className="h-4 w-4" />
-                </span>
-                <p className="text-sm font-extrabold text-violet-950">
-                  {hi ? "दीर्घकालिक रुझान: HbA1c (ब्लड शुगर औसत)" : "Long-term Trajectory: HbA1c (Average Sugar)"}
-                </p>
-              </div>
-              <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-rose-700">
-                +1.3% in 6 mo
-              </span>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-3 tabular text-base sm:text-lg font-extrabold text-violet-900">
-              {reports.map((r, i) => (
-                <span key={r.id} className="flex items-center gap-2 sm:gap-3">
-                  <div className="flex flex-col items-center">
-                    <span
-                      className={`rounded-2xl px-3.5 py-1.5 shadow-sm transition ${
-                        i === reports.length - 1
-                          ? "bg-rose-600 text-white shadow-rose-600/30"
-                          : "bg-white text-slate-800 ring-1 ring-slate-200/70"
-                      }`}
-                    >
-                      {getReportVal(r.id, "hba1c") ?? 6.0}%
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-400 mt-1">
-                      {pick(r.month, s.lang)}
-                    </span>
-                  </div>
-                  {i < reports.length - 1 && (
-                    <ArrowRight className="h-4 w-4 text-violet-400 mb-4" strokeWidth={2.5} />
-                  )}
-                </span>
-              ))}
-            </div>
-
-            <p className="mt-3 text-xs sm:text-sm font-semibold leading-relaxed text-slate-600">
-              {t("trends.hba1cLine")}
-            </p>
-          </div>
         </div>
       </section>
+
+      <div className="mt-8 flex items-center gap-2 text-sm font-semibold text-slate-500">
+        <ArrowRight className="h-4 w-4 text-brand-500" />
+        {hi ? "हर रुझान केवल आपकी saved रिपोर्ट्स से बनाया गया है।" : "Every trend above is calculated only from your saved reports."}
+      </div>
     </AppShell>
   );
 }

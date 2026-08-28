@@ -106,7 +106,7 @@ const RULES: Rule[] = [
       bn: "লোহিত রক্তকণিকার ফলাফলগুলি পরস্পর যুক্ত",
     },
     tests: ["hemoglobin", "mcv", "rbc", "hematocrit", "mch", "rdw"],
-    anchors: ["hemoglobin"],
+    anchors: ["hemoglobin", "hematocrit", "mcv", "rbc"],
     minFlagged: 1,
     sourceId: "medlineplus-hgb",
     seededId: "pattern-blood",
@@ -119,7 +119,7 @@ const RULES: Rule[] = [
       bn: "কিডনি সম্পর্কিত ফলাফল একসঙ্গে দেখুন",
     },
     tests: ["creatinine", "potassium"],
-    anchors: ["creatinine"],
+    anchors: ["creatinine", "potassium"],
     minFlagged: 1,
     sourceId: "medlineplus-creatinine",
   },
@@ -131,7 +131,7 @@ const RULES: Rule[] = [
       bn: "শ্বেত রক্তকণিকার ফলাফলগুলি পরস্পর যুক্ত",
     },
     tests: ["wbc", "neutrophils", "lymphocytes", "eosinophils", "monocytes"],
-    anchors: ["wbc"],
+    anchors: ["wbc", "neutrophils", "lymphocytes"],
     minFlagged: 1,
     sourceId: "medlineplus-hgb",
   },
@@ -223,7 +223,9 @@ export function detectPatterns(payload: AnonymisedPayload, lang: LangCode): Dete
   const out: DetectedPattern[] = [];
 
   for (const rule of RULES) {
-    const present = rule.tests.map((id) => byTest.get(id)).filter((r): r is AnonymisedResult => !!r);
+    const present = rule.tests
+      .map((id) => byTest.get(id))
+      .filter((r): r is AnonymisedResult => !!r && r.status_known !== false);
     if (present.length < 2) continue;
 
     // An anchor must be present AND flagged, otherwise the cluster is just a

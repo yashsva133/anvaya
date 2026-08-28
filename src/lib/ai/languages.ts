@@ -321,6 +321,55 @@ export function detectLangFromText(text: string, fallback: AnswerLang = "en"): A
   return best;
 }
 
+/** Common imperative forms users type in each supported language. */
+const LOCALIZED_LANGUAGE_REQUESTS: readonly [AnswerLang, RegExp][] = [
+  ["hi", /(?:हिंदी|हिन्दी)\s*(?:में|मे)\s*(?:जवाब|उत्तर|बोलें|लिखें|बताएं|बताइए)/iu],
+  ["bn", /বাংলা(?:য়|য়|তে)\s*(?:উত্তর|জবাব|বলুন|লিখুন)/iu],
+  ["ta", /தமிழில்\s*(?:பதில்|விடை|சொல்லுங்கள்|எழுதுங்கள்)/iu],
+  ["te", /తెలుగులో\s*(?:సమాధానం|జవాబు|చెప్పండి|రాయండి)/iu],
+  ["mr", /मराठ(?:ीत|ीमध्ये|ी भाषेत)\s*(?:उत्तर|जवाब|बोला|लिहा|द्या)/iu],
+  ["gu", /ગુજરાતીમાં\s*(?:જવાબ|ઉત્તર|કહો|લખો|આપો)/iu],
+  ["kn", /ಕನ್ನಡದಲ್ಲಿ\s*(?:ಉತ್ತರ|ಜವಾಬು|ಹೇಳಿ|ಬರೆಯಿರಿ)/iu],
+  ["ml", /മലയാളത്തിൽ\s*(?:മറുപടി|ഉത്തരം|പറയൂ|എഴുതൂ)/iu],
+  ["pa", /ਪੰਜਾਬੀ\s*(?:ਵਿੱਚ|ਵਿਚ)\s*(?:ਜਵਾਬ|ਉੱਤਰ|ਦੱਸੋ|ਲਿਖੋ)/iu],
+  ["ur", /اردو\s*(?:میں|می)\s*(?:جواب|جملہ|بتائیں|لکھیں)/iu],
+  ["or", /ଓଡ଼ିଆରେ\s*(?:ଉତ୍ତର|ଜବାବ|କୁହନ୍ତୁ|ଲେଖନ୍ତୁ)/iu],
+  ["as", /অসমীয়াত\s*(?:উত্তৰ|জবাব|কওক|লিখক)/iu],
+  ["ne", /नेपालीमा\s*(?:जवाफ|उत्तर|भन्नुहोस्|लेख्नुहोस्)/iu],
+];
+
+/**
+ * Detect an explicit "answer in <language>" request in a typed question.
+ * This is intentionally conservative: ordinary mentions such as "my Hindi
+ * report" do not change the answer language unless the user asks for it.
+ */
+export function requestedLanguageFromQuestion(text: string): AnswerLang | undefined {
+  const q = text.trim().toLocaleLowerCase();
+  if (!q) return undefined;
+
+  for (const [code, pattern] of LOCALIZED_LANGUAGE_REQUESTS) {
+    if (pattern.test(q)) return code;
+  }
+
+  for (const language of LANGUAGES) {
+    const names = [language.english.toLocaleLowerCase(), language.native.toLocaleLowerCase()];
+    for (const name of names) {
+      if (
+        new RegExp(`(?:\\bin|\\binto|\\busing|\\banswer|\\bwrite|\\bspeak)\\s+${escapeRegExp(name)}(?:\\s+(?:language|mein|में|में जवाब|में उत्तर))?`, "iu").test(q) ||
+        q.includes(`${name} में`) ||
+        q.includes(`${name} mein`)
+      ) {
+        return language.code;
+      }
+    }
+  }
+  return undefined;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Language a text answer should be SPOKEN in, given what was asked for. */
 export function spokenLangFor(answerText: string, requested: AnswerLang): AnswerLang {
   const detected = detectLangFromText(answerText, requested);

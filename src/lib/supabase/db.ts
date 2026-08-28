@@ -4,9 +4,8 @@ import {
 } from "./client";
 import { getSupabaseAdminClient } from "./admin";
 import {
-  PATIENT as DEFAULT_PATIENT,
-  REPORTS as DEFAULT_REPORTS,
   TESTS as DEFAULT_TESTS,
+  createUnknownTestDef,
   type Report,
   type ReportEntry,
   type TestDef,
@@ -16,10 +15,17 @@ import {
 export interface ExtractedParam {
   parameter: string;
   value: number;
-  normal_min: number;
-  normal_max: number;
-  unit: string;
-  status: string;
+  normal_min?: number | null;
+  normal_max?: number | null;
+  reference_text?: string | null;
+  unit?: string | null;
+  status?: string | null;
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 export interface SaveExtractedReportPayload {
@@ -36,6 +42,10 @@ export interface SaveExtractedReportPayload {
  * If profileId is provided, only return the row belonging to that user.
  */
 export async function getPatientProfile(profileId?: string): Promise<any> {
+  // Never run an unscoped patient query. A new account must not inherit the
+  // first patient row returned by Supabase.
+  if (!profileId) return null;
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseBrowserClient();
@@ -86,7 +96,8 @@ export async function getPatientProfile(profileId?: string): Promise<any> {
         if (prof) {
           const nameEn = prof.full_name || prof.email?.split("@")[0] || "User";
           return {
-            id: prof.id,
+            // This is an auth profile, not a patients row. Do not reuse the
+            // profile UUID as a foreign-key patient_id when saving a report.
             name: { en: nameEn, hi: nameEn },
             nameShort: nameEn.split(" ")[0] || nameEn,
             age: 0,
@@ -124,23 +135,32 @@ export async function getLabTestCatalog(): Promise<Record<string, TestDef>> {
       if (!error && data && data.length > 0) {
         const catalog: Record<string, TestDef> = {};
         for (const item of data) {
-          const code = item.code.toLowerCase();
-          const fallback = DEFAULT_TESTS[code] || DEFAULT_TESTS.hemoglobin;
+          const code = String(item.code || "").trim().toLowerCase();
+          if (!code) continue;
+          const known = DEFAULT_TESTS[code];
+          const fallback = known || createUnknownTestDef(code, {
+            label: item.name_en || code,
+            unit: item.default_unit || undefined,
+          });
           const range = item.reference_ranges?.[0];
+          const low = finiteNumber(range?.ref_low) ?? fallback.ref.low;
+          const high = finiteNumber(range?.ref_high) ?? fallback.ref.high;
+          const unit = item.default_unit || fallback.unit;
+          const rangeText =
+            (low != null && high != null)
+              ? `${low}–${high}${unit ? ` ${unit}` : ""}`
+              : fallback.ref.text;
 
           catalog[code] = {
+            ...fallback,
             id: code,
-            name: { en: item.name_en, hi: item.name_hi || item.name_en },
+            name: { en: item.name_en || fallback.name.en, hi: item.name_hi || item.name_en || fallback.name.hi },
             simple: {
-              en: item.simple_name_en || item.name_en,
-              hi: item.simple_name_hi || item.name_hi || item.name_en,
+              en: item.simple_name_en || item.name_en || fallback.simple.en,
+              hi: item.simple_name_hi || item.name_hi || item.name_en || fallback.simple.hi,
             },
-            unit: item.default_unit || fallback.unit,
-            ref: {
-              low: range?.ref_low != null ? Number(range.ref_low) : fallback.ref.low,
-              high: range?.ref_high != null ? Number(range.ref_high) : fallback.ref.high,
-              text: fallback.ref.text,
-            },
+            unit,
+            ref: { low, high, text: rangeText },
             what: {
               med: item.description_medical || fallback.what.med,
               en: item.description_plain_en || fallback.what.en,
@@ -148,15 +168,7 @@ export async function getLabTestCatalog(): Promise<Record<string, TestDef>> {
               vs_en: item.description_very_simple_en || fallback.what.vs_en,
               vs_hi: item.description_very_simple_hi || fallback.what.vs_hi,
             },
-            icon: fallback.icon,
-            tint: fallback.tint,
-            ink: fallback.ink,
-            why: fallback.why,
-            causes: fallback.causes,
-            todo: fallback.todo,
-            conf: fallback.conf,
-            sources: fallback.sources,
-            related: fallback.related,
+            icon: item.icon_key || fallback.icon,
           };
         }
         return catalog;
@@ -173,6 +185,9 @@ export async function getLabTestCatalog(): Promise<Record<string, TestDef>> {
  * Fetch all reports for patient
  */
 export async function getPatientReports(patientId?: string): Promise<Report[]> {
+  // An omitted patient id means "no reports for this user", not "all reports".
+  if (!patientId) return [];
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseBrowserClient();
@@ -181,7 +196,8 @@ export async function getPatientReports(patientId?: string): Promise<Report[]> {
         .select(`
           id, collected_on, status, notes,
           test_results (
-            id, value, raw_unit,
+            id, value, corrected_value, raw_name, raw_unit, unit,
+            printed_ref_low, printed_ref_high, printed_ref_text,
             lab_test_catalog ( code )
           )
         `)
@@ -202,22 +218,68 @@ export async function getPatientReports(patientId?: string): Promise<Report[]> {
           });
           const monthStr = dateObj.toLocaleDateString("en-GB", { month: "short" });
 
-          const entries: ReportEntry[] = (r.test_results || []).map((tr: any) => {
-            const testCode = tr.lab_test_catalog?.code || "hemoglobin";
-            const val = Number(tr.value || 0);
-            const def = DEFAULT_TESTS[testCode] || DEFAULT_TESTS.hemoglobin;
-            let status: Status = "normal";
-            if (def.ref.low != null && val < def.ref.low) status = "low";
-            else if (def.ref.high != null && val > def.ref.high) status = "high";
+          const entries: ReportEntry[] = (r.test_results || []).flatMap((tr: any) => {
+            const rawName = typeof tr.raw_name === "string" ? tr.raw_name.trim() : "";
+            const catalogueCode = typeof tr.lab_test_catalog?.code === "string"
+              ? tr.lab_test_catalog.code.trim().toLowerCase()
+              : "";
+            const normalizedName = rawName.toLowerCase().replace(/[^a-z0-9]/g, "");
+            const testCode = catalogueCode || (normalizedName ? `report_${normalizedName.slice(0, 56)}` : "");
+            const rawValue = tr.corrected_value ?? tr.value;
+            const val = Number(rawValue);
+            if (!testCode || !Number.isFinite(val)) return [];
 
-            return {
+            const known = DEFAULT_TESTS[testCode];
+            const rawLow = finiteNumber(tr.printed_ref_low);
+            const rawHigh = finiteNumber(tr.printed_ref_high);
+            const suppliedRangeValid =
+              rawLow === undefined || rawHigh === undefined || rawLow <= rawHigh;
+            // A reversed OCR range is not trusted. Known tests may use their
+            // catalogue default; unknown tests stay without numeric bounds.
+            const low = suppliedRangeValid ? rawLow ?? known?.ref.low : known?.ref.low;
+            const high = suppliedRangeValid ? rawHigh ?? known?.ref.high : known?.ref.high;
+            let status: Status = "normal";
+            if (low != null && val < low) status = "low";
+            else if (high != null && val > high) status = "high";
+            else if (low != null && high != null) {
+              const margin = (high - low) * 0.1;
+              if (val <= low + margin || val >= high - margin) status = "borderline";
+            } else if (high != null && val >= high * 0.9) {
+              status = "borderline";
+            } else if (low != null && val <= low * 1.1) {
+              status = "borderline";
+            }
+
+            const unit = typeof tr.unit === "string" && tr.unit.trim()
+              ? tr.unit.trim()
+              : typeof tr.raw_unit === "string" ? tr.raw_unit.trim() : "";
+            const referenceText = typeof tr.printed_ref_text === "string" && tr.printed_ref_text.trim()
+              ? tr.printed_ref_text.trim()
+              : low != null && high != null
+                ? `${low}–${high}${unit ? ` ${unit}` : ""}`
+                : low != null
+                  ? `above ${low}${unit ? ` ${unit}` : ""}`
+                  : high != null
+                    ? `below ${high}${unit ? ` ${unit}` : ""}`
+                    : "Reference range not reported";
+            const statusKnown = low != null || high != null;
+
+            return [{
               test: testCode,
-              value: val,
+              value: Math.round(val * 100) / 100,
               status,
-            };
+              statusKnown,
+              ...(rawName ? { label: rawName } : {}),
+              ...(unit ? { unit } : {}),
+              reference: {
+                ...(low != null ? { low } : {}),
+                ...(high != null ? { high } : {}),
+                text: referenceText,
+              },
+            }];
           });
 
-          const attentionCount = entries.filter((e) => e.status !== "normal").length;
+          const attentionCount = entries.filter((e) => e.statusKnown !== false && e.status !== "normal").length;
 
           return {
             id: r.id,
@@ -234,7 +296,7 @@ export async function getPatientReports(patientId?: string): Promise<Report[]> {
     }
   }
 
-  return DEFAULT_REPORTS;
+  return [];
 }
 
 /**
@@ -243,56 +305,25 @@ export async function getPatientReports(patientId?: string): Promise<Report[]> {
 export async function saveExtractedReportToDb(
   payload: SaveExtractedReportPayload
 ): Promise<{ success: boolean; reportId: string; error?: string }> {
+  if (!isSupabaseConfigured()) {
+    return {
+      success: false,
+      reportId: `local-${Date.now()}`,
+      error: "Supabase is not configured; the report was kept in this browser only.",
+    };
+  }
+
   try {
     const admin = getSupabaseAdminClient();
     const collectedOn = payload.collected_on || new Date().toISOString().split("T")[0];
 
     console.log("[SUPABASE DB SAVE] Starting save for report collected on:", collectedOn);
 
-    // 1. Get or create a patient row for active patient
-    let patientId = payload.patient_id;
+    // 1. Use the authenticated user's patient row. Never select an arbitrary
+    // patient and never create a fictional default record for a new account.
+    const patientId = payload.patient_id;
     if (!patientId) {
-      const { data: patientData, error: pFindErr } = await admin
-        .from("patients")
-        .select("id")
-        .limit(1)
-        .maybeSingle();
-
-      if (pFindErr) {
-        console.warn("[SUPABASE DB SAVE] Error finding patient:", pFindErr.message);
-      }
-
-      if (patientData?.id) {
-        patientId = patientData.id;
-        console.log("[SUPABASE DB SAVE] Found existing patient id:", patientId);
-      } else {
-        // Create default patient row
-        const { data: newPatient, error: patientErr } = await admin
-          .from("patients")
-          .insert({
-            full_name: "Rahul Singh",
-            name_local_script: "राहुल सिंह",
-            sex: "male",
-            preferred_language: "en",
-            reading_level: "standard",
-          })
-          .select("id")
-          .single();
-
-        if (patientErr) {
-          console.error("[SUPABASE DB SAVE] Error creating patient row:", patientErr);
-          throw new Error(`Failed to create patient: ${patientErr.message}`);
-        }
-
-        if (newPatient) {
-          patientId = newPatient.id;
-          console.log("[SUPABASE DB SAVE] Created new patient id:", patientId);
-        }
-      }
-    }
-
-    if (!patientId) {
-      throw new Error("Could not find or create a valid patient_id in patients table.");
+      throw new Error("patient_id is required to save a report for this account.");
     }
 
     // 2. Insert into lab_reports
@@ -301,7 +332,7 @@ export async function saveExtractedReportToDb(
       .insert({
         patient_id: patientId,
         collected_on: collectedOn,
-        lab_name: payload.lab_name || "City Diagnostics",
+        lab_name: payload.lab_name || null,
         status: "analysed",
         upload_channel: "file",
         notes: payload.patient_summary || null,
@@ -353,7 +384,11 @@ export async function saveExtractedReportToDb(
           unit: p.unit || null,
           printed_ref_low: p.normal_min ?? null,
           printed_ref_high: p.normal_max ?? null,
-          printed_ref_text: `${p.normal_min ?? 0}–${p.normal_max ?? 0} ${p.unit ?? ""}`,
+          printed_ref_text:
+            p.reference_text ||
+            (p.normal_min != null && p.normal_max != null
+              ? `${p.normal_min}–${p.normal_max}${p.unit ? ` ${p.unit}` : ""}`
+              : null),
           value_source: "ocr",
           original_value: p.value,
         };
@@ -388,6 +423,10 @@ export async function saveExtractedReportToDb(
 export async function deleteReportFromDb(
   reportId: string
 ): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured()) {
+    return { success: false, error: "Supabase is not configured; only local report data was deleted." };
+  }
+
   try {
     const admin = getSupabaseAdminClient();
 

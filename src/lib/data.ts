@@ -1,4 +1,4 @@
-﻿// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // RxAnvaya — sample content model.
 // ALL patient data below is FICTIONAL sample data created for the SIH 2026
 // prototype demonstration. It does not represent any real person.
@@ -624,6 +624,108 @@ export const TESTS: Record<string, TestDef> = {
 
 export const TEST_IDS = Object.keys(TESTS);
 
+/**
+ * Metadata captured with a report result when its test is not in our clinical
+ * catalogue. It is intentionally limited to what was printed beside that
+ * result; it must never be filled with another test's name, unit, or range.
+ */
+export interface ReportTestMetadata {
+  label?: string;
+  unit?: string;
+  reference?: { low?: number; high?: number; text?: string };
+}
+
+function cleanReportLabel(value: string | undefined, fallback: string): string {
+  const clean = value
+    ?.replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 96);
+  if (clean) return clean;
+  return fallback
+    .replace(/^report_/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .trim() || "Unlabelled test";
+}
+
+/**
+ * Safe presentation definition for a real result that is not catalogued yet.
+ * The copy is deliberately non-clinical: without a trusted definition we show
+ * the recorded label/value and tell the person to use the printed range or ask
+ * their clinician, rather than borrowing Hemoglobin metadata.
+ */
+export function createUnknownTestDef(
+  testId: string,
+  metadata: ReportTestMetadata = {}
+): TestDef {
+  const label = cleanReportLabel(metadata.label, testId);
+  const unit = metadata.unit?.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 32) || "";
+  const low = Number.isFinite(metadata.reference?.low) ? metadata.reference?.low : undefined;
+  const high = Number.isFinite(metadata.reference?.high) ? metadata.reference?.high : undefined;
+  const rangeText =
+    metadata.reference?.text?.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 96) ||
+    (low !== undefined && high !== undefined
+      ? `${low}–${high}${unit ? ` ${unit}` : ""}`
+      : low !== undefined
+        ? `above ${low}${unit ? ` ${unit}` : ""}`
+        : high !== undefined
+          ? `below ${high}${unit ? ` ${unit}` : ""}`
+          : "Reference range not reported");
+
+  return {
+    id: testId,
+    unit,
+    name: { en: label, hi: label },
+    simple: { en: label, hi: label },
+    icon: "flask",
+    tint: "bg-slate-100",
+    ink: "text-slate-500",
+    ref: { low, high, text: rangeText },
+    what: {
+      med: "This test was recorded from your report, but an explanation is not available in the current catalogue.",
+      en: "This test was recorded from your report, but an explanation is not available yet.",
+      hi: "यह जाँच आपकी रिपोर्ट से दर्ज की गई है, लेकिन इसकी व्याख्या अभी उपलब्ध नहीं है।",
+      vs_en: "This result came from your report. Ask your doctor what it means.",
+      vs_hi: "यह परिणाम आपकी रिपोर्ट से लिया गया है। इसका अर्थ डॉक्टर से पूछें।",
+    },
+    why: {
+      en: "Use the reference range printed on your report; this result needs clinical context.",
+      hi: "अपनी रिपोर्ट पर दी गई संदर्भ सीमा देखें; इस परिणाम के लिए डॉक्टर का संदर्भ ज़रूरी है।",
+      vs_en: "Your doctor can explain this result using the printed range.",
+    },
+    causes: {
+      en: "The app does not have enough trusted information to explain this test or its possible causes.",
+      hi: "इस जाँच या इसके संभावित कारणों को समझाने के लिए ऐप के पास पर्याप्त विश्वसनीय जानकारी नहीं है।",
+    },
+    todo: {
+      en: "Please show this result and its printed reference range to your doctor or laboratory.",
+      hi: "इस परिणाम और इसकी छपी हुई संदर्भ सीमा को डॉक्टर या प्रयोगशाला को दिखाएँ।",
+      vs_en: "Ask your doctor or laboratory about this result.",
+    },
+    conf: {
+      level: "moderate",
+      pct: 0,
+      note: {
+        en: "The result was recorded, but this test is not in the explanation catalogue.",
+        hi: "परिणाम दर्ज किया गया है, लेकिन यह जाँच व्याख्या सूची में नहीं है।",
+      },
+    },
+    sources: [],
+    related: [],
+  };
+}
+
+/** Resolve known metadata first, then preserve an unknown result honestly. */
+export function resolveTestDef(
+  testId: string,
+  catalog?: Record<string, TestDef>,
+  metadata?: ReportTestMetadata
+): TestDef {
+  const key = testId.toLowerCase();
+  return catalog?.[testId] || catalog?.[key] || TESTS[testId] || TESTS[key] || createUnknownTestDef(key, metadata);
+}
+
 /* --------------------------------- SOURCES -------------------------------- */
 
 export interface Source {
@@ -701,10 +803,21 @@ export const SOURCES: Source[] = [
 
 /* --------------------------------- REPORTS -------------------------------- */
 
-export interface ReportEntry {
+export interface ReportEntry extends ReportTestMetadata {
+  /** Catalogue code, or a stable report_* id for an uncatalogued result. */
   test: string;
   value: number;
   status: Status;
+  /** False when the report had no trusted range from which to classify it. */
+  statusKnown?: boolean;
+}
+
+/** Whether a result's status came from a catalogue or a printed range. */
+export function reportStatusKnown(entry: ReportEntry): boolean {
+  return (
+    entry.statusKnown ??
+    Boolean(TESTS[entry.test] || entry.reference?.low !== undefined || entry.reference?.high !== undefined)
+  );
 }
 
 export interface Report {

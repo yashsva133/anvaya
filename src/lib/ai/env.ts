@@ -9,6 +9,22 @@
 
 export type ProviderKind = "ollama" | "openai" | "vertex" | "mock" | "none";
 
+/**
+ * Server-side translation used when MedGemma is asked to serve a non-English
+ * language. Google Cloud Translation v2 is intentionally represented as a
+ * tiny REST adapter in src/lib/ai/translate.ts rather than a browser SDK.
+ */
+export interface TranslationConfig {
+  /** `none` keeps the legacy direct-generation path; `google` enables the bridge. */
+  provider: "google" | "none";
+  /** Never expose this value to the browser or include it in status output. */
+  apiKey?: string;
+  /** Official Cloud Translation v2 endpoint; overrideable for a compatible gateway/tests. */
+  baseUrl: string;
+  timeoutMs: number;
+  maxChars: number;
+}
+
 export interface AiConfig {
   /** Which inference backend to call. `none` => rule fallback only. */
   provider: ProviderKind;
@@ -41,6 +57,8 @@ export interface SupabaseConfig {
 
 export interface AiEnv {
   ai: AiConfig;
+  /** Optional for callers that construct an AiEnv in tests; loadAiEnv always fills it. */
+  translation?: TranslationConfig;
   db: SupabaseConfig;
   /** True when a real model provider is configured. */
   live: boolean;
@@ -68,6 +86,38 @@ function bool(name: string, fallback: boolean): boolean {
   const raw = str(name);
   if (raw === undefined) return fallback;
   return /^(1|true|yes|on)$/i.test(raw);
+}
+
+function resolveTranslationProvider(): TranslationConfig["provider"] {
+  const requested = (str("TRANSLATION_PROVIDER") ?? "").toLowerCase();
+  if (["none", "off", "disabled"].includes(requested)) return "none";
+  if (["google", "gtranslate", "google-cloud", "google-cloud-translation"].includes(requested)) {
+    return "google";
+  }
+  // A key is enough to opt in, so adding the key is all that is needed in a
+  // deployment when no explicit provider name was set.
+  return str("GOOGLE_TRANSLATE_API_KEY") ||
+    str("GOOGLE_CLOUD_TRANSLATE_API_KEY") ||
+    str("TRANSLATE_API_KEY")
+    ? "google"
+    : "none";
+}
+
+function loadTranslationConfig(): TranslationConfig {
+  const provider = resolveTranslationProvider();
+  return {
+    provider,
+    apiKey:
+      str("GOOGLE_TRANSLATE_API_KEY") ??
+      str("GOOGLE_CLOUD_TRANSLATE_API_KEY") ??
+      str("TRANSLATE_API_KEY"),
+    baseUrl:
+      str("GOOGLE_TRANSLATE_BASE_URL") ??
+      str("TRANSLATE_BASE_URL") ??
+      "https://translation.googleapis.com/language/translate/v2",
+    timeoutMs: Math.max(2000, Math.floor(num("TRANSLATION_TIMEOUT_MS", 12000))),
+    maxChars: Math.max(500, Math.floor(num("TRANSLATION_MAX_CHARS", 12000))),
+  };
 }
 
 function resolveProvider(): ProviderKind {
@@ -138,8 +188,11 @@ export function loadAiEnv(): AiEnv {
       trustFormula: str("AI_TRUST_FORMULA") ?? "0.6*model + 0.4*retrieval",
       rulesFirst: bool("AI_RULES_FIRST", false),
     },
+    translation: loadTranslationConfig(),
     db: { url, serviceKey },
-    live: provider !== "none" && provider !== "mock" ? Boolean(baseUrl) : provider === "mock",
+    // `mock` exercises the pipeline but never calls a model; keep it in demo
+    // mode so health/status and patient-facing provenance cannot imply live AI.
+    live: provider !== "none" && provider !== "mock" ? Boolean(baseUrl) : false,
     persistence: Boolean(url && serviceKey),
   };
 }
@@ -156,6 +209,14 @@ export function describeConfig(env: AiEnv) {
     min_score: env.ai.minScore,
     trust_formula: env.ai.trustFormula,
     rules_first: env.ai.rulesFirst,
+    translation: {
+      provider: env.translation?.provider ?? "none",
+      configured: Boolean(env.translation?.provider === "google" && env.translation.apiKey),
+      base_url: env.translation?.baseUrl ?? null,
+      // This is an architectural choice, not a claim that every model needs it:
+      // when configured, non-English turns use English as the model boundary.
+      mode: env.translation?.provider === "google" && env.translation.apiKey ? "english_bridge" : "direct_model",
+    },
     mode: env.live ? "live" : "demo",
     persistence: env.persistence ? "supabase" : "none",
   };

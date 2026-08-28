@@ -113,14 +113,35 @@ export default function ScanPage() {
         }
 
         const data = await res.json();
+        const entries = mapChartDataToEntries(data.chart_data || []);
+        if (entries.length === 0) {
+          toast(hi ? "रिपोर्ट में कोई परिणाम नहीं मिला।" : "No lab results were found in this scan.", "warn");
+          setCaptured(false);
+          return;
+        }
+
+        const collectedOn = new Date();
+        const dateEn = collectedOn.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+        const dateHi = collectedOn.toLocaleDateString("hi-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+        const monthEn = collectedOn.toLocaleDateString("en-GB", { month: "short" });
+        const monthHi = collectedOn.toLocaleDateString("hi-IN", { month: "short" });
+
         setStoredActiveReport({
           id: `report-${Date.now()}`,
-          date: { en: "27 Aug 2026", hi: "27 अगस्त 2026" },
-          month: { en: "Aug", hi: "अग." },
+          date: { en: dateEn, hi: dateHi },
+          month: { en: monthEn, hi: monthHi },
           patient_summary: data.patient_summary,
           flagged_issues: data.flagged_issues,
           audio_script: data.audio_script,
-          entries: mapChartDataToEntries(data.chart_data || []),
+          entries,
         });
         
         router.push("/processing");

@@ -21,7 +21,12 @@ import { askAgent } from "@/lib/ai/agent";
 import { parseClientReport } from "@/lib/ai/clientReport";
 import { loadAiEnv } from "@/lib/ai/env";
 import { persistTurn } from "@/lib/ai/persistence";
-import { detectLangFromText, toAnswerLang, type AnswerLang } from "@/lib/ai/languages";
+import {
+  detectLangFromText,
+  requestedLanguageFromQuestion,
+  toAnswerLang,
+  type AnswerLang,
+} from "@/lib/ai/languages";
 import type { LangCode } from "@/lib/data";
 import type { ReadingLevel } from "@/lib/ai/types";
 
@@ -44,6 +49,7 @@ interface AnswerBody {
   session?: unknown;
   report?: unknown;
   patientId?: unknown;
+  history?: unknown;
 }
 
 export async function POST(req: Request) {
@@ -62,10 +68,9 @@ export async function POST(req: Request) {
   // Answer language: what the client asked for, else what the question is
   // written in, else the UI language. A Tamil question typed into the English
   // UI is answered in Tamil without anyone having to pick it.
-  const answerLang: AnswerLang = toAnswerLang(
-    body.answerLang,
-    body.answerLang === undefined ? detectLangFromText(question, lang) : lang
-  );
+  const requestedInQuestion = requestedLanguageFromQuestion(question);
+  const answerLang: AnswerLang =
+    requestedInQuestion ?? toAnswerLang(body.answerLang, detectLangFromText(question, lang));
   const channel = body.channel === "voice" ? "voice" : "text";
   const reading: ReadingLevel =
     body.reading === "simple" || body.reading === "advanced" || body.reading === "very"
@@ -83,6 +88,13 @@ export async function POST(req: Request) {
   // The trust boundary: anything the client claims about its report stops here.
   const report = parseClientReport(body.report);
 
+  const history = Array.isArray(body.history)
+    ? (body.history.filter((msg: any) => typeof msg === "object" && msg !== null && typeof msg.role === "string" && typeof msg.text === "string" && (msg.role === "user" || msg.role === "assistant" || msg.role === "ai")).map((msg: any) => ({
+        role: msg.role === "ai" ? "assistant" : msg.role,
+        text: msg.text,
+      })) as { role: "user" | "assistant"; text: string }[])
+    : undefined;
+
   const answer = await askAgent({
     question,
     lang,
@@ -91,6 +103,7 @@ export async function POST(req: Request) {
     readingLevel: reading,
     sessionId,
     report: report ?? undefined,
+    history,
   });
 
   // Best-effort persistence of the full turn. Never blocks correctness: the
@@ -124,11 +137,15 @@ export async function POST(req: Request) {
     confidence: answer.confidence,
     // ---- additive provenance ----
     engine: answer.engine,
-    model: answer.generation?.model ?? (env.live ? env.ai.model : null),
-    personalized: Boolean(report),
+    model:
+      answer.engine === "medgemma" || answer.engine === "mock"
+        ? answer.generation?.model ?? env.ai.model
+        : null,
+    personalized: answer.payload.results.length > 0,
     language: answer.language,
     /** The language the returned text is actually written in (see agent.ts). */
     answer_lang: answer.answer_lang,
+    translation: answer.translation ?? null,
     /** Present when the requested language could not be honoured. */
     language_note: answer.language_note ?? null,
     channel,

@@ -10,11 +10,8 @@ import {
 } from "react";
 import { useAuth } from "@/lib/auth";
 import {
-  PATIENT as DEFAULT_PATIENT,
-  REPORTS as DEFAULT_REPORTS,
   TESTS as DEFAULT_TESTS,
-  TREND_CARDS as DEFAULT_TREND_CARDS,
-  PATTERNS as DEFAULT_PATTERNS,
+  resolveTestDef,
   type Report,
   type ReportEntry,
   type TestDef,
@@ -22,9 +19,11 @@ import {
   type Pattern,
 } from "@/lib/data";
 import {
+  getEmptyActiveReport,
   getStoredActiveReport,
   getStoredReportsHistory,
   deleteStoredReport,
+  setReportStoreScope,
   type ActiveReportState,
 } from "@/lib/report-store";
 import {
@@ -34,11 +33,7 @@ import {
 } from "@/lib/supabase/db";
 
 export interface PatientInfo {
-  /**
-   * The `patients.id` uuid, present only when the profile was loaded from
-   * Supabase. The AI endpoints need it to file a conversation against the right
-   * person; the seeded demo profile deliberately has none.
-   */
+  /** The `patients.id` uuid, present only when the profile was loaded from Supabase. */
   id?: string;
   name: { en: string; hi: string };
   nameShort: string;
@@ -62,52 +57,61 @@ interface ReportDataContextType {
   deleteReport: (reportId: string) => Promise<boolean>;
 }
 
+const EMPTY_PATIENT: PatientInfo = {
+  name: { en: "", hi: "" },
+  nameShort: "",
+  age: 0,
+  gender: { en: "", hi: "" },
+  email: "",
+};
+
 const ReportDataContext = createContext<ReportDataContextType | null>(null);
 
 export function ReportDataProvider({ children }: { children: ReactNode }) {
   const { user, profile } = useAuth();
 
-  const [patient, setPatient] = useState<PatientInfo>({
-    ...DEFAULT_PATIENT,
-    name: { en: "Rahul Singh", hi: "राहुल सिंह" },
-    nameShort: "Rahul",
-    email: "rahul.singh42@gmail.com",
-  });
+  // No fictional patient is placed in a real user's context. The catalogue is
+  // safe static reference data; reports and patient identity are not.
+  const [patient, setPatient] = useState<PatientInfo>(EMPTY_PATIENT);
   const [catalog, setCatalog] = useState<Record<string, TestDef>>(DEFAULT_TESTS);
-  const [activeReport, setActiveReport] = useState<ActiveReportState>(
-    getStoredActiveReport()
-  );
-  const [reports, setReports] = useState<Report[]>(getStoredReportsHistory());
-  const [loading, setLoading] = useState(false);
+  const [activeReport, setActiveReport] = useState<ActiveReportState>(getEmptyActiveReport());
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // If we have an authenticated user, build patient info from auth profile first
       if (user) {
-        const authName = profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "User";
+        const authName =
+          profile?.full_name ||
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.email?.split("@")[0] ||
+          "User";
         setPatient((prev) => ({
           ...prev,
           name: { en: authName, hi: authName },
           nameShort: authName.split(" ")[0] || authName,
           email: user.email || prev.email,
         }));
+      } else {
+        setPatient(EMPTY_PATIENT);
       }
 
-      // 1. Fetch patient profile from Supabase (may override with richer data)
+      // Fetch only this user's patient row. An unscoped query would leak the
+      // first patient in a shared database to a newly registered user.
       const profileId = user?.id;
-      const p = await getPatientProfile(profileId);
+      const p = profileId ? await getPatientProfile(profileId) : null;
       if (p) setPatient(p as PatientInfo);
 
-      // 2. Fetch catalog definitions
       const cat = await getLabTestCatalog();
       if (cat) setCatalog(cat);
 
       // 3. Fetch historical reports from Supabase or local store
-      const rpts = await getPatientReports();
+      const rpts = await getPatientReports(p?.id);
       if (rpts && rpts.length > 0) {
         setReports(rpts);
-      } else if (session?.user) {
+      } else if (user) {
         setReports([]);
       } else {
         setReports(getStoredReportsHistory());
@@ -116,18 +120,20 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
       // 4. Sync stored active report
       setActiveReport(getStoredActiveReport());
     } catch (err) {
-      console.warn("Could not load full live report data, fallback active:", err);
+      console.warn("Could not load full live report data:", err);
       setActiveReport(getStoredActiveReport());
       setReports(getStoredReportsHistory());
     } finally {
       setLoading(false);
     }
-  }, [user?.id, profile?.full_name]);
+  }, [user, profile]);
 
   useEffect(() => {
-    loadData();
+    // Namespacing happens before reading local storage. A new account therefore
+    // starts with an empty report list even if another account used this browser.
+    setReportStoreScope(user?.id);
+    void loadData();
 
-    // Listen to local storage updates from "Looks correct" save
     const onReportUpdated = () => {
       setActiveReport(getStoredActiveReport());
       setReports(getStoredReportsHistory());
@@ -140,50 +146,40 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("anvaya_report_updated", onReportUpdated);
       window.removeEventListener("storage", onReportUpdated);
     };
-  }, [loadData]);
+  }, [loadData, user?.id]);
 
   const getEntry = useCallback(
-    (testId: string): ReportEntry | undefined => {
-      return activeReport.entries.find((e) => e.test === testId);
-    },
+    (testId: string): ReportEntry | undefined =>
+      activeReport.entries.find((e) => e.test === testId),
     [activeReport]
   );
 
   const getTestDef = useCallback(
-    (testId: string): TestDef => {
-      return catalog[testId] || DEFAULT_TESTS[testId] || DEFAULT_TESTS.hemoglobin;
-    },
+    (testId: string): TestDef => resolveTestDef(testId, catalog),
     [catalog]
   );
 
-  const deleteReport = useCallback(
-    async (reportId: string): Promise<boolean> => {
-      // 1. Optimistically update local context state
-      setReports((prev) => prev.filter((r) => r.id !== reportId));
+  const deleteReport = useCallback(async (reportId: string): Promise<boolean> => {
+    setReports((prev) => prev.filter((r) => r.id !== reportId));
+    deleteStoredReport(reportId);
+    setActiveReport(getStoredActiveReport());
 
-      // 2. Delete from localStorage
-      deleteStoredReport(reportId);
-      setActiveReport(getStoredActiveReport());
-
-      // 3. Delete from Supabase backend if connected
-      try {
-        const res = await fetch("/api/delete-report", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reportId }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.success === false) {
-          console.warn("[DELETE REPORT] DB deletion note:", data.error);
-        }
-      } catch (e) {
-        console.warn("[DELETE REPORT] Fallback local delete only:", e);
+    try {
+      const res = await fetch("/api/delete-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        console.warn("[DELETE REPORT] DB deletion note:", data.error);
       }
+    } catch (e) {
+      console.warn("[DELETE REPORT] Fallback local delete only:", e);
+    }
 
-      return true;
-    },
-    []
-  );
+    return true;
+  }, []);
 
   return (
     <ReportDataContext.Provider
@@ -192,8 +188,10 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
         catalog,
         activeReport,
         reports,
-        trends: DEFAULT_TREND_CARDS,
-        patterns: DEFAULT_PATTERNS,
+        // These are intentionally empty until a real report exists. The old
+        // static cards were another way fictional data leaked into new users.
+        trends: [],
+        patterns: [],
         loading,
         getEntry,
         getTestDef,
@@ -208,8 +206,6 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
 
 export function useReportData(): ReportDataContextType {
   const ctx = useContext(ReportDataContext);
-  if (!ctx) {
-    throw new Error("useReportData must be used within a ReportDataProvider");
-  }
+  if (!ctx) throw new Error("useReportData must be used within a ReportDataProvider");
   return ctx;
 }

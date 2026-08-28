@@ -3,8 +3,9 @@
 What was built, how it reuses the chatbot pipeline, and what is still required
 to run it in production.
 
-**Scope:** the voice agent and the multilingual answer path. Report ingestion
-(PaddleOCR) is untouched.
+**Scope:** the voice agent and the multilingual answer path. Image/PDF report
+ingestion still uses PaddleOCR; explicitly uploaded structured CSV files are
+parsed by `src/lib/reportCsv.ts` before OCR.
 
 ---
 
@@ -14,20 +15,24 @@ to run it in production.
 src/lib/ai/
   languages.ts      NEW — the language registry: 14 languages, BCP-47 tags,
                     script ranges for detection, server-side validation
-  translations.ts   NEW — curated safety text (refusal + emergency) in all 14
-                    languages, plus the spoken greeting
-  mock-phrases.ts   NEW — mock-provider phrasebook in all 14 languages, so the
+  translations.ts   curated safety text (refusal + emergency) and the canonical
+                    model footer in all 14 languages, plus the spoken greeting
+  mock-phrases.ts   mock-provider phrasebook in all 14 languages, so the
                     multilingual path is testable without a GPU
+  translate.ts      server-only English bridge with protected report tokens
+  conversation.ts   natural greetings, capability replies and no-report copy
   prompts.ts        ANSWER LANGUAGE now comes from the registry; new `channel`
-                    (text|voice) formatting rules; prompt 2026-08-27.2
+                    (text|voice) formatting rules; prompt 2026-08-28.3
   guardrails.ts     refusals and escalations are returned IN the answer
                     language; emergency keywords for 12 more languages;
                     coverage flags recorded in safety_flags
-  agent.ts          `answerLang` + `channel` options; language substitution is
-                    recorded instead of happening silently
+  agent.ts          `answerLang` + `channel` options; translation/fallback
+                    provenance is recorded instead of happening silently
   types.ts          AgentAnswer.answer_lang / .language_note
-  reportContext.ts  NEW — the personalization payload, extracted from the chat
-                    page so both UIs send the identical thing
+  reportContext.ts  the personalization payload, extracted from the chat page
+                    so both UIs send the identical thing
+
+src/lib/reportCsv.ts explicit CSV parser used before OCR for CSV uploads
 
 src/lib/voice/
   types.ts          Web Speech API typings + error mapping
@@ -98,33 +103,34 @@ Fourteen languages: `en hi bn mr te ta gu ur kn or ml pa ne as`.
 | --- | --- |
 | Ask (browser STT) | whatever the browser supports for that BCP-47 tag |
 | Ask (server STT) | any language Whisper supports, when `STT_BASE_URL` is set |
-| Answer language | all 14, via the model |
-| Answer language, no model | English or Hindi only — see §4 |
+| Answer language | all 14 through the server-side English bridge when configured |
+| Answer language, no translator/model | all 14 deterministic localized fallbacks; no silent English substitution |
 | Refusal / escalation text | all 14, curated |
 | UI chrome | en / hi / bn (the rest fall back to English) |
 | Read aloud | any language the device has a voice for, else `TTS_BASE_URL` |
 
 `answer_lang` in the response is the language the text is *actually* written in.
-It equals what was requested except in the substitution case, which also sets
-`language_note`.
+It is normalized to the requested supported language. `language_note` is reserved
+for a degraded translation/fallback condition and the UI can use it to explain
+that provenance without changing the returned language.
 
 ---
 
-## 4. The honest limitation: rule fallback is English + Hindi
+## 4. The English-boundary bridge and honest provenance
 
-`src/lib/ai/rules.ts` — the deterministic answers used when no model is
-configured, or a model call fails — exists only in English and Hindi. A Tamil
-turn with no model therefore cannot be answered in Tamil. Rather than pretend,
-the pipeline:
+MedGemma is called at an English boundary because its non-English quality is
+not reliable. When `TRANSLATION_PROVIDER=google` and the server-side
+`GOOGLE_TRANSLATE_API_KEY` are configured, a non-English turn is translated to
+English for classification/model use and the screened answer is translated
+back to the requested language. The key is never sent to the browser.
 
-1. answers in English,
-2. records `language_substituted:ta->en` in `safety_flags`,
-3. returns `language_note: "rule_answers_only_in_en_hi;requested_ta"`,
-4. and the UI shows which language the answer arrived in.
-
-With a real model configured (`AI_PROVIDER=ollama|openai|vertex`), or with
-`AI_PROVIDER=mock` for development, all 14 languages answer in their own
-language.
+When the bridge is unavailable, the agent uses its deterministic phrasebook for
+the requested language. It does not silently turn a new user's empty report
+into the fictional sample, and it does not claim that a rules answer was
+written by MedGemma. `answer_lang` remains the requested language. The response
+uses `engine: "medgemma"`, `engine: "mock"`, or `engine: "rules"`/`"fallback"`
+according to the path that actually produced the text; `AI_PROVIDER=mock` keeps
+status `mode: "demo"`, never `live`.
 
 ---
 
@@ -134,12 +140,22 @@ Two changes matter here:
 
 **Refusals are localized.** If the model is refused or its output is replaced,
 the replacement text is `safeRedirect(answerLang)`. A Tamil speaker whose
-question triggered a refusal now reads Tamil, not English.
+question triggered a refusal now reads Tamil, not English. A refusal bypasses
+the external output translator entirely, so a failed translator can never
+replace safe wording with a report summary; the refusal flag is retained.
+
+**Medical tokens and safety wording are protected.** Before a successful
+English-to-target translation, the server masks values, units, test names,
+reference ranges and the exact canonical “not a diagnosis” footer. Missing
+markers, an invalid target script, new numeric claims, or a dropped footer
+reject the translation and select the localized deterministic fallback. The
+canonical footer is replaced with the target-language safety copy only after
+validation.
 
 **Emergency keywords were extended.** `guardInput()` escalates "chest pain /
 cannot breathe / unconscious / poison" without a model in the loop. Those
-patterns were English + Hindi only, so a Tamil speaker describing chest pain
-would previously have received a polite answer instead of "go to a hospital
+the original pattern list covered English + Hindi only, so a Tamil speaker
+could previously have received a polite answer instead of "go to a hospital
 now". Twelve more languages now have those keywords
 (`EMERGENCY_REQUESTS_MULTILINGUAL` in `guardrails.ts`).
 
@@ -148,11 +164,13 @@ Two limits, stated rather than hidden:
 * The keywords are keywords, not a classifier. They use the specific
   multi-word forms a person says, not bare body-part words, to keep false
   positives down. A miss is possible.
-* The *output* patterns (diagnosis claims, dosing advice) are still English +
-  Hindi. For another language, every turn is flagged
+* The *output* lexical patterns (diagnosis claims, dosing advice) are reviewed
+  in English + Hindi. Conservative multilingual keywords now cover direct
+  diagnosis/dosing requests on input when translation is unavailable. For a
+  model answer written directly in another language, every turn is flagged
   `output_guard_language_uncovered:<lang>` so a reviewer can see exactly which
-  answers went through the weaker screening. Numeric grounding and the refusal
-  check are language-independent and still apply.
+  answers went through the weaker lexical screen. Numeric grounding and the
+  refusal check are language-independent and still apply.
 * Only the English and Hindi safety strings have been through clinical review;
   the other twelve are new translations pending native-speaker review.
   `/api/ai/status` reports this under `languages.safety_review`.
@@ -189,8 +207,9 @@ AI_PROVIDER=mock npm run dev
 Open `/voice`, pick a language, press the microphone. `AI_PROVIDER=mock`
 composes answers from the report values in the requested language, so the whole
 multilingual path — retrieval, prompt, guardrails, response shaping — is
-exercised without a GPU. With no `AI_PROVIDER` at all, English and Hindi still
-answer from the rules and the other languages hit the §4 substitution.
+exercised without a GPU. With no `AI_PROVIDER` at all, deterministic
+localized copy/fallbacks are used; no language is silently substituted and no
+new account receives the sample report.
 
 ### 7.2 Verifying the server speech routes without a key
 
@@ -223,6 +242,8 @@ request construction, response handling and byte streaming.
 AI_PROVIDER=ollama
 AI_BASE_URL=http://127.0.0.1:11434
 AI_MODEL=medgemma:4b
+TRANSLATION_PROVIDER=google
+GOOGLE_TRANSLATE_API_KEY=... # server-only; never put this in NEXT_PUBLIC_*
 STT_BASE_URL=...        # optional; needed for Firefox
 TTS_BASE_URL=...        # optional; needed where voices are missing
 SUPABASE_URL=...        # optional; enables writing the AI tables
@@ -232,7 +253,8 @@ SUPABASE_URL=...        # optional; enables writing the AI tables
 
 ## 8. Verification performed
 
-Against `next dev` with `AI_PROVIDER=mock` (2026-08-27):
+Against the dependency-free pipeline tests with `AI_PROVIDER=mock` fixtures
+(2026-08-28):
 
 | Check | Result |
 | --- | --- |
@@ -241,21 +263,21 @@ Against `next dev` with `AI_PROVIDER=mock` (2026-08-27):
 | `answerLang: "fr"` (unsupported) | resolves to `en`, no error |
 | Tamil "chest pain" | `input_blocked:emergency`, escalation text in Tamil |
 | English "do I have diabetes?" | `input_blocked:diagnosis`, refusal in English |
-| No model configured, Tamil question | English answer + `language_substituted:ta->en` + `language_note` |
+| No translator/model, Tamil report question | localized deterministic Tamil fallback; no sample values and no silent English substitution |
+| Output translator drops a marker/footer | localized report fallback with a recorded translation failure |
+| Model refusal with no translator | localized `safeRedirect()`; refusal flag retained |
 | `POST /api/stt` against fake provider | `ok:true`, `detected_language: ta`, `engine: whisper:whisper-fake` |
 | `POST /api/tts` against fake provider | 98,710 bytes, `content-type: audio/wav`, `x-anvaya-lang: ta` |
 | `/api/stt`, `/api/tts` unconfigured | 503 `not_configured` with a hint |
-| `GET /api/ai/status` | 14 languages, prompt `2026-08-27.2`, voice config |
+| `GET /api/ai/status` | 14 languages, prompt `2026-08-28.3`, voice/translation config with no secrets |
 | `/voice`, `/ask`, `/dashboard` | 200; `/voice` renders all 14 language options |
-| `tsc --noEmit`, `eslint .` | clean (4 pre-existing warnings in untouched files) |
+| `npm run typecheck`, `npm run lint` | typecheck clean; lint has 1 pre-existing warning in `backend/middleware/Errorhandler.js` |
 
-**Not verified here, and why:** `next build` cannot complete in this sandbox
-because `src/app/layout.tsx` fetches Inter and Noto Sans Devanagari from
-`fonts.googleapis.com`, which is unreachable (curl returns 000). This is
-pre-existing and unrelated to the voice work — `next dev` runs fine and warns
-that it used a fallback font. Microphone capture, `speechSynthesis` playback and
-browser speech recognition cannot be exercised from a headless sandbox either;
-those paths are exercised in a browser.
+**Not verified here, and why:** microphone capture, `speechSynthesis` playback,
+and browser speech recognition cannot be exercised from a headless sandbox;
+those paths are exercised in a browser. The production build, typecheck, lint,
+HTTP route smoke tests, and dependency-free multilingual tests were verified in
+this workspace; lint still reports the one pre-existing warning listed above.
 
 ---
 
@@ -267,11 +289,16 @@ those paths are exercised in a browser.
 2. **Output guardrails per script.** The `output_guard_language_uncovered` flag
    marks every turn that needs it; extending `DIAGNOSIS_OUTPUT` /
    `DOSING_OUTPUT` to the major scripts removes it.
-3. **Rule answers in more languages**, which would remove the §4 substitution
-   for the offline path.
+3. **Native-speaker clinical review.** The additional localized safety footers,
+   refusal copy and phrasebook text still need review before a production
+   clinical claim is made in every language.
 4. **Voice sessions in Postgres.** `voice_sessions` already exists in the schema
    (`db/migrations/0015_qa_voice.sql`); `persistTurn` writes `qa_messages` today,
    and the voice session row is the natural place to record the spoken language
    and the STT engine.
 5. **Streaming TTS.** Answers are spoken after the full response; chunked
    streaming would cut the perceived latency roughly in half.
+6. **Broader output-guard patterns.** `output_guard_language_uncovered` still
+   records languages whose diagnosis/dosing lexical patterns are not yet
+   translated; the English model boundary, protected tokens and deterministic
+   refusal path remain the safety backstops.

@@ -74,6 +74,18 @@ export function asUuid(v: unknown): string | undefined {
   return typeof v === "string" && UUID_RE.test(v) ? v : undefined;
 }
 
+/** Mock generations exercise the same pipeline and are not rule fallbacks. */
+function isGeneratedEngine(engine: string | undefined): boolean {
+  return engine === "medgemma" || engine === "mock";
+}
+
+/** Generation status describes the provider call, not the final UI fallback. */
+function generationStatus(g?: { text: string; error_code?: string }): "succeeded" | "failed" | "blocked" {
+  if (!g) return "blocked";
+  if (g.error_code || !g.text.trim()) return "failed";
+  return "succeeded";
+}
+
 function sha256(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
@@ -672,7 +684,7 @@ export async function persistTurn(opts: {
       purpose: "qa_answer",
       // A blocked input never produced a generation; a rules answer did not
       // either. Only a real model call is 'succeeded'.
-      status: answer.engine === "medgemma" ? "succeeded" : g?.error_code ? "failed" : "blocked",
+      status: generationStatus(g),
       provider: g?.provider ?? answer.engine,
       model: g?.model ?? null,
       modelVersion: g?.model ?? null,
@@ -772,7 +784,7 @@ export async function persistTurn(opts: {
           confidence_level: answer.confidence,
           // qa_assistant_needs_generation: an assistant turn needs either a
           // generation or is_fallback, so the constraint is satisfied either way.
-          is_fallback: answer.engine !== "medgemma",
+          is_fallback: !isGeneratedEngine(answer.engine),
           latency_ms: answer.latency_ms,
         });
         out.qa_message_id = row?.id;
@@ -828,7 +840,7 @@ export async function persistSummary(opts: {
     const g = s.generation;
     const generationId = await writeGeneration(ctx, {
       purpose: "report_summary",
-      status: s.engine === "medgemma" ? "succeeded" : g?.error_code ? "failed" : "blocked",
+      status: generationStatus(g),
       provider: g?.provider ?? opts.provider,
       model: g?.model ?? s.model,
       modelVersion: g?.model ?? null,
@@ -993,9 +1005,8 @@ export async function persistInsights(opts: {
       const g = p.generation;
       const generationId = await writeGeneration(ctx, {
         purpose: "pattern_insight",
-        status:
-          p.engine === "medgemma" ? "succeeded" : g?.error_code ? "failed" : "blocked",
-        provider: g?.provider ?? (p.engine === "medgemma" ? opts.provider : "rules"),
+        status: generationStatus(g),
+        provider: g?.provider ?? (isGeneratedEngine(p.engine) ? opts.provider : "rules"),
         model: g?.model ?? p.model,
         modelVersion: g?.model ?? null,
         promptKey: ins.prompt_key,

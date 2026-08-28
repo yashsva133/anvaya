@@ -10,8 +10,8 @@ import { BadgeCheck, ChevronDown, Keyboard, PencilLine, ShieldQuestion } from "l
 import { FlowShell } from "@/components/shell";
 import { useI18n, pick } from "@/lib/i18n";
 import { Sheet, StatusPill, TestIcon, useToast } from "@/components/core";
-import { LATEST, TESTS, fmtValue, type ReportEntry, type Status, type TestDef } from "@/lib/data";
-import { setStoredActiveReport } from "@/lib/report-store";
+import { fmtValue, reportStatusKnown, resolveTestDef, type ReportEntry, type Status, type TestDef } from "@/lib/data";
+import { deleteStoredReport, setStoredActiveReport } from "@/lib/report-store";
 import { useReportData } from "@/context/ReportDataContext";
 
 const HEADLINE = ["hemoglobin", "hba1c", "ldl", "hdl", "glucose", "creatinine"];
@@ -32,7 +32,7 @@ export default function ExtractedPage() {
   const router = useRouter();
   const { t, s } = useI18n();
   const toast = useToast();
-  const { catalog, activeReport, refresh } = useReportData();
+  const { catalog, activeReport, patient, refresh } = useReportData();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -45,7 +45,7 @@ export default function ExtractedPage() {
     return () => clearTimeout(id);
   }, []);
 
-  const baseEntries = activeReport?.entries?.length > 0 ? activeReport.entries : LATEST.entries;
+  const baseEntries = activeReport?.entries ?? [];
   const visible = showAll ? baseEntries : baseEntries.filter((e) => HEADLINE.includes(e.test));
 
   const valueOf = (e: ReportEntry) => fixed[e.test] ?? e.value;
@@ -59,6 +59,28 @@ export default function ExtractedPage() {
             <div key={i} className="skeleton h-20 rounded-3xl" style={{ animationDelay: `${i * 0.1}s` }} />
           ))}
         </div>
+      ) : baseEntries.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-[2rem] border-2 border-dashed border-brand-200 bg-white p-8 text-center shadow-sm"
+        >
+          <h1 className="text-2xl font-extrabold tracking-tight text-brand-950">
+            {s.lang === "hi" ? "अभी कोई रिपोर्ट नहीं है" : "No report to review yet"}
+          </h1>
+          <p className="mx-auto mt-2 max-w-sm text-sm font-semibold leading-relaxed text-slate-500">
+            {s.lang === "hi"
+              ? "अपनी लैब रिपोर्ट अपलोड करें या स्कैन करें। परिणाम मिलने के बाद आप उन्हें यहाँ जाँच सकेंगे।"
+              : "Upload or scan a lab report first. Once we read it, you can check the results here."}
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push("/upload")}
+            className="mt-5 inline-flex min-h-12 items-center justify-center rounded-2xl bg-brand-700 px-6 text-sm font-extrabold text-white shadow-md transition hover:bg-brand-600"
+          >
+            {t("upload.title")}
+          </button>
+        </motion.div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-center text-2xl font-extrabold tracking-tight text-brand-950 md:text-3xl">
@@ -80,7 +102,7 @@ export default function ExtractedPage() {
           <div className="mt-4 space-y-2.5">
             {visible.map((e, i) => {
               const val = valueOf(e);
-              const def = catalog[e.test] || TESTS[e.test] || TESTS.hemoglobin;
+              const def = resolveTestDef(e.test, catalog, e);
               const currentStatus = fixed[e.test] != null ? evaluateStatus(val, def) : e.status;
 
               return (
@@ -100,7 +122,7 @@ export default function ExtractedPage() {
                       {def.ref.text} · {t("common.perReport")}
                     </p>
                     <div className="mt-1.5">
-                      <StatusPill status={currentStatus} size="sm" />
+                      <StatusPill status={currentStatus} known={reportStatusKnown(e)} size="sm" />
                     </div>
                   </div>
                   <div className="text-right">
@@ -141,7 +163,7 @@ export default function ExtractedPage() {
                 setSaving(true);
                 const finalEntries: ReportEntry[] = baseEntries.map((e) => {
                   const val = valueOf(e);
-                  const def = catalog[e.test] || TESTS[e.test] || TESTS.hemoglobin;
+                  const def = resolveTestDef(e.test, catalog, e);
                   return {
                     ...e,
                     value: val,
@@ -150,35 +172,47 @@ export default function ExtractedPage() {
                 });
 
                 const chartData = finalEntries.map((e) => {
-                  const def = catalog[e.test] || TESTS[e.test] || TESTS.hemoglobin;
+                  const def = resolveTestDef(e.test, catalog, e);
                   return {
                     parameter: def.name.en,
                     value: e.value,
-                    normal_min: def.ref.low ?? 0,
-                    normal_max: def.ref.high ?? 100,
+                    ...(def.ref.low != null ? { normal_min: def.ref.low } : {}),
+                    ...(def.ref.high != null ? { normal_max: def.ref.high } : {}),
+                    reference_text: def.ref.text,
                     unit: def.unit,
                     status: e.status,
                   };
                 });
 
-                setStoredActiveReport({
-                  id: `report-${Date.now()}`,
-                  date: { en: "27 Aug 2026", hi: "27 अगस्त 2026" },
-                  month: { en: "Aug", hi: "अग." },
-                  entries: finalEntries,
+                const collectedOn = new Date();
+                const dateEn = collectedOn.toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
                 });
+                const dateHi = collectedOn.toLocaleDateString("hi-IN", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                });
+                const monthEn = collectedOn.toLocaleDateString("en-GB", { month: "short" });
+                const monthHi = collectedOn.toLocaleDateString("hi-IN", { month: "short" });
 
-                if (typeof window !== "undefined") {
-                  localStorage.setItem("rxanvaya_has_reports", "true");
-                }
+                const savedReport = {
+                  id: activeReport.id !== "no-report" ? activeReport.id : `report-${Date.now()}`,
+                  date: { en: dateEn, hi: dateHi },
+                  month: { en: monthEn, hi: monthHi },
+                  entries: finalEntries,
+                };
+                setStoredActiveReport(savedReport);
 
                 try {
                   const res = await fetch("/api/save-report", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
+                      patient_id: patient.id,
                       collected_on: new Date().toISOString().split("T")[0],
-                      lab_name: "City Diagnostics",
                       chart_data: chartData,
                     }),
                   });
@@ -187,8 +221,18 @@ export default function ExtractedPage() {
                     console.warn("[EXTRACTED SAVE] DB Warning:", saveJson.error);
                     toast(saveJson.error ? `DB: ${saveJson.error}` : t("extract.correctToast"), "info");
                   } else {
+                    // Replace the temporary browser id with the database id so
+                    // later refreshes and deletes address the same real report.
+                    if (saveJson.reportId && saveJson.reportId !== savedReport.id) {
+                      // The first local save used a temporary id so the
+                      // confirmation screen could render immediately. Replace
+                      // that history row rather than leaving duplicate reports
+                      // when the database returns its canonical id.
+                      deleteStoredReport(savedReport.id);
+                      setStoredActiveReport({ ...savedReport, id: saveJson.reportId });
+                    }
                     toast(t("extract.correctToast"));
-                    refresh();
+                    await refresh();
                   }
                 } catch (err: any) {
                   console.warn("Save report request completed with local store fallback:", err);
@@ -223,12 +267,12 @@ export default function ExtractedPage() {
       <Sheet
         open={!!editEntry}
         onClose={() => setEditEntry(null)}
-        title={editEntry ? `${t("extract.edit")} — ${pick(TESTS[editEntry.test].name, s.lang)}` : ""}
+        title={editEntry ? `${t("extract.edit")} — ${pick(resolveTestDef(editEntry.test, catalog, editEntry).name, s.lang)}` : ""}
       >
         {editEntry && (
           <div className="mt-2">
             <label className="text-xs font-extrabold uppercase tracking-wide text-slate-400">
-              {t("doctor.result")} ({TESTS[editEntry.test].unit})
+              {t("doctor.result")} ({resolveTestDef(editEntry.test, catalog, editEntry).unit})
             </label>
             <input
               value={editVal}

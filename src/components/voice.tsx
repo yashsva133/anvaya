@@ -196,11 +196,17 @@ function TurnCard({
             {turn.engine && (
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-extrabold ${
-                  turn.engine === "medgemma" ? "bg-violet-50 text-violet-700" : "bg-slate-50 text-slate-500"
+                  turn.engine === "medgemma" || turn.engine === "mock"
+                    ? "bg-violet-50 text-violet-700"
+                    : "bg-slate-50 text-slate-500"
                 }`}
               >
                 <Sparkles className="h-3 w-3" />
-                {turn.engine === "medgemma" ? `MedGemma · ${turn.model ?? "local"}` : turn.engine}
+                {turn.engine === "medgemma"
+                  ? `MedGemma · ${turn.model ?? "local"}`
+                  : turn.engine === "mock"
+                    ? `Mock provider · ${turn.model ?? "local"}`
+                    : turn.engine}
               </span>
             )}
             {(turn.sources ?? 0) > 0 && (

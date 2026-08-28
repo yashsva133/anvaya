@@ -59,6 +59,8 @@ export interface AnonymisedResult {
    * never be the source of truth for this value.
    */
   status: Status;
+  /** False when no catalogue or printed reference bound was available. */
+  status_known?: boolean;
   /** Previous report's value, when one exists — enables trend answers. */
   previous_value?: number;
   previous_date?: string;
@@ -93,6 +95,8 @@ export interface AnonymisedTrend {
   improving: boolean;
   first_status: Status;
   latest_status: Status;
+  /** False when the trend has no reference bound for clinical comparison. */
+  status_known: boolean;
 }
 
 /**
@@ -193,6 +197,21 @@ export interface GuardResult {
 }
 
 /** The complete result of one /api/answer turn. */
+export interface TranslationTrace {
+  /** Name of the server-side translation adapter. */
+  provider: string;
+  /** Language the person requested for the answer. */
+  target_language: AnswerLang;
+  /** Whether the incoming question crossed the English model boundary. */
+  input_translated: boolean;
+  /** Whether the model's validated English answer was translated for display. */
+  output_translated: boolean;
+  /** Latency of the input translation, when one was needed. */
+  input_latency_ms?: number;
+  /** Latency of the output translation, when one was needed. */
+  output_latency_ms?: number;
+}
+
 export interface AgentAnswer {
   /** Topic slug, mirroring the existing `matched` response field. */
   matched: string;
@@ -201,18 +220,19 @@ export interface AgentAnswer {
   sources: number;
   confidence: ConfidenceLevel;
   /** Additive: which path produced the answer. The current UI ignores it. */
-  engine: "medgemma" | "rules" | "fallback";
+  engine: "medgemma" | "mock" | "rules" | "fallback";
   /** The UI language the turn was made in. */
   language: LangCode;
   /**
-   * The language the answer text is ACTUALLY written in. Equal to `language`
-   * for every text turn; may differ for a voice turn when the rule fallback had
-   * to substitute (rules.ts ships English + Hindi only), which is also recorded
-   * in language_note.
+   * The language the answer text is ACTUALLY written in. The English-boundary
+   * bridge and localized deterministic fallbacks keep this equal to the
+   * requested language; unsupported client values are normalized before here.
    */
   answer_lang: AnswerLang;
   /** Set when the requested answer language could not be honoured. */
   language_note?: string;
+  /** How the English model boundary was crossed, when translation was enabled. */
+  translation?: TranslationTrace;
   citations: {
     source_code: string;
     source_title: string;

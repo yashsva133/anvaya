@@ -123,6 +123,8 @@ export interface StoryStep {
   when: string;
   text: string;
   status: Status;
+  /** False when the story is a neutral no-range notice, not an abnormal result. */
+  statusKnown?: boolean;
 }
 
 const STORY_COPY: Record<
@@ -132,6 +134,7 @@ const STORY_COPY: Record<
     now: (label: string, value: string, unit: string, word: string) => string;
     today: string;
     single: (n: number, total: number) => string;
+    unknown: (n: number, total: number) => string;
     allFine: string;
   }
 > = {
@@ -140,6 +143,7 @@ const STORY_COPY: Record<
     now: (label, value, unit, word) => `${label} is now ${value} ${unit} — ${word}. Worth discussing with your doctor.`,
     today: "Today",
     single: (n, total) => `${n} of ${total} results in this report are outside or near their range.`,
+    unknown: (n, total) => `${n} of ${total} results have no reported reference range, so they need clinical review.`,
     allFine: "Every result in this report is inside its usual range.",
   },
   hi: {
@@ -147,6 +151,7 @@ const STORY_COPY: Record<
     now: (label, value, unit, word) => `${label} अब ${value} ${unit} है — ${word}। डॉक्टर से चर्चा करना सही रहेगा।`,
     today: "आज",
     single: (n, total) => `इस रिपोर्ट के ${total} में से ${n} परिणाम सीमा के बाहर या उसके पास हैं।`,
+    unknown: (n, total) => `इस रिपोर्ट के ${total} में से ${n} परिणामों की संदर्भ सीमा नहीं मिली, इसलिए डॉक्टर से समीक्षा करें।`,
     allFine: "इस रिपोर्ट का हर परिणाम अपनी सामान्य सीमा के भीतर है।",
   },
   bn: {
@@ -154,6 +159,7 @@ const STORY_COPY: Record<
     now: (label, value, unit, word) => `${label} এখন ${value} ${unit} — ${word}। চিকিৎসকের সঙ্গে আলোচনা করা ভালো।`,
     today: "আজ",
     single: (n, total) => `এই রিপোর্টের ${total}টির মধ্যে ${n}টি ফলাফল সীমার বাইরে বা কাছাকাছি।`,
+    unknown: (n, total) => `এই রিপোর্টের ${total}টির মধ্যে ${n}টি ফলাফলের কোনো স্বাভাবিক সীমা নেই, তাই চিকিৎসকের পর্যালোচনা দরকার।`,
     allFine: "এই রিপোর্টের প্রতিটি ফলাফল স্বাভাবিক সীমার মধ্যে আছে।",
   },
 };
@@ -194,7 +200,9 @@ export function buildStory(payload: AnonymisedPayload, lang: LangCode): StorySte
   const c = STORY_COPY[lang] ?? STORY_COPY.en;
   const w = STATUS_WORD[lang] ?? STATUS_WORD.en;
 
-  const candidates = payload.trends.filter((t) => t.points.length >= 2);
+  // An unknown result can still have a numeric trend, but without a trusted
+  // range it must never drive a clinical story or be labelled "normal".
+  const candidates = payload.trends.filter((t) => t.status_known && t.points.length >= 2);
   const pick: AnonymisedTrend | undefined =
     candidates.find((t) => t.worsening && t.latest_status !== "normal") ??
     candidates.find((t) => t.worsening) ??
@@ -202,12 +210,23 @@ export function buildStory(payload: AnonymisedPayload, lang: LangCode): StorySte
     candidates[0];
 
   if (!pick) {
-    const flagged = payload.results.filter((r) => r.status !== "normal").length;
+    const unknown = payload.results.filter((r) => r.status_known === false).length;
+    const assessed = payload.results.filter((r) => r.status_known !== false);
+    const flagged = assessed.filter((r) => r.status !== "normal").length;
     return [
       {
         when: c.today,
-        text: flagged === 0 ? c.allFine : c.single(flagged, payload.results.length),
-        status: (flagged === 0 ? "normal" : "borderline") as Status,
+        text:
+          unknown > 0
+            ? c.unknown(unknown, payload.results.length)
+            : flagged === 0
+              ? c.allFine
+              : c.single(flagged, assessed.length),
+        // StoryStep has the existing status union used by the UI. Amber is a
+        // neutral attention colour here, not a claim that an unknown result is
+        // abnormal.
+        status: (unknown > 0 ? "borderline" : flagged === 0 ? "normal" : "borderline") as Status,
+        ...(unknown > 0 ? { statusKnown: false } : {}),
       },
     ];
   }
@@ -237,7 +256,7 @@ export interface InsightPattern extends DetectedPattern {
   /** Why it is worth discussing. */
   risk: string;
   disclaimer: string;
-  engine: "medgemma" | "rules";
+  engine: "medgemma" | "mock" | "rules";
   model: string | null;
   /** Set when the seeded copy was used instead of a generation. */
   fallback_reason?: string;
@@ -258,7 +277,7 @@ export interface InsightsResult {
   patterns: InsightPattern[];
   story: StoryStep[];
   /** "medgemma" when at least one card was written by the model. */
-  engine: "medgemma" | "rules";
+  engine: "medgemma" | "mock" | "rules";
   model: string | null;
   language: LangCode;
   counts: { total: number; flagged: number; patterns: number };
@@ -340,17 +359,19 @@ export async function generateInsights(opts: InsightsOptions): Promise<InsightsR
 
   const payload = buildAnonymisedPayload({ lang, reportId: opts.reportId, report: opts.report });
   const detected = detectPatterns(payload, lang).slice(0, maxPatterns);
-  const story = buildStory(payload, lang);
+  // An empty report has no story or pattern. Do not turn "no data" into the
+  // prototype's "everything is fine" card.
+  const story = payload.results.length > 0 ? buildStory(payload, lang) : [];
 
   const base = {
     story,
     language: lang,
     counts: {
       total: payload.results.length,
-      flagged: payload.results.filter((r) => r.status !== "normal").length,
+      flagged: payload.results.filter((r) => r.status_known !== false && r.status !== "normal").length,
       patterns: detected.length,
     },
-    reports_compared: payload.trends[0]?.points.length ?? 1,
+    reports_compared: payload.results.length > 0 ? payload.trends[0]?.points.length ?? 1 : 0,
     prompt_key: INSIGHT_PROMPT_KEY,
     prompt_version: INSIGHT_PROMPT_VERSION,
     system_prompt_sha256: insightSystemPromptSha256(),
@@ -475,7 +496,7 @@ export async function generateInsights(opts: InsightsOptions): Promise<InsightsR
         explanation: expl || composedExplanation(p, lang),
         risk: risk || seeded?.risk || "",
         disclaimer: seeded?.disclaimer ?? DISCLAIMER[lang],
-        engine: "medgemma",
+        engine: env.ai.provider === "mock" ? "mock" : "medgemma",
         model: generation.model,
         safety_flags: guard.safety_flags,
         retrieval,
@@ -489,7 +510,11 @@ export async function generateInsights(opts: InsightsOptions): Promise<InsightsR
   return {
     ...base,
     patterns: cards,
-    engine: cards.some((c) => c.engine === "medgemma") ? "medgemma" : "rules",
+    engine: cards.some((c) => c.engine === "medgemma")
+      ? "medgemma"
+      : cards.some((c) => c.engine === "mock")
+        ? "mock"
+        : "rules",
     model: cards.find((c) => c.model)?.model ?? null,
     latency_ms: Date.now() - startedAt,
   };

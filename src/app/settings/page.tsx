@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 // Screen — Settings & Accessibility + Collapsible Trusted Medical Sources Button.
 // Every setting applies app-wide instantly, and evidence library opens on demand.
@@ -33,10 +33,10 @@ import {
   Volume2,
 } from "lucide-react";
 import { AppShell } from "@/components/shell";
-import { SectionTitle, StatusPill, TestIcon, useToast } from "@/components/core";
+import { SectionTitle, TestIcon, useToast } from "@/components/core";
 import { useI18n, pick, type LangCode, type ReadingMode } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
-import { PATIENT, SOURCES, TESTS } from "@/lib/data";
+import { SOURCES, TESTS } from "@/lib/data";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -57,15 +57,14 @@ export default function SettingsPage() {
     patient?.full_name ||
     profile?.full_name ||
     user?.user_metadata?.full_name ||
-    pick(PATIENT.name, s.lang);
+    user?.email?.split("@")[0] ||
+    (hi ? "आपकी प्रोफ़ाइल" : "Your profile");
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#sources") {
       setSourcesOpen(true);
     }
   }, []);
-
-  const hb = TESTS.hemoglobin;
 
   return (
     <AppShell>
@@ -189,29 +188,39 @@ export default function SettingsPage() {
               className="mt-3 rounded-3xl border-2 border-rose-200 bg-rose-50/50 p-4 sm:p-5"
             >
               <div className="flex items-center gap-3">
-                <TestIcon testId="hemoglobin" size={s.mode === "simple" ? 56 : 44} />
+                <span
+                  className={`inline-flex shrink-0 items-center justify-center rounded-2xl bg-brand-100 text-brand-700 ${
+                    s.mode === "simple" ? "h-14 w-14" : "h-11 w-11"
+                  }`}
+                >
+                  <Accessibility className={s.mode === "simple" ? "h-7 w-7" : "h-5 w-5"} />
+                </span>
                 <div className="min-w-0 flex-1">
                   <p
                     className={`truncate font-extrabold text-slate-800 ${
                       s.mode === "simple" ? "text-lg" : "text-base"
                     }`}
                   >
-                    {s.mode === "advanced" ? pick(hb.name, s.lang) : pick(hb.simple, s.lang)}
+                    {hi ? "रिपोर्ट परिणाम" : "Report result"}
                   </p>
                   <p
                     className={`tabular font-extrabold text-brand-900 ${
                       s.mode === "simple" ? "text-2xl sm:text-3xl" : "text-xl sm:text-2xl"
                     }`}
                   >
-                    10.5 g/dL
+                    —
                   </p>
                 </div>
               </div>
               <div className="mt-3">
-                <StatusPill status="low" size={s.mode === "simple" ? "md" : "sm"} />
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-500">
+                  {hi ? "रिपोर्ट अपलोड होने पर परिणाम यहाँ दिखेगा" : "A saved result will appear here after upload"}
+                </span>
               </div>
               <p className="mt-2 text-sm font-semibold text-slate-600">
-                {pick({ en: s.mode === "advanced" ? hb.what.en : hb.what.vs_en, hi: s.mode === "advanced" ? hb.what.hi : hb.what.vs_hi }, s.lang)}
+                {hi
+                  ? "यह केवल पढ़ने की सुविधा का पूर्वावलोकन है — इसमें आपकी रिपोर्ट का डेटा नहीं है।"
+                  : "Accessibility preview only — this card does not contain your report data."}
               </p>
             </motion.div>
           </div>
@@ -300,7 +309,7 @@ export default function SettingsPage() {
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm font-medium text-slate-500">
-                  {user?.email || "guest@rxanvaya.local"}
+                  {user?.email || (hi ? "ईमेल सेट नहीं" : "Email not set")}
                 </p>
               </div>
             </div>
@@ -330,7 +339,7 @@ export default function SettingsPage() {
                 {hi ? "आयु" : "Age"}
               </p>
               <p className="mt-0.5 text-sm font-extrabold text-brand-950">
-                {patient?.age ? `${patient.age} yrs` : `${PATIENT.age} yrs`}
+                {patient?.age ? `${patient.age} yrs` : (hi ? "सेट नहीं" : "Not set")}
               </p>
             </div>
             <div className="rounded-xl bg-slate-50 p-2.5 text-center">
@@ -338,7 +347,7 @@ export default function SettingsPage() {
                 {hi ? "लिंग" : "Sex"}
               </p>
               <p className="mt-0.5 text-sm font-extrabold text-brand-950">
-                {patient?.sex ? (hi && patient.sex === "male" ? "पुरुष" : hi && patient.sex === "female" ? "महिला" : patient.sex) : pick(PATIENT.gender, s.lang)}
+                {patient?.sex ? (hi && patient.sex === "male" ? "पुरुष" : hi && patient.sex === "female" ? "महिला" : patient.sex) : (hi ? "सेट नहीं" : "Not set")}
               </p>
             </div>
             <div className="rounded-xl bg-slate-50 p-2.5 text-center">

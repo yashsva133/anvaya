@@ -249,10 +249,10 @@ export default function LandingPage() {
             <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
             <div className="leading-tight">
               <p className="text-xs font-extrabold text-slate-800">
-                Creatinine 1.0 mg/dL
+                Lab result ready to explain
               </p>
               <p className="text-[10px] font-bold text-emerald-600">
-                {s.lang === "hi" ? "सामान्य सीमा में" : "Within usual range"}
+                {s.lang === "hi" ? "आपकी रिपोर्ट से" : "From your report"}
               </p>
             </div>
           </motion.div>
@@ -265,10 +265,10 @@ export default function LandingPage() {
             <TestIcon testId="hemoglobin" size={28} />
             <div className="leading-tight">
               <p className="text-xs font-extrabold text-slate-800">
-                Hemoglobin 10.5 ↓
+                {s.lang === "hi" ? "परिणाम पर ध्यान दें" : "Result needs a closer look"}
               </p>
               <p className="text-[10px] font-bold text-rose-600">
-                {s.lang === "hi" ? "सामान्य से कम" : "Lower than usual"}
+                {s.lang === "hi" ? "डॉक्टर से चर्चा करें" : "Discuss with your doctor"}
               </p>
             </div>
           </motion.div>
@@ -379,13 +379,13 @@ export default function LandingPage() {
               {/* Visual Box */}
               <div className="mt-4 rounded-2xl border border-rose-200/90 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-extrabold text-slate-900">Hemoglobin</span>
+                  <span className="text-sm font-extrabold text-slate-900">Lab result</span>
                   <span className="rounded-lg bg-rose-100 px-2.5 py-1 text-xs font-extrabold text-rose-700">
-                    10.5 (Low) ⚠️
+                    Needs context ⚠️
                   </span>
                 </div>
                 <p className="mt-2 text-xs font-semibold text-slate-500">
-                  Ref range: 12.0 - 15.0 g/dL · Raw number only
+                  Reference range from your report · Raw number only
                 </p>
               </div>
             </div>
@@ -417,7 +417,7 @@ export default function LandingPage() {
               {/* Visual Box */}
               <div className="mt-4 rounded-2xl border border-amber-200/90 bg-white p-4 shadow-sm">
                 <p className="line-clamp-2 text-xs font-semibold leading-relaxed text-slate-800">
-                  “Hemoglobin is a quaternary iron-containing metalloprotein in red blood cells that...”
+                  “A clinical result needs context, plain-language explanation, and a safe next step...”
                 </p>
                 <p className="mt-2 text-xs font-bold text-amber-700">
                   ⚠️ Unverified claims · No trend history
@@ -452,9 +452,9 @@ export default function LandingPage() {
               {/* Visual Box */}
               <div className="mt-4 rounded-2xl border border-mint-200/90 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-extrabold text-brand-950">Hemoglobin 10.5</span>
-                  <span className="rounded-lg bg-rose-100 px-2.5 py-1 text-xs font-extrabold text-rose-700">
-                    Lower than usual ↓
+                  <span className="text-sm font-extrabold text-brand-950">Your lab result</span>
+                  <span className="rounded-lg bg-mint-100 px-2.5 py-1 text-xs font-extrabold text-mint-700">
+                    Explained clearly ✓
                   </span>
                 </div>
                 <p className="mt-1.5 text-xs font-bold text-slate-700">
@@ -552,24 +552,24 @@ export default function LandingPage() {
                 <TestIcon testId="hba1c" size={56} />
                 <div>
                   <p className="text-base sm:text-lg font-extrabold text-slate-900">
-                    {s.lang === "hi" ? "औसत ब्लड शुगर (HbA1c)" : "Average blood sugar"}
+                    {s.lang === "hi" ? "आपकी लैब जाँच" : "Your lab result"}
                   </p>
                   <p className="tabular text-2xl sm:text-3xl font-extrabold text-brand-900">
-                    7.2%
+                    —
                   </p>
                 </div>
               </div>
               <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs sm:text-sm font-bold text-rose-700">
                 <ArrowRight className="h-4 w-4 rotate-45" strokeWidth={3} />
-                {s.lang === "hi" ? "सामान्य से अधिक" : "Higher than usual"}
+                {s.lang === "hi" ? "रिपोर्ट से समझाया जाएगा" : "Explained after upload"}
               </div>
               <p className="mt-3 text-sm sm:text-[15px] font-medium leading-relaxed text-slate-600">
                 {s.lang === "hi"
-                  ? "यह संख्या पिछले 2-3 महीनों में आपके रक्त शर्करा (ब्लड शुगर) का औसत स्तर बताती है।"
-                  : "This number tells us about your blood sugar levels over the past few months."}
+                  ? "अपनी रिपोर्ट अपलोड करने के बाद हर जाँच का मान, संदर्भ सीमा और अर्थ आसान भाषा में समझें।"
+                  : "After you upload a report, each result is explained with its reference range and context."}
               </p>
               <div className="mt-4 flex items-center gap-2">
-                <ListenBtn text="Average blood sugar is 7.2 percent. This is higher than usual. This number tells us about your blood sugar over the past few months." />
+                <ListenBtn text={s.lang === "hi" ? "अपनी रिपोर्ट अपलोड करें। हम आपके परिणाम आसान भाषा में समझाएँगे।" : "Upload your report. We will explain your results in simple language."} />
                 <span className="text-xs font-bold text-slate-400">
                   {s.lang === "hi" ? "टैप करें — आवाज़ में सुनें" : "Tap — reads aloud"}
                 </span>

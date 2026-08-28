@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as SummaryBody;
   } catch {
-    /* an empty body summarises the seeded demo report */
+    /* malformed input is handled as an empty, user-safe report */
   }
 
   const lang: LangCode = body.lang === "hi" || body.lang === "bn" ? body.lang : "en";
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
   // retrieval + matches, and the summary text itself as a versioned
   // ai_explanations row against this report. Never blocks the response.
   let persisted: Awaited<ReturnType<typeof persistSummary>> | undefined;
-  if (env.persistence) {
+  if (env.persistence && summary.payload.results.length > 0 && report) {
     persisted = await persistSummary({
       db: env.db,
       summary,
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
     personalized: Boolean(report),
     counts: summary.counts,
     trends: summary.trend_chips,
-    reports_compared: summary.payload.trends[0]?.points.length ?? 1,
+    reports_compared: summary.payload.results.length > 0 ? summary.payload.trends[0]?.points.length ?? 1 : 0,
     sources: summary.sources,
     citations: summary.citations,
     prompt_key: summary.prompt_key,
