@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -76,10 +77,11 @@ export default function TrendsPage() {
         .slice(0, 24),
     [reports]
   );
-  const [selected, setSelected] = useState("");
+  const searchParams = useSearchParams();
+  const [selected, setSelected] = useState(searchParams.get("test") || "");
 
   useEffect(() => {
-    if (availableTests.length > 0 && !availableTests.includes(selected)) {
+    if (availableTests.length > 0 && !selected && !availableTests.includes(selected)) {
       setSelected(availableTests[0]);
     }
   }, [availableTests, selected]);

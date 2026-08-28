@@ -239,7 +239,41 @@ export async function getPatientReports(patientIdOrProfileId?: string): Promise<
               ? tr.lab_test_catalog.code.trim().toLowerCase()
               : "";
             const normalizedName = rawName.toLowerCase().replace(/[^a-z0-9]/g, "");
-            const testCode = catalogueCode || (normalizedName ? `report_${normalizedName.slice(0, 56)}` : "");
+            // Try to match the raw name against known test codes before using the report_ prefix.
+            // Common aliases that OCR might produce (e.g. "haemoglobin" → "hemoglobin").
+            const NAME_ALIASES: Record<string, string> = {
+              haemoglobin: "hemoglobin",
+              hb: "hemoglobin", hgb: "hemoglobin",
+              rbc: "rbc", wbc: "wbc", leucocytes: "wbc", leukocytes: "wbc",
+              platelets: "platelets", plateletcount: "platelets", thrombocytes: "platelets",
+              haematocrit: "hematocrit", pcv: "hematocrit",
+              mcv: "mcv", mch: "mch", mchc: "mchc", rdw: "rdw",
+              neutrophils: "neutrophils", lymphocytes: "lymphocytes",
+              monocytes: "monocytes", eosinophils: "eosinophils", basophils: "basophils",
+              glucose: "glucose", fbs: "glucose", fasting: "glucose",
+              hba1c: "hba1c", glycatedhemoglobin: "hba1c",
+              creatinine: "creatinine", urea: "bun", bun: "bun",
+              uricacid: "uric_acid",
+              totalcholesterol: "cholesterol", cholesterol: "cholesterol",
+              ldl: "ldl", hdl: "hdl", triglycerides: "triglycerides", tg: "triglycerides",
+              sgpt: "alt", alt: "alt", sgot: "ast", ast: "ast",
+              alkalinephosphatase: "alp", alp: "alp",
+              bilirubin: "bilirubin", totalprotein: "total_protein",
+              albumin: "albumin", globulin: "globulin",
+              sodium: "sodium", potassium: "potassium", chloride: "chloride",
+              calcium: "calcium", phosphorus: "phosphorus",
+              tsh: "tsh", t3: "t3", t4: "t4",
+              vitaminb12: "vitamin_b12", b12: "vitamin_b12",
+              vitamind: "vitamin_d", vitamind3: "vitamin_d",
+              ferritin: "ferritin", iron: "iron", tibc: "tibc",
+              esr: "esr", crp: "crp",
+            };
+            const resolvedCode =
+              catalogueCode ||
+              NAME_ALIASES[normalizedName] ||
+              (DEFAULT_TESTS[normalizedName] ? normalizedName : null) ||
+              (normalizedName ? `report_${normalizedName.slice(0, 56)}` : "");
+            const testCode = resolvedCode;
             const rawValue = tr.corrected_value ?? tr.value;
             const val = Number(rawValue);
             if (!testCode || !Number.isFinite(val)) return [];

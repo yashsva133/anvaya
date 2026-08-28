@@ -24,6 +24,10 @@ export async function POST(req: NextRequest) {
         error: authError,
       } = await supabase.auth.getUser();
 
+      if (authError || !user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
       // Find or create the patient row for this user
       let finalPatientId = body.patient_id;
       if (!finalPatientId) {

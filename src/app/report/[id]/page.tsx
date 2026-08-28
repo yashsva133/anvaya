@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, BookOpen, FileText } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { SectionTitle, TestIcon, StatusPill } from "@/components/core";
+import { OverviewSummaryCard } from "@/components/summary-card";
 import { useReportData } from "@/context/ReportDataContext";
 import { useI18n, pick } from "@/lib/i18n";
 import { resolveTestDef, fmtValue, reportStatusKnown } from "@/lib/data";
@@ -41,6 +42,65 @@ export default function ReportPage() {
     );
   }
 
+  const criticalEntries = report.entries.filter((e) => reportStatusKnown(e) && ["critical", "high", "low"].includes(e.status));
+  const borderlineEntries = report.entries.filter((e) => reportStatusKnown(e) && e.status === "borderline");
+  const normalEntries = report.entries.filter((e) => !reportStatusKnown(e) || e.status === "normal");
+
+  const renderGroup = (title: string, entries: typeof report.entries) => {
+    if (entries.length === 0) return null;
+    return (
+      <div className="mb-8">
+        <h2 className="text-xl font-bold text-slate-800 mb-4">{title}</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {entries.map((e, index) => {
+            const def = resolveTestDef(e.test, catalog, e);
+            const known = reportStatusKnown(e);
+            return (
+              <div
+                key={`${e.test}-${index}`}
+                className={`group flex items-center justify-between gap-3 rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                  e.status !== "normal" && known
+                    ? "border-amber-200 bg-amber-50/30 hover:border-amber-300"
+                    : "border-slate-100 bg-white hover:border-brand-200"
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <Link
+                    href={`/trends?test=${e.test}`}
+                    className="shrink-0 transition-transform hover:scale-110 cursor-pointer z-10"
+                    title={s.lang === "hi" ? "रुझान देखें" : "View Trends"}
+                  >
+                    <TestIcon testId={e.test} size={44} />
+                  </Link>
+                  <Link href={`/test/${e.test}`} className="min-w-0 flex-1 group-hover:opacity-80">
+                    <p className="font-extrabold text-slate-800 text-[15px] leading-tight truncate">
+                      {pick(def.name, s.lang)}
+                    </p>
+                    <p className="text-xs font-bold text-slate-400 mt-0.5 truncate">
+                      {def.ref.text}
+                    </p>
+                  </Link>
+                </div>
+
+                <Link href={`/test/${e.test}`} className="flex flex-col items-end gap-1.5 shrink-0 group-hover:opacity-80">
+                  <StatusPill status={e.status} known={known} size="sm" />
+                  <div className="text-right flex items-baseline gap-1">
+                    <span className="tabular text-xl font-extrabold text-slate-700">
+                      {fmtValue(e.value)}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      {def.unit}
+                    </span>
+                  </div>
+                </Link>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <AppShell>
       <div className="mb-6 flex items-center">
@@ -72,48 +132,14 @@ export default function ReportPage() {
         </div>
       </div>
 
-      <section className="mt-8">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {report.entries.map((e, index) => {
-            const def = resolveTestDef(e.test, catalog, e);
-            const known = reportStatusKnown(e);
-            return (
-              <Link
-                key={`${e.test}-${index}`}
-                href={`/test/${e.test}`}
-                className={`group flex items-center justify-between gap-3 rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-md ${
-                  e.status !== "normal" && known
-                    ? "border-amber-200 bg-amber-50/30 hover:border-amber-300"
-                    : "border-slate-100 bg-white hover:border-brand-200"
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <TestIcon testId={e.test} size={44} className="shrink-0" />
-                  <div className="min-w-0">
-                    <p className="font-extrabold text-slate-800 text-[15px] leading-tight truncate">
-                      {pick(def.name, s.lang)}
-                    </p>
-                    <p className="text-xs font-bold text-slate-400 mt-0.5 truncate">
-                      {def.ref.text}
-                    </p>
-                  </div>
-                </div>
+      <section className="mb-8">
+        <OverviewSummaryCard reportId={id} />
+      </section>
 
-                <div className="flex flex-col items-end gap-1.5 shrink-0">
-                  <StatusPill status={e.status} known={known} size="sm" />
-                  <div className="text-right flex items-baseline gap-1">
-                    <span className="tabular text-xl font-extrabold text-slate-700">
-                      {fmtValue(e.value)}
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-400">
-                      {def.unit}
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+      <section className="mt-8">
+        {renderGroup(s.lang === "hi" ? "गंभीर और सीमा से बाहर" : "Critical & Out of Range", criticalEntries)}
+        {renderGroup(s.lang === "hi" ? "सीमा के पास (बॉर्डरलाइन)" : "Near Limit (Borderline)", borderlineEntries)}
+        {renderGroup(s.lang === "hi" ? "सामान्य" : "Normal", normalEntries)}
       </section>
     </AppShell>
   );

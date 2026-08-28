@@ -67,10 +67,14 @@ const TONE: Record<TrendChip["tone"], string> = {
   steady: "border-slate-200 bg-slate-50 text-slate-600",
 };
 
-export function OverviewSummaryCard() {
+export function OverviewSummaryCard({ reportId }: { reportId?: string }) {
   const { t, s } = useI18n();
   const hi = s.lang === "hi";
-  const { activeReport, patient, reports } = useReportData();
+  const { activeReport: contextActiveReport, patient, reports: contextReports } = useReportData();
+  
+  // If reportId is provided, we summarize ONLY that report and provide NO history.
+  const activeReport = reportId ? (contextReports.find(r => r.id === reportId) || contextActiveReport) : contextActiveReport;
+  const reports = reportId ? [] : contextReports;
 
   const [data, setData] = useState<SummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);

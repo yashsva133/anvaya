@@ -230,6 +230,7 @@ export default function ExtractedPage() {
                 };
                 setStoredActiveReport(savedReport);
 
+                let finalId = savedReport.id;
                 try {
                   const res = await fetch("/api/save-report", {
                     method: "POST",
@@ -246,6 +247,7 @@ export default function ExtractedPage() {
                     toast(saveJson.error ? `DB: ${saveJson.error}` : t("extract.correctToast"), "info");
                   } else {
                     if (saveJson.reportId && saveJson.reportId !== savedReport.id) {
+                      finalId = saveJson.reportId;
                       deleteStoredReport(savedReport.id);
                       setStoredActiveReport({ ...savedReport, id: saveJson.reportId });
                     }
@@ -259,7 +261,7 @@ export default function ExtractedPage() {
 
                 setTimeout(() => {
                   setSaving(false);
-                  router.push("/dashboard");
+                  router.push(`/report/${finalId}`);
                 }, 500);
               }}
               className="flex min-h-16 flex-1 items-center justify-center gap-2.5 rounded-3xl bg-mint-600 text-lg font-extrabold text-white shadow-lg shadow-mint-600/30 transition hover:bg-mint-500 active:scale-[0.98] disabled:opacity-75"

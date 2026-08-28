@@ -109,6 +109,17 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
       const rpts = await getPatientReports(p?.id);
       if (rpts && rpts.length > 0) {
         setReports(rpts);
+        const stored = getStoredActiveReport();
+        if (stored && stored.entries.length > 0) {
+          setActiveReport(stored);
+        } else {
+          setActiveReport({
+            id: rpts[0].id,
+            date: rpts[0].date,
+            month: rpts[0].month,
+            entries: rpts[0].entries,
+          });
+        }
       } else if (user) {
         setReports([]);
         setActiveReport(getStoredActiveReport());
@@ -130,8 +141,14 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
     void loadData();
 
     const onReportUpdated = () => {
-      setActiveReport(getStoredActiveReport());
-      setReports(getStoredReportsHistory());
+      // When logged in, do a full Supabase refresh so the AI summary
+      // and overview pick up the just-saved report from the database.
+      if (user) {
+        void loadData();
+      } else {
+        setActiveReport(getStoredActiveReport());
+        setReports(getStoredReportsHistory());
+      }
     };
 
     window.addEventListener("anvaya_report_updated", onReportUpdated);
