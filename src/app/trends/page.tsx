@@ -15,7 +15,6 @@ import {
   GitCommitVertical,
   SearchX,
   Sparkles,
-  TrendingDown,
   TrendingUp,
 } from "lucide-react";
 import { AppShell } from "@/components/shell";
@@ -166,22 +165,11 @@ export default function TrendsPage() {
           : "A second report will let you compare the change over time."
         : movingAway
           ? hi
-          ? "यह मान अपनी संदर्भ सीमा से और दूर जा रहा है। डॉक्टर से चर्चा करें।"
-          : "This reading is moving farther from its reference range. Discuss it with your doctor."
-        : hi
-          ? "यह रुझान डॉक्टर के लिए उपयोगी संदर्भ दे सकता है।"
-          : "This trend can give your doctor useful context.";
-
-  const trendCards = availableTests.map((id) => {
-    const d = resolveTestDef(id, catalog, reports.flatMap((r) => r.entries).find((e) => e.test === id));
-    const values = pointsFor(reports, id, s.lang);
-    const a = values[0];
-    const b = values[values.length - 1] ?? a;
-    const dir: "up" | "down" | "flat" = !a || !b || a.value === b.value ? "flat" : b.value > a.value ? "up" : "down";
-    const st = b ? statusFor(d, b.value) : "normal";
-    const known = d.ref.low !== undefined || d.ref.high !== undefined;
-    return { id, def: d, values, dir, status: st, statusKnown: known, change: a && b ? Math.round((b.value - a.value) * 100) / 100 : 0 };
-  });
+            ? "यह मान अपनी संदर्भ सीमा से और दूर जा रहा है। डॉक्टर से चर्चा करें।"
+            : "This reading is moving farther from its reference range. Discuss it with your doctor."
+          : hi
+            ? "यह रुझान डॉक्टर के लिए उपयोगी संदर्भ दे सकता है।"
+            : "This trend can give your doctor useful context.";
 
   return (
     <AppShell>
@@ -255,53 +243,7 @@ export default function TrendsPage() {
         </div>
       </motion.div>
 
-      <section className="mt-10">
-        <SectionTitle icon={TrendingDown} title={hi ? "सभी रुझान एक नज़र में" : "All trends at a glance"} />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {trendCards.map((card, i) => (
-            <motion.button
-              key={card.id}
-              initial={{ opacity: 0, y: 10 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.04 }}
-              onClick={() => setSelected(card.id)}
-              className={`card-shadow rounded-3xl border-2 p-4 text-left transition hover:-translate-y-0.5 ${!card.statusKnown ? "border-slate-200 bg-white" : card.status === "normal" ? "border-emerald-200 bg-white" : "border-amber-200 bg-white"}`}
-            >
-              <div className="flex items-center justify-between">
-                <TestIcon testId={card.id} size={42} />
-                <span className={`flex h-9 w-9 items-center justify-center rounded-full ${!card.statusKnown ? "bg-slate-50 text-slate-500" : card.status === "normal" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}><TrendDirIcon dir={card.dir} /></span>
-              </div>
-              <p className="mt-3 text-[15px] font-extrabold text-slate-800">{pick(card.def.name, s.lang)}</p>
-              <p className={`text-sm font-extrabold ${!card.statusKnown ? "text-slate-600" : card.status === "normal" ? "text-emerald-600" : "text-amber-600"}`}>
-                {!card.statusKnown
-                  ? hi
-                    ? "संदर्भ सीमा नहीं मिली"
-                    : "Reference range not reported"
-                  : card.values.length < 2
-                    ? hi
-                      ? "पहली reading"
-                      : "First reading"
-                    : card.dir === "flat"
-                      ? hi
-                        ? "स्थिर"
-                        : "Stable"
-                      : card.dir === "up"
-                        ? hi
-                          ? "बढ़ा"
-                          : "Increased"
-                        : hi
-                          ? "घटा"
-                          : "Decreased"}
-              </p>
-              <p className="mt-0.5 text-[11px] font-bold text-slate-400">
-                {card.values.length > 1 ? `${card.change > 0 ? "+" : ""}${card.change} ${card.def.unit}` : (hi ? "तुलना के लिए और रिपोर्ट चाहिए" : "Need another report to compare")}
-              </p>
-            </motion.button>
-          ))}
-        </div>
-      </section>
-
+      {/* report timeline compare */}
       <section className="mt-10">
         <SectionTitle icon={CalendarDays} title={t("trends.timeline")} sub={hi ? "समय के साथ आपकी saved रिपोर्ट्स" : "Your saved laboratory reports in date order"} />
         <div className="card-shadow rounded-[2rem] border border-slate-100 bg-white p-5 sm:p-7 md:p-8">

@@ -192,7 +192,8 @@ export default function ReportsPage() {
                     >
                       <div className="grid gap-2.5 sm:gap-3 grid-cols-1 md:grid-cols-2">
                         {r.entries.map((e, i) => {
-                          const def = catalog[e.test] || TESTS[e.test] || TESTS.hemoglobin;
+                          const def = resolveTestDef(e.test, catalog, e);
+                          if (!def) return null;
                           const notNormal = e.status !== "normal";
                           return (
                             <Link
