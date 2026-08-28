@@ -111,7 +111,7 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
       const rpts = await getPatientReports();
       if (rpts && rpts.length > 0) {
         setReports(rpts);
-      } else if (session?.user) {
+      } else if (user) {
         setReports([]);
       } else {
         setReports(getStoredReportsHistory());
