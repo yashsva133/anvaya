@@ -106,24 +106,9 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
       if (cat) setCatalog(cat);
 
       // 3. Fetch historical reports from Supabase or local store
-      const rpts = await getPatientReports(profileId || patient.id);
+      const rpts = await getPatientReports(p?.id);
       if (rpts && rpts.length > 0) {
         setReports(rpts);
-        const stored = getStoredActiveReport();
-        if (!stored || stored.entries.length === 0 || stored.id === "no-report") {
-          const newest = rpts[rpts.length - 1];
-          setActiveReport({
-            id: newest.id,
-            date: newest.date,
-            month: newest.month,
-            patient_summary: newest.patient_summary,
-            flagged_issues: newest.flagged_issues,
-            audio_script: newest.audio_script,
-            entries: newest.entries,
-          });
-        } else {
-          setActiveReport(stored);
-        }
       } else if (user) {
         setReports([]);
         setActiveReport(getStoredActiveReport());

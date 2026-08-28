@@ -81,6 +81,8 @@ export interface AskOptions {
   answerLang?: AnswerLang;
   /** "voice" turns get spoken formatting and are recorded as voice_sessions. */
   channel?: Channel;
+  /** Optional conversation history for context-aware generation. */
+  history?: { role: "user" | "assistant"; text: string }[];
   /** Extra safety_flags to record on this turn, e.g. the input-guard coverage note. */
   notes?: string[];
 }
@@ -709,6 +711,7 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
       readingLevel,
       payload: promptPayload,
       matches: [],
+      history: opts.history,
     });
   const initialPrompt = makePrompt(question);
 
@@ -739,24 +742,8 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
     });
   }
 
-  // Small talk is a first-class chatbot path. It works with no report and does
-  // not waste a model call or accidentally show a lab-report template.
-  if (conversation) {
-    return localAnswer({
-      text: conversationText(conversation, answerLang),
-      question,
-      matched: `conversation_${conversation}`,
-      answerLang,
-      lang,
-      payload: emptyPayload,
-      prompt: initialPrompt,
-      env,
-      sessionId,
-      startedAt,
-      notes,
-      engine: "rules",
-    });
-  }
+  // Small talk and greetings are now passed directly to MedGemma, 
+  // letting it act as a natural companion.
 
   const translator = createTranslator(env.translation);
   let modelQuestion = question;
@@ -901,52 +888,9 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
   }
 
   // A translated social turn should stay social even when the original script
-  // was not in the small local conversation phrasebook.
-  const translatedConversation = inputTranslated ? detectConversation(modelQuestion) : null;
-  if (translatedConversation) {
-    return localAnswer({
-      text: conversationText(translatedConversation, answerLang),
-      question,
-      matched: `conversation_${translatedConversation}`,
-      answerLang,
-      lang,
-      payload: emptyPayload,
-      prompt: makePrompt(modelQuestion),
-      env,
-      sessionId,
-      startedAt,
-      notes,
-      engine: "rules",
-      translation: {
-        provider: translator?.name ?? "none",
-        target_language: answerLang,
-        input_translated: true,
-        output_translated: false,
-        ...(inputLatencyMs !== undefined ? { input_latency_ms: inputLatencyMs } : {}),
-      },
-    });
-  }
+  // was not in the small local conversation phrasebook. MedGemma handles it.
 
-  // A live report exists, but a weather/general/social question must not be
-  // handed the person's results. Keep the chatbot natural while staying within
-  // its clinical purpose.
-  if (!reportQuestion) {
-    return localAnswer({
-      text: outOfScopeText(answerLang),
-      question,
-      matched: "out_of_scope",
-      answerLang,
-      lang,
-      payload: emptyPayload,
-      prompt: initialPrompt,
-      env,
-      sessionId,
-      startedAt,
-      notes,
-      engine: "rules",
-      languageNote: inputLanguage !== "en" && !translator ? "context_not_used:unclassified_language" : undefined,
-    });
-  }
+  // The LLM now naturally handles small talk using the history and medical prompt.
 
   // Only report-related turns receive the user's de-identified report payload.
   promptPayload = buildAnonymisedPayload({
@@ -960,33 +904,9 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
   // already translated it, reuse that result rather than making a second call.
   if (inputLanguage !== "en" && !inputTranslated) {
     if (!translator) {
-      if (answerLang !== "en") {
-        return localMultilingualReportAnswer({
-          question,
-          lang,
-          answerLang,
-          payload,
-          prompt: makePrompt(modelQuestion),
-          env,
-          sessionId,
-          startedAt,
-          notes,
-          reason: "input_translation_not_configured",
-        });
-      }
-      return translationFailureAnswer({
-        question,
-        lang,
-        answerLang,
-        payload,
-        prompt: makePrompt(modelQuestion),
-        env,
-        sessionId,
-        startedAt,
-        notes,
-        reason: "not_configured",
-      });
-    }
+      // Allow local model to handle multilingual input natively instead of falling back
+      console.log("[AGENT] No translation API configured; passing multilingual input natively to LLM.");
+    } else {
     try {
       const translatedQuestion = await translateSafely(translator, question, "auto", "en", payload);
       modelQuestion = translatedQuestion.text;
@@ -1033,7 +953,8 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
         reason: error instanceof TranslationError ? error.code : "input_provider_error",
       });
     }
-  }
+    }
+    }
 
   const prompt = makePrompt(modelQuestion);
   let retrieval = retrieve({

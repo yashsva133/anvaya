@@ -5,10 +5,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CalendarDays,
   ChevronDown,
+  ArrowRight,
   FileText,
   FolderOpen,
   GitCompareArrows,
@@ -24,7 +26,7 @@ import {
   useToast,
 } from "@/components/core";
 import { useI18n, pick } from "@/lib/i18n";
-import { fmtValue, reportStatusKnown, resolveTestDef } from "@/lib/data";
+import { fmtValue, reportStatusKnown, resolveTestDef, TESTS } from "@/lib/data";
 import { useReportData } from "@/context/ReportDataContext";
 
 export default function ReportsPage() {
@@ -35,6 +37,7 @@ export default function ReportsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const latest = reports[reports.length - 1] || reports[0];
   const hi = s.lang === "hi";
+  const router = useRouter();
 
   const handleDelete = async (reportId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -97,7 +100,6 @@ export default function ReportsPage() {
             [...reports].reverse().map((r, idx) => {
               const isLatest = r.id === latest?.id;
               const warn = r.attention > 0;
-              const expanded = open === r.id;
               const isDeleting = deletingId === r.id;
 
               return (
@@ -115,9 +117,8 @@ export default function ReportsPage() {
                   <div
                     role="button"
                     tabIndex={0}
-                    onClick={() => setOpen(expanded ? null : r.id)}
-                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen(expanded ? null : r.id)}
-                    aria-expanded={expanded}
+                    onClick={() => router.push(`/report/${r.id}`)}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && router.push(`/report/${r.id}`)}
                     className="flex w-full flex-wrap items-center gap-4 p-5 text-left transition hover:bg-slate-50/60 cursor-pointer"
                   >
                     <span
@@ -177,94 +178,10 @@ export default function ReportsPage() {
                         <Trash2 className="h-4 w-4" />
                       </button>
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition group-hover:bg-slate-200">
-                        <ChevronDown
-                          className={`h-5 w-5 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
-                        />
+                        <ArrowRight className="h-5 w-5" />
                       </div>
                     </div>
                   </div>
-
-                  {expanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      className="border-t border-dashed border-slate-200 bg-slate-50/40 p-4 sm:p-6"
-                    >
-                      <div className="grid gap-2.5 sm:gap-3 grid-cols-1 md:grid-cols-2">
-                        {r.entries.map((e, i) => {
-                          const def = resolveTestDef(e.test, catalog, e);
-                          if (!def) return null;
-                          const notNormal = e.status !== "normal";
-                          return (
-                            <Link
-                              key={`${e.test}-${i}`}
-                              href={`/test/${e.test}`}
-                              className={`group flex items-center justify-between gap-3 rounded-2xl border p-3 sm:p-3.5 transition-all hover:-translate-y-0.5 hover:shadow-md ${
-                                notNormal
-                                  ? "border-amber-200 bg-amber-50/30 hover:border-amber-300 hover:bg-amber-50/60"
-                                  : "border-slate-100 bg-white hover:border-brand-200 hover:bg-brand-50/30"
-                              }`}
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <TestIcon testId={e.test} size={40} className="shrink-0" />
-                                <div className="min-w-0">
-                                  <p className="font-extrabold text-slate-800 text-sm sm:text-[15px] leading-tight">
-                                    {pick(def.name, s.lang)}
-                                  </p>
-                                  <p className="text-[11px] font-bold text-slate-400 mt-0.5">
-                                    {def.ref.text}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-2.5 shrink-0">
-                                <div className="text-right">
-                                  <p className="tabular font-extrabold text-brand-950 text-base sm:text-lg leading-none">
-                                    {fmtValue(e.value)}
-                                  </p>
-                                  <p className="text-[10px] font-bold text-slate-400 mt-0.5">{def.unit}</p>
-                                </div>
-                                <StatusPill status={e.status} known={reportStatusKnown(e)} size="sm" />
-                              </div>
-                            </Link>
-                          );
-                        })}
-                      </div>
-
-                      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/60 pt-4">
-                        <p className="text-xs font-semibold text-slate-500">
-                          {hi ? "किसी भी जाँच पर टैप करके विस्तृत व्याख्या और रुझान देखें।" : "Tap any test to see detailed explanations and trends."}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={(e) => handleDelete(r.id, e)}
-                            className="inline-flex min-h-11 items-center gap-1.5 rounded-2xl border border-rose-200 bg-rose-50 px-4 text-xs font-extrabold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100 active:scale-95"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            {hi ? "हटाएं" : "Delete"}
-                          </button>
-                          {isLatest ? (
-                            <Link
-                              href="/dashboard"
-                              className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-brand-700 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-brand-600 active:scale-95"
-                            >
-                              <Sparkles className="h-4 w-4" />
-                              {t("reports.open")}
-                            </Link>
-                          ) : (
-                            <Link
-                              href={`/compare?old=${r.id}&new=${latest?.id ?? ""}`}
-                              className="inline-flex min-h-11 items-center gap-2 rounded-2xl border-2 border-brand-200 bg-white px-5 text-sm font-extrabold text-brand-700 transition hover:border-brand-400 active:scale-95"
-                            >
-                              <GitCompareArrows className="h-4 w-4" />
-                              {hi ? "नवीनतम से तुलना करें" : "Compare with latest"}
-                            </Link>
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
                 </motion.div>
               );
             })

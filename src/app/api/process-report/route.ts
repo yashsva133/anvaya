@@ -123,6 +123,7 @@ export async function POST(req: NextRequest) {
     let csvData = "";
     try {
       const candidates = [
+        path.join(process.cwd(), "venv", "Scripts", "python.exe"),
         "python",
         "python3",
         path.join(process.cwd(), "venv", "Scripts", "python.exe"),
@@ -131,20 +132,18 @@ export async function POST(req: NextRequest) {
       const errors: string[] = [];
       for (const py of candidates) {
         try {
-          const scriptPath = path.join(process.cwd(), "lab_ocr_paddleocr.py");
-          const { stdout, stderr } = await execPromise(`"${py}" "${scriptPath}" --image "${tempInPath}" --out "${tempOutCsv}" --min-confidence 0.2`);
-          if (stderr) console.log(`[OCR Python stderr - ${py}]:`, stderr);
+          console.log(`Starting OCR processing using ${py}... (this usually takes 15-20 seconds)`);
+          await execPromise(`"${py}" lab_ocr_paddleocr.py --image "${tempInPath}" --out "${tempOutCsv}"`);
           csvData = await fs.readFile(tempOutCsv, "utf8");
+          console.log(`OCR processing completed successfully! CSV length: ${csvData.length}`);
+          console.log("CSV Preview:", csvData.substring(0, 200));
           if (csvData.trim()) break;
-        } catch (err: any) {
-          const errMsg = err?.stderr || err?.stdout || err?.message || String(err);
-          errors.push(`Candidate '${py}': ${errMsg}`);
+        } catch (e) {
+          console.error(`OCR candidate ${py} failed:`, e);
         }
       }
-      if (!csvData && errors.length > 0) {
-        console.error("OCR Python Candidates Failed:\n" + errors.join("\n"));
-      }
-    } catch {
+    } catch (e) {
+      console.error("All OCR candidates failed:", e);
       // OCR candidate fallback
     } finally {
       await fs.unlink(tempInPath).catch(() => {});

@@ -24,44 +24,56 @@ export async function POST(req: NextRequest) {
         error: authError,
       } = await supabase.auth.getUser();
 
-      let targetPatientId = body.patient_id;
-
-      if (user) {
-        // Prove ownership or auto-resolve patient record for authenticated user
-        let { data: patient } = await supabase
+      // Find or create the patient row for this user
+      let finalPatientId = body.patient_id;
+      if (!finalPatientId) {
+        const { data: patientRow, error: pErr } = await supabase
           .from("patients")
           .select("id")
           .eq("profile_id", user.id)
           .maybeSingle();
-
-        if (!patient && targetPatientId) {
-          const { data: byId } = await supabase
-            .from("patients")
-            .select("id")
-            .eq("id", targetPatientId)
+          
+        if (patientRow?.id) {
+          finalPatientId = patientRow.id;
+        } else {
+          // Auto-create patient
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("full_name, email")
+            .eq("id", user.id)
             .maybeSingle();
-          if (byId) patient = byId;
-        }
-
-        if (!patient) {
-          // Create a patient row for this user on the fly
-          const { data: created, error: createErr } = await supabase
+            
+          const nameEn = prof?.full_name || user.email?.split("@")[0] || "User";
+          const { data: newPatient, error: insertErr } = await supabase
             .from("patients")
             .insert({
               profile_id: user.id,
-              full_name: user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
-              email: user.email || null,
+              full_name: nameEn,
+              email: prof?.email || user.email || "",
             })
             .select("id")
             .single();
-
-          if (!createErr && created) {
-            patient = created;
+            
+          if (insertErr || !newPatient) {
+            return NextResponse.json({ error: "Failed to create patient record." }, { status: 500 });
           }
+          finalPatientId = newPatient.id;
         }
-
-        if (patient) {
-          body.patient_id = patient.id;
+        
+        // Mutate body so the underlying saveExtractedReportToDb has a patient_id
+        body.patient_id = finalPatientId;
+      } else {
+        const { data: patient, error: patientError } = await supabase
+          .from("patients")
+          .select("id")
+          .eq("id", body.patient_id)
+          .eq("profile_id", user.id)
+          .maybeSingle();
+        if (patientError) {
+          return NextResponse.json({ error: patientError.message }, { status: 500 });
+        }
+        if (!patient) {
+          return NextResponse.json({ error: "That patient record is not yours." }, { status: 403 });
         }
       }
     }
