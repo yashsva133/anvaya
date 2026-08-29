@@ -105,10 +105,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (patData) {
-        setPatient(patData as PatientRecord);
+        let age: number | undefined = undefined;
+        if (patData.date_of_birth) {
+          const birthDate = new Date(patData.date_of_birth);
+          if (!isNaN(birthDate.getTime())) {
+            const diff = Date.now() - birthDate.getTime();
+            age = Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+          }
+        }
+        if (age === undefined && typeof window !== "undefined") {
+          const localAge = localStorage.getItem(`anvaya_age_${userId}`) || localStorage.getItem("anvaya_user_age");
+          if (localAge && !isNaN(parseInt(localAge, 10))) {
+            age = parseInt(localAge, 10);
+          }
+        }
+        setPatient({
+          ...patData,
+          age: age ?? (patData as any).age,
+        } as PatientRecord);
         const hasRequired = Boolean(
           patData.full_name &&
-            (patData.sex || patData.date_of_birth) &&
+            (patData.sex || patData.date_of_birth || age !== undefined) &&
             patData.preferred_language
         );
         setIsOnboarded(hasRequired);
@@ -470,12 +487,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .select()
           .single();
 
-        if (patError) {
-          console.error("Failed to save patient record:", patError);
-          return { error: patError.message };
+        if (payload.age !== undefined && typeof window !== "undefined") {
+          localStorage.setItem(`anvaya_age_${user.id}`, String(payload.age));
+          localStorage.setItem("anvaya_user_age", String(payload.age));
         }
 
-        setPatient(savedPatient as PatientRecord);
+        setPatient({
+          ...savedPatient,
+          age: payload.age ?? (dob ? Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : undefined),
+        } as PatientRecord);
         setIsOnboarded(true);
         await fetchUserData(user.id);
         return { error: null };

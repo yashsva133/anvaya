@@ -329,13 +329,13 @@ export const TESTS: Record<string, TestDef> = {
 
   platelets: {
     id: "platelets",
-    unit: "×10³/µL",
-    name: { en: "Platelets", hi: "प्लेटलेट्स" },
+    unit: "/cumm",
+    name: { en: "Platelet Count", hi: "प्लेटलेट्स" },
     simple: { en: "Clotting cells", hi: "थक्का बनाने वाली कोशिकाएँ" },
     icon: "layers",
     tint: "bg-sky-100",
     ink: "text-sky-600",
-    ref: { low: 150, high: 410, text: "150–410 ×10³/µL" },
+    ref: { low: 150000, high: 410000, text: "150,000–410,000 /cumm" },
     what: {
       med: "Platelets (thrombocytes) are anucleate cell fragments essential for primary haemostasis and clot formation.",
       en: "Platelets are tiny cells that help your blood clot when you get a cut.",
@@ -371,13 +371,13 @@ export const TESTS: Record<string, TestDef> = {
 
   wbc: {
     id: "wbc",
-    unit: "×10³/µL",
+    unit: "/cumm",
     name: { en: "WBC Count", hi: "WBC गणना" },
     simple: { en: "Infection-fighting cells", hi: "संक्रमण से लड़ने वाली कोशिकाएँ" },
     icon: "shieldplus",
     tint: "bg-emerald-100",
     ink: "text-emerald-600",
-    ref: { low: 4, high: 11, text: "4–11 ×10³/µL" },
+    ref: { low: 4000, high: 11000, text: "4,000–11,000 /cumm" },
     what: {
       med: "Total leucocyte count quantifies circulating white blood cells, central to innate and adaptive immune response.",
       en: "White blood cells help your body fight infections.",
@@ -723,7 +723,30 @@ export function resolveTestDef(
   metadata?: ReportTestMetadata
 ): TestDef {
   const key = testId.toLowerCase();
-  return catalog?.[testId] || catalog?.[key] || TESTS[testId] || TESTS[key] || createUnknownTestDef(key, metadata);
+  const base = catalog?.[testId] || catalog?.[key] || TESTS[testId] || TESTS[key];
+  if (!base) return createUnknownTestDef(key, metadata);
+  if (metadata) {
+    const effectiveUnit = metadata.unit || base.unit;
+    const effectiveLow = metadata.reference?.low ?? base.ref.low;
+    const effectiveHigh = metadata.reference?.high ?? base.ref.high;
+    const effectiveText = metadata.reference?.text || (effectiveLow !== undefined && effectiveHigh !== undefined
+      ? `${effectiveLow}–${effectiveHigh} ${effectiveUnit}`
+      : effectiveLow !== undefined
+        ? `above ${effectiveLow} ${effectiveUnit}`
+        : effectiveHigh !== undefined
+          ? `below ${effectiveHigh} ${effectiveUnit}`
+          : base.ref.text);
+    return {
+      ...base,
+      unit: effectiveUnit,
+      ref: {
+        low: effectiveLow,
+        high: effectiveHigh,
+        text: effectiveText,
+      },
+    };
+  }
+  return base;
 }
 
 /* --------------------------------- SOURCES -------------------------------- */
@@ -851,8 +874,8 @@ export const REPORTS: Report[] = [
       E("triglycerides", 158, "borderline"),
       E("totalchol", 189, "normal"),
       E("creatinine", 0.9, "normal"),
-      E("platelets", 228, "normal"),
-      E("wbc", 6.1, "normal"),
+      E("platelets", 228000, "normal"),
+      E("wbc", 6100, "normal"),
       E("potassium", 4.2, "normal"),
     ],
   },
@@ -871,8 +894,8 @@ export const REPORTS: Report[] = [
       E("triglycerides", 170, "high"),
       E("totalchol", 201, "borderline"),
       E("creatinine", 0.9, "normal"),
-      E("platelets", 236, "normal"),
-      E("wbc", 6.8, "normal"),
+      E("platelets", 236000, "normal"),
+      E("wbc", 6800, "normal"),
       E("mcv", 83.4, "normal"),
       E("potassium", 4.4, "normal"),
     ],
@@ -892,8 +915,8 @@ export const REPORTS: Report[] = [
       E("triglycerides", 188, "high"),
       E("totalchol", 214, "high"),
       E("creatinine", 0.9, "normal"),
-      E("platelets", 215, "normal"),
-      E("wbc", 6.5, "normal"),
+      E("platelets", 215000, "normal"),
+      E("wbc", 6500, "normal"),
       E("mcv", 82.1, "normal"),
       E("rbc", 4.4, "low"),
       E("potassium", 4.3, "normal"),
@@ -913,8 +936,8 @@ export const REPORTS: Report[] = [
       E("glucose", 88, "normal"),
       E("triglycerides", 128, "normal"),
       E("creatinine", 1.0, "normal"),
-      E("platelets", 210, "normal"),
-      E("wbc", 6.4, "normal"),
+      E("platelets", 210000, "normal"),
+      E("wbc", 6400, "normal"),
       E("mcv", 82.4, "normal"),
       E("rbc", 4.6, "normal"),
       E("hematocrit", 41.2, "normal"),
@@ -1321,7 +1344,7 @@ export const COMPARE_ROWS: {
   { feature: { en: "Confidence indicator", hi: "विश्वास संकेतक" }, portal: "no", generic: "limited", rx: "yes" },
   { feature: { en: "Indian languages", hi: "भारतीय भाषाएँ" }, portal: "limited", generic: "partial", rx: "yes" },
   { feature: { en: "Low-literacy interface", hi: "कम-साक्षर इंटरफ़ेस" }, portal: "no", generic: "no", rx: "yes" },
-  { feature: { en: "Doctor summary", hi: "डॉक्टर सारांश" }, portal: "limited", generic: "limited", rx: "yes" },
+  { feature: { en: "Patient summary", hi: "रोगी सारांश" }, portal: "limited", generic: "limited", rx: "yes" },
 ];
 
 /* --------------------------------- HELPERS --------------------------------- */

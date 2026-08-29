@@ -36,29 +36,97 @@ import { AppShell } from "@/components/shell";
 import { SectionTitle, TestIcon, useToast } from "@/components/core";
 import { useI18n, pick, type LangCode, type ReadingMode } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
+import { useReportData } from "@/context/ReportDataContext";
 import { SOURCES, TESTS } from "@/lib/data";
 
 export default function SettingsPage() {
   const router = useRouter();
   const { s, set, t } = useI18n();
   const { user, profile, patient, signOut } = useAuth();
+  const { patient: dbPatient } = useReportData();
   const toast = useToast();
   const notify = () => toast(t("settings.savedToast"));
   const hi = s.lang === "hi";
 
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editAge, setEditAge] = useState<number | "">("");
+  const [editSex, setEditSex] = useState<"male" | "female" | "other" | "unspecified">("male");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const { saveOnboarding } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
     router.replace("/login");
   };
 
+  const userAge =
+    (dbPatient?.age && !isNaN(dbPatient.age) && dbPatient.age > 0 ? dbPatient.age : null) ||
+    (patient?.age && !isNaN(patient.age) && patient.age > 0 ? patient.age : null) ||
+    (patient?.date_of_birth
+      ? Math.floor((Date.now() - new Date(patient.date_of_birth).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
+      : null) ||
+    (user?.user_metadata?.age ? Number(user.user_metadata.age) : null) ||
+    (typeof window !== "undefined" && user?.id && localStorage.getItem(`anvaya_age_${user.id}`)
+      ? parseInt(localStorage.getItem(`anvaya_age_${user.id}`)!, 10)
+      : null) ||
+    (typeof window !== "undefined" && localStorage.getItem("anvaya_user_age")
+      ? parseInt(localStorage.getItem("anvaya_user_age")!, 10)
+      : null);
+
+  const userSex =
+    dbPatient?.gender?.en?.toLowerCase() ||
+    patient?.sex ||
+    user?.user_metadata?.gender ||
+    user?.user_metadata?.sex ||
+    (typeof window !== "undefined" ? (localStorage.getItem("anvaya_user_sex") as any) : null);
+
   const displayName =
+    dbPatient?.name?.en ||
     patient?.full_name ||
     profile?.full_name ||
     user?.user_metadata?.full_name ||
     user?.email?.split("@")[0] ||
     (hi ? "आपकी प्रोफ़ाइल" : "Your profile");
+
+  useEffect(() => {
+    if (patient || profile || user) {
+      setEditName(patient?.full_name || profile?.full_name || user?.user_metadata?.full_name || "");
+      setEditAge(userAge || "");
+      setEditSex(patient?.sex || (userSex as any) || "male");
+    }
+  }, [patient, profile, user, userAge, userSex]);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingProfile(true);
+    try {
+      if (editAge !== "" && typeof window !== "undefined") {
+        if (user?.id) localStorage.setItem(`anvaya_age_${user.id}`, String(editAge));
+        localStorage.setItem("anvaya_user_age", String(editAge));
+      }
+      if (editSex && typeof window !== "undefined") {
+        localStorage.setItem("anvaya_user_sex", editSex);
+      }
+
+      await saveOnboarding({
+        fullName: editName.trim() || displayName,
+        ...(editAge !== "" ? { age: Number(editAge) } : {}),
+        gender: editSex,
+        preferredLanguage: s.lang,
+        readingLevel: s.mode as any,
+      });
+
+      toast(hi ? "प्रोफ़ाइल सफलतापूर्वक सहेजी गई!" : "Profile updated successfully!");
+      setEditOpen(false);
+    } catch {
+      toast(hi ? "प्रोफ़ाइल सहेजने में त्रुटि" : "Could not update profile");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#sources") {
@@ -315,13 +383,14 @@ export default function SettingsPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
-              <Link
-                href="/onboarding"
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
                 className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-4 text-xs font-bold text-slate-700 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800"
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" />
                 {hi ? "प्रोफ़ाइल संशोधित करें" : "Edit Profile"}
-              </Link>
+              </button>
               <button
                 type="button"
                 onClick={handleSignOut}
@@ -334,22 +403,32 @@ export default function SettingsPage() {
           </div>
 
           <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-4">
-            <div className="rounded-xl bg-slate-50 p-2.5 text-center">
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="rounded-xl bg-slate-50 p-2.5 text-center transition hover:bg-brand-50/50 hover:ring-1 hover:ring-brand-200"
+              title={hi ? "आयु बदलने के लिए क्लिक करें" : "Click to edit age"}
+            >
               <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
                 {hi ? "आयु" : "Age"}
               </p>
               <p className="mt-0.5 text-sm font-extrabold text-brand-950">
-                {patient?.age ? `${patient.age} yrs` : (hi ? "सेट नहीं" : "Not set")}
+                {userAge ? `${userAge} yrs` : (hi ? "सेट नहीं (यहाँ क्लिक करें)" : "Not set (Click to set)")}
               </p>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-2.5 text-center">
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="rounded-xl bg-slate-50 p-2.5 text-center transition hover:bg-brand-50/50 hover:ring-1 hover:ring-brand-200"
+              title={hi ? "लिंग बदलने के लिए क्लिक करें" : "Click to edit sex"}
+            >
               <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
                 {hi ? "लिंग" : "Sex"}
               </p>
               <p className="mt-0.5 text-sm font-extrabold text-brand-950">
-                {patient?.sex ? (hi && patient.sex === "male" ? "पुरुष" : hi && patient.sex === "female" ? "महिला" : patient.sex) : (hi ? "सेट नहीं" : "Not set")}
+                {userSex ? (hi && userSex === "male" ? "पुरुष" : hi && userSex === "female" ? "महिला" : userSex) : (hi ? "सेट नहीं" : "Not set")}
               </p>
-            </div>
+            </button>
             <div className="rounded-xl bg-slate-50 p-2.5 text-center">
               <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
                 {hi ? "पठन मोड" : "Reading Mode"}
@@ -368,6 +447,93 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+
+        {/* Edit Profile Modal Dialog */}
+        <AnimatePresence>
+          {editOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="w-full max-w-md rounded-3xl border border-slate-100 bg-white p-6 shadow-2xl"
+              >
+                <h3 className="text-lg font-black text-brand-950">
+                  {hi ? "प्रोफ़ाइल संपादित करें" : "Edit Profile"}
+                </h3>
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  {hi
+                    ? "सटीक मेडिकल संदर्भ सीमा के लिए अपनी आयु और जानकारी दर्ज करें।"
+                    : "Enter your age and details for accurate clinical reference ranges."}
+                </p>
+
+                <form onSubmit={handleSaveProfile} className="mt-5 space-y-4">
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700">
+                      {hi ? "पूरा नाम" : "Full Name"}
+                    </label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="e.g. Anshul"
+                      className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:border-brand-500 focus:bg-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700">
+                        {hi ? "आयु (वर्ष)" : "Age (Years)"}
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="120"
+                        value={editAge}
+                        onChange={(e) => setEditAge(e.target.value ? parseInt(e.target.value, 10) : "")}
+                        placeholder="e.g. 24"
+                        className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:border-brand-500 focus:bg-white focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700">
+                        {hi ? "लिंग" : "Sex"}
+                      </label>
+                      <select
+                        value={editSex}
+                        onChange={(e) => setEditSex(e.target.value as any)}
+                        className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-bold text-slate-800 focus:border-brand-500 focus:bg-white focus:outline-none"
+                      >
+                        <option value="male">{hi ? "पुरुष (Male)" : "Male"}</option>
+                        <option value="female">{hi ? "महिला (Female)" : "Female"}</option>
+                        <option value="other">{hi ? "अन्य (Other)" : "Other"}</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex items-center justify-end gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditOpen(false)}
+                      className="rounded-full px-4 py-2 text-xs font-bold text-slate-500 transition hover:bg-slate-100"
+                    >
+                      {hi ? "रद्द करें" : "Cancel"}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingProfile}
+                      className="rounded-full bg-brand-700 px-5 py-2 text-xs font-extrabold text-white shadow-md transition hover:bg-brand-600 disabled:opacity-50"
+                    >
+                      {savingProfile ? (hi ? "सहेजा जा रहा है..." : "Saving...") : (hi ? "सहेजें" : "Save Changes")}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </section>
 
       {/* --------------------------- Sources Button & Expandable Library (At Last) --------------------------- */}

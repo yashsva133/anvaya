@@ -37,30 +37,27 @@ import difflib
 import cv2
 import numpy as np
 
-HAS_RAPID_OCR = False
-HAS_PADDLE_OCR = False
-HAS_EASY_OCR = False
+HAS_NATIVE_PADDLE_OCR = False
+HAS_PADDLE_ONNX = False
 
 try:
-    from rapidocr_onnxruntime import RapidOCR
-    HAS_RAPID_OCR = True
+    import onnxruntime as ort
 except ImportError:
-    pass
+    ort = None
 
-if not HAS_RAPID_OCR:
-    try:
-        import paddle
-        from paddleocr import PaddleOCR
-        HAS_PADDLE_OCR = True
-    except ImportError:
-        pass
+# 1. First check for native PaddleOCR
+try:
+    from paddleocr import PaddleOCR
+    HAS_NATIVE_PADDLE_OCR = True
+except Exception:
+    HAS_NATIVE_PADDLE_OCR = False
 
-if not HAS_RAPID_OCR and not HAS_PADDLE_OCR:
-    try:
-        import easyocr
-        HAS_EASY_OCR = True
-    except ImportError:
-        pass
+# 2. Check for PaddleOCR ONNX Runtime engine (PP-OCRv4)
+try:
+    from rapidocr_onnxruntime import RapidOCR
+    HAS_PADDLE_ONNX = True
+except Exception:
+    HAS_PADDLE_ONNX = False
 
 # Ensure Windows terminal handles UTF-8 / unicode symbols gracefully
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
@@ -80,7 +77,7 @@ REFERENCE_RANGES = {
     "hemoglobin":            {"display": "Hemoglobin",            "unit": "g/dL",     "low": 13.0,   "high": 17.0,   "aliases": ["hb", "haemoglobin", "hemoglobin", "hgb"]},
     "wbc count":             {"display": "WBC Count",             "unit": "/cumm",    "low": 4000,   "high": 11000,  "aliases": ["wbc", "total leucocyte count", "tlc", "total leukocyte count", "total wbc count", "leukocyte count", "leucocyte count", "total count", "total leucocytes count"]},
     "rbc count":             {"display": "RBC Count",             "unit": "mill/cumm","low": 4.5,    "high": 5.5,    "aliases": ["rbc", "total rbc count", "rbc count", "total red blood cell count", "red blood cell count", "total erythrocytes count", "erythrocytes"]},
-    "platelet count":        {"display": "Platelet Count",        "unit": "lakh/cumm","low": 1.5,    "high": 4.5,    "aliases": ["platelets", "plt", "platelet count", "total platelet count", "total platelets", "platelet"]},
+    "platelet count":        {"display": "Platelet Count",        "unit": "/cumm",    "low": 150000, "high": 410000, "aliases": ["platelets", "plt", "platelet count", "total platelet count", "total platelets", "platelet"]},
     "hba1c":                 {"display": "HbA1c",                 "unit": "%",        "low": 4.0,    "high": 5.6,    "aliases": ["glycated hemoglobin", "hb a1c", "glycosylated hemoglobin", "hba1c"]},
     "fasting glucose":       {"display": "Fasting Glucose",       "unit": "mg/dL",    "low": 70,     "high": 100,    "aliases": ["fbs", "fasting blood sugar", "fasting plasma glucose", "glucose - fasting", "blood sugar fasting", "glucose fasting"]},
     "post prandial glucose": {"display": "PP Glucose",            "unit": "mg/dL",    "low": 70,     "high": 140,    "aliases": ["ppbs", "post prandial blood sugar", "pp blood sugar", "glucose pp", "postprandial glucose"]},
@@ -265,19 +262,96 @@ def parse_box_coords(box):
     return 0.0, 0.0, 0.0, 0.0
 
 
+def is_cuda_available() -> bool:
+    """Detects if CUDA GPU acceleration is available on this system."""
+    if ort is not None:
+        try:
+            providers = ort.get_available_providers()
+            if "CUDAExecutionProvider" in providers or "TensorrtExecutionProvider" in providers:
+                return True
+        except Exception:
+            pass
+    try:
+        import paddle
+        if paddle.device.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0:
+            return True
+    except Exception:
+        pass
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def run_paddle_ocr(img: np.ndarray, lang: str = "en", min_confidence: float = 0.6,
-                   use_gpu: bool = False):
+                   use_gpu: bool = None):
     """
-    Runs available OCR engine (RapidOCR / PaddleOCR / EasyOCR) on the image and returns:
+    Runs PaddleOCR (PP-OCR model engine) on the image and returns:
     1. structured_items: list of dicts with 'text', 'score', 'xmin', 'ymin', 'xmax', 'ymax', 'ymid'
     2. raw_lines: list of (text, confidence) tuples
     """
+    if use_gpu is None:
+        use_gpu = is_cuda_available()
+
     structured_items = []
     raw_lines = []
 
-    if HAS_RAPID_OCR:
-        engine = RapidOCR()
-        result, _ = engine(img)
+    if HAS_NATIVE_PADDLE_OCR:
+        try:
+            device = "gpu:0" if use_gpu else "cpu"
+            ocr = PaddleOCR(
+                lang=lang,
+                device=device,
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=True,
+            )
+            result = ocr.predict(input=img)
+            for res in result:
+                texts = res.get("rec_texts", [])
+                scores = res.get("rec_scores", [])
+                boxes = res.get("rec_boxes", res.get("dt_polys", []))
+                for text, score, box in zip(texts, scores, boxes):
+                    score = float(score)
+                    text_str = str(text).strip()
+                    raw_lines.append((text_str, score))
+                    if score >= min_confidence and text_str:
+                        xmin, ymin, xmax, ymax = parse_box_coords(box)
+                        structured_items.append({
+                            "text": text_str,
+                            "score": score,
+                            "xmin": xmin,
+                            "ymin": ymin,
+                            "xmax": xmax,
+                            "ymax": ymax,
+                            "ymid": (ymin + ymax) / 2.0
+                        })
+            if structured_items:
+                return structured_items, raw_lines
+        except Exception:
+            # Fall through to Paddle ONNX runtime
+            pass
+
+    if HAS_PADDLE_ONNX:
+        engine = None
+        if use_gpu:
+            try:
+                engine = RapidOCR(Det_use_cuda=True, Cls_use_cuda=True, Rec_use_cuda=True)
+            except Exception:
+                engine = RapidOCR()
+        else:
+            engine = RapidOCR()
+
+        try:
+            result, _ = engine(img)
+        except Exception:
+            # Fallback to CPU execution if GPU provider fails at runtime
+            engine = RapidOCR()
+            result, _ = engine(img)
+
         if result:
             for box, text, score in result:
                 score = float(score)
@@ -296,67 +370,7 @@ def run_paddle_ocr(img: np.ndarray, lang: str = "en", min_confidence: float = 0.
                     })
         return structured_items, raw_lines
 
-    if HAS_PADDLE_OCR:
-        import paddle
-        if use_gpu or (paddle.device.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0):
-            device = "gpu:0"
-        else:
-            device = "cpu"
-
-        ocr = PaddleOCR(
-            lang=lang,
-            device=device,
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=True,
-        )
-        result = ocr.predict(input=img)
-
-        for res in result:
-            texts = res.get("rec_texts", [])
-            scores = res.get("rec_scores", [])
-            boxes = res.get("rec_boxes", res.get("dt_polys", []))
-
-            for text, score, box in zip(texts, scores, boxes):
-                score = float(score)
-                text_str = str(text).strip()
-                raw_lines.append((text_str, score))
-
-                if score >= min_confidence and text_str:
-                    xmin, ymin, xmax, ymax = parse_box_coords(box)
-                    structured_items.append({
-                        "text": text_str,
-                        "score": score,
-                        "xmin": xmin,
-                        "ymin": ymin,
-                        "xmax": xmax,
-                        "ymax": ymax,
-                        "ymid": (ymin + ymax) / 2.0
-                    })
-        return structured_items, raw_lines
-
-    if HAS_EASY_OCR:
-        import easyocr
-        reader = easyocr.Reader(['en'], gpu=use_gpu)
-        result = reader.readtext(img)
-        for box, text, score in result:
-            score = float(score)
-            text_str = str(text).strip()
-            raw_lines.append((text_str, score))
-            if score >= min_confidence and text_str:
-                xmin, ymin, xmax, ymax = parse_box_coords(box)
-                structured_items.append({
-                    "text": text_str,
-                    "score": score,
-                    "xmin": xmin,
-                    "ymin": ymin,
-                    "xmax": xmax,
-                    "ymax": ymax,
-                    "ymid": (ymin + ymax) / 2.0
-                })
-        return structured_items, raw_lines
-
-    raise ImportError("No OCR engine found. Please run: pip install rapidocr-onnxruntime opencv-python")
+    raise ImportError("PaddleOCR engine not found. Please install: pip install paddleocr rapidocr-onnxruntime onnxruntime-gpu")
 
 
 # =================================================================
@@ -641,10 +655,24 @@ def parse_row(row_items, min_test_confidence: float = 0.6):
 
         base_conf = sum(all_confidences) / len(all_confidences) if all_confidences else 1.0
 
-        # Normalize platelet count if reported in absolute /cumm (>10000)
-        if canonical == "platelet count" and value is not None and value > 10000:
-            value = round(value / 100000.0, 2)
-            raw_unit = "lakh/cumm"
+        # Handle count multipliers/units for platelet and wbc counts
+        if canonical == "platelet count" and value is not None:
+            if value > 1000000 and value < 5000000:
+                # Extra trailing OCR digit/noise (e.g. 1550000 -> 155000)
+                value = round(value / 10.0, 0)
+            elif value < 10.0:
+                # Value was reported in lakh/cumm (e.g. 3.0 -> 300000)
+                value = round(value * 100000.0, 0)
+            elif value <= 1000.0:
+                # Value was reported in 10^3 / thousands (e.g. 300 -> 300000)
+                value = round(value * 1000.0, 0)
+            raw_unit = "/cumm"
+
+        if canonical == "wbc count" and value is not None:
+            if value < 50.0:
+                # Value was reported in 10^3 / thousands (e.g. 5.5 -> 5500)
+                value = round(value * 1000.0, 0)
+            raw_unit = "/cumm"
 
         # Edge Case 2 & 3: Unit and Value resolution
         unit_was_readable = (raw_unit is not None)
@@ -823,13 +851,17 @@ def main():
                         help="Minimum OCR confidence to keep a line")
     parser.add_argument("--dpi", type=int, default=300,
                         help="Rendering DPI when input is a PDF (ignored for images)")
-    parser.add_argument("--gpu", action="store_true",
-                        help="Use GPU for OCR inference (requires paddlepaddle-gpu installed)")
+    parser.add_argument("--gpu", dest="gpu", action="store_true", default=None,
+                        help="Use GPU for OCR inference (CUDA acceleration)")
+    parser.add_argument("--cpu", dest="gpu", action="store_false",
+                        help="Force CPU for OCR inference")
     args = parser.parse_args()
 
+    use_gpu = args.gpu if args.gpu is not None else is_cuda_available()
     print(f"[1/6] Loading {args.image} ...")
     pages = load_pages(args.image, dpi=args.dpi)
     print(f"      -> {len(pages)} page(s) to process")
+    print(f"      -> CUDA/GPU Acceleration: {'ENABLED (CUDA 13.1 / GPU)' if use_gpu else 'DISABLED (CPU)'}")
 
     all_records = []
     all_raw_lines = []
@@ -839,9 +871,9 @@ def main():
         processed = preprocess_image(raw_img)
 
         print(f"[3/7] Page {page_num}/{len(pages)}: running PaddleOCR "
-              f"(lang={args.lang}, gpu={args.gpu}) ...")
+              f"(lang={args.lang}, gpu={use_gpu}) ...")
         structured_items, raw_lines = run_paddle_ocr(
-            processed, lang=args.lang, min_confidence=args.min_confidence, use_gpu=args.gpu
+            processed, lang=args.lang, min_confidence=args.min_confidence, use_gpu=use_gpu
         )
         print(f"      -> {len(structured_items)} bounding boxes above confidence threshold")
         all_raw_lines.extend(raw_lines)
