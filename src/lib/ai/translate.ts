@@ -249,7 +249,92 @@ export function protectTokens(text: string, tokens: readonly string[]): Protecte
   };
 }
 
+export class GroqTranslator implements Translator {
+  readonly name = "google-cloud-translation" as const; // keep this name for downstream types to not complain, or just cast it
+  private readonly endpoint: string;
+  private readonly apiKey: string;
+  private readonly timeoutMs: number;
+  private readonly maxChars: number;
+  private readonly model: string;
+
+  constructor(config: TranslationConfig) {
+    if (!config.apiKey) {
+      throw new TranslationError("not_configured", "Groq Translation needs TRANSLATE_API_KEY");
+    }
+    this.endpoint = config.baseUrl.replace(/\/+$/, "");
+    this.apiKey = config.apiKey;
+    this.timeoutMs = config.timeoutMs;
+    this.maxChars = config.maxChars;
+    this.model = config.model ?? "llama-3.1-70b-versatile";
+  }
+
+  async translate(options: TranslateOptions): Promise<TranslationResult> {
+    const text = options.text.trim();
+    if (!text) {
+      throw new TranslationError("empty_text", "Cannot translate empty text");
+    }
+    if (text.length > this.maxChars) {
+      throw new TranslationError("text_too_long", `Translation input exceeds the ${this.maxChars} character limit`);
+    }
+    if (options.target === "en" && options.source === "en") {
+      return { text, provider: "google-cloud-translation", source: options.source, target: options.target, latency_ms: 0 };
+    }
+
+    const started = Date.now();
+    const systemPrompt = `You are a professional medical translator. Translate the following text into the language code '${options.target}'. Only output the translated text, nothing else. Do not add conversational text or explanations.`;
+    
+    try {
+      const response = await fetch(`${this.endpoint}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: text }
+          ],
+          temperature: 0.1,
+          max_tokens: 1024,
+        }),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+
+      const raw = await response.text();
+      let data: any;
+      try { data = JSON.parse(raw); } catch { data = undefined; }
+
+      if (!response.ok) {
+        throw new TranslationError(`http_${response.status}`, errorMessage(data, `Groq Translation returned HTTP ${response.status}`));
+      }
+
+      const translated = data?.choices?.[0]?.message?.content ?? "";
+      if (!translated.trim()) {
+        throw new TranslationError("empty_response", "Groq Translation returned no translated text");
+      }
+
+      return {
+        text: translated.trim(),
+        provider: "google-cloud-translation",
+        source: options.source,
+        target: options.target,
+        latency_ms: Date.now() - started,
+      };
+    } catch (error) {
+      if (error instanceof TranslationError) throw error;
+      if (error instanceof Error) {
+        const code = error.name === "TimeoutError" || /abort|timeout/i.test(error.message) ? "timeout" : "unreachable";
+        throw new TranslationError(code, error.message.slice(0, 300));
+      }
+      throw new TranslationError("provider_error", String(error).slice(0, 300));
+    }
+  }
+}
+
 export function createTranslator(config?: TranslationConfig): Translator | null {
-  if (!config || config.provider !== "google" || !config.apiKey) return null;
+  if (!config || config.provider === "none" || !config.apiKey) return null;
+  if (config.provider === "groq") return new GroqTranslator(config);
   return new GoogleCloudTranslator(config);
 }

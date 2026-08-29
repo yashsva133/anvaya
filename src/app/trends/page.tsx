@@ -3,7 +3,7 @@
 // Screen 8 — trends and report timeline. Every number on this screen comes
 // from the signed-in person's saved reports; an empty account stays empty.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -66,7 +66,7 @@ function statusFor(def: TestDef, value: number): "normal" | "borderline" | "high
   return "normal";
 }
 
-export default function TrendsPage() {
+function TrendsPageContent() {
   const { t, s } = useI18n();
   const { reports, catalog, loading } = useReportData();
   const hi = s.lang === "hi";
@@ -296,5 +296,13 @@ export default function TrendsPage() {
         {hi ? "हर रुझान केवल आपकी saved रिपोर्ट्स से बनाया गया है।" : "Every trend above is calculated only from your saved reports."}
       </div>
     </AppShell>
+  );
+}
+
+export default function TrendsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-500">Loading trends...</div>}>
+      <TrendsPageContent />
+    </Suspense>
   );
 }

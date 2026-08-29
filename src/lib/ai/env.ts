@@ -15,14 +15,15 @@ export type ProviderKind = "ollama" | "openai" | "vertex" | "mock" | "none";
  * tiny REST adapter in src/lib/ai/translate.ts rather than a browser SDK.
  */
 export interface TranslationConfig {
-  /** `none` keeps the legacy direct-generation path; `google` enables the bridge. */
-  provider: "google" | "none";
+  /** `none` keeps the legacy direct-generation path; `google` enables the bridge, `groq` uses Groq LLM. */
+  provider: "google" | "groq" | "none";
   /** Never expose this value to the browser or include it in status output. */
   apiKey?: string;
   /** Official Cloud Translation v2 endpoint; overrideable for a compatible gateway/tests. */
   baseUrl: string;
   timeoutMs: number;
   maxChars: number;
+  model?: string;
 }
 
 export interface AiConfig {
@@ -91,6 +92,7 @@ function bool(name: string, fallback: boolean): boolean {
 function resolveTranslationProvider(): TranslationConfig["provider"] {
   const requested = (str("TRANSLATION_PROVIDER") ?? "").toLowerCase();
   if (["none", "off", "disabled"].includes(requested)) return "none";
+  if (["groq", "openai"].includes(requested)) return "groq";
   if (["google", "gtranslate", "google-cloud", "google-cloud-translation"].includes(requested)) {
     return "google";
   }
@@ -108,15 +110,17 @@ function loadTranslationConfig(): TranslationConfig {
   return {
     provider,
     apiKey:
+      str("TRANSLATE_API_KEY") ??
       str("GOOGLE_TRANSLATE_API_KEY") ??
-      str("GOOGLE_CLOUD_TRANSLATE_API_KEY") ??
-      str("TRANSLATE_API_KEY"),
+      str("GOOGLE_CLOUD_TRANSLATE_API_KEY"),
     baseUrl:
-      str("GOOGLE_TRANSLATE_BASE_URL") ??
+      str("TRANSLATION_BASE_URL") ??
       str("TRANSLATE_BASE_URL") ??
+      str("GOOGLE_TRANSLATE_BASE_URL") ??
       "https://translation.googleapis.com/language/translate/v2",
     timeoutMs: Math.max(2000, Math.floor(num("TRANSLATION_TIMEOUT_MS", 12000))),
     maxChars: Math.max(500, Math.floor(num("TRANSLATION_MAX_CHARS", 12000))),
+    model: str("TRANSLATION_MODEL") ?? "llama-3.1-70b-versatile",
   };
 }
 
@@ -213,9 +217,10 @@ export function describeConfig(env: AiEnv) {
       provider: env.translation?.provider ?? "none",
       configured: Boolean(env.translation?.provider === "google" && env.translation.apiKey),
       base_url: env.translation?.baseUrl ?? null,
+      model: env.translation?.model ?? null,
       // This is an architectural choice, not a claim that every model needs it:
       // when configured, non-English turns use English as the model boundary.
-      mode: env.translation?.provider === "google" && env.translation.apiKey ? "english_bridge" : "direct_model",
+      mode: env.translation?.provider !== "none" && env.translation?.apiKey ? "english_bridge" : "direct_model",
     },
     mode: env.live ? "live" : "demo",
     persistence: env.persistence ? "supabase" : "none",
