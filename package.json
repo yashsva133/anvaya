@@ -7,7 +7,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-loader ./scripts/test-loader.mjs --test scripts/test-ai.mjs"
+    "test": "node --experimental-loader ./scripts/test-loader.mjs --test scripts/test-ai.mjs scripts/test-report-extraction.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.19.0",

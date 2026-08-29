@@ -1,15 +1,30 @@
+// POST /api/process-report — turn an uploaded lab report into results.
+//
+//                        *** THE INVARIANT ***
+//
+//   Every value returned by this route came out of the file the person
+//   uploaded. There is no sample report, no seed report and no fallback
+//   report on the failure path — an unreadable upload is a 422 with an
+//   actionable message and zero clinical values.
+//
+//   (This route used to return a hard-coded report with INVENTED results —
+//   haemoglobin 12.5, PCV 57.5 — with HTTP 200 whenever OCR failed. That is
+//   indistinguishable from a successful parse, and those numbers then fed the
+//   dashboard, the trends, the pattern detector and the /api/answer payload.
+//   It is gone; see src/lib/reportExtraction.ts.)
+//
+// The only hard-coded report left is DEFAULT_SAMPLE_REPORT, which is reachable
+// only through the explicit `isSample=true` demo flag and is tagged
+// `sample: true` so nothing downstream can mistake it for a real parse.
+
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import os from "os";
 import fs from "fs/promises";
 import path from "path";
-import { exec } from "child_process";
-import util from "util";
-import { parseCsvToReportData } from "@/lib/reportCsv";
+import { outcomeFromCsv, runOcr } from "@/lib/reportExtraction";
 
-const execPromise = util.promisify(exec);
-
-// In-memory cache to prevent re-calling Gemini/OCR for duplicate reports
+// In-memory cache to prevent re-running OCR for duplicate reports
 interface CacheEntry {
   data: any;
   timestamp: number;
@@ -75,7 +90,12 @@ export async function POST(req: NextRequest) {
     requestTimestamps.push(Date.now());
 
     if (isSample) {
-      return NextResponse.json({ ...DEFAULT_SAMPLE_REPORT, cached: true }, { status: 200 });
+      // Explicit demo data, explicitly labelled. Never the fallthrough for a
+      // real upload that failed to parse.
+      return NextResponse.json(
+        { ...DEFAULT_SAMPLE_REPORT, cached: true, sample: true },
+        { status: 200 }
+      );
     }
 
     if (!file) {
@@ -102,15 +122,14 @@ export async function POST(req: NextRequest) {
       (/\b(?:test_name|parameter|test)\b/.test(firstLine) &&
         /\b(?:value|result|reading)\b/.test(firstLine));
     if (looksLikeCsv) {
-      const parsedCsv = parseCsvToReportData(uploadedText);
-      if (!parsedCsv || parsedCsv.chart_data.length === 0) {
-        return NextResponse.json(
-          { error: "We could not read this CSV report. Check that it includes test names and numeric values." },
-          { status: 422 }
-        );
+      const outcome = outcomeFromCsv(uploadedText, { csvUpload: true });
+      // Failures are never cached: the same file should get another chance
+      // once the person has fixed it.
+      if (!outcome.ok) {
+        return NextResponse.json({ error: outcome.error }, { status: outcome.status });
       }
-      reportCache.set(hash, { data: parsedCsv, timestamp: Date.now() });
-      return NextResponse.json(parsedCsv, { status: 200 });
+      reportCache.set(hash, { data: outcome.data, timestamp: Date.now() });
+      return NextResponse.json(outcome.data, { status: 200 });
     }
 
     const tmpDir = os.tmpdir();
@@ -122,67 +141,24 @@ export async function POST(req: NextRequest) {
 
     let csvData = "";
     try {
-      const candidates = [
-        path.join(process.cwd(), "venv", "Scripts", "python.exe"),
-        "python",
-        "python3",
-        path.join(process.cwd(), "venv", "Scripts", "python.exe"),
-      ];
-
-      const errors: string[] = [];
-      for (const py of candidates) {
-        try {
-          console.log(`Starting OCR processing using ${py}... (this usually takes 15-20 seconds)`);
-          await execPromise(`"${py}" lab_ocr_paddleocr.py --image "${tempInPath}" --out "${tempOutCsv}"`);
-          csvData = await fs.readFile(tempOutCsv, "utf8");
-          console.log(`OCR processing completed successfully! CSV length: ${csvData.length}`);
-          console.log("CSV Preview:", csvData.substring(0, 200));
-          if (csvData.trim()) break;
-        } catch (e) {
-          console.error(`OCR candidate ${py} failed:`, e);
-        }
-      }
-    } catch (e) {
-      console.error("All OCR candidates failed:", e);
-      // OCR candidate fallback
+      csvData = await runOcr({ inputPath: tempInPath, outputCsvPath: tempOutCsv });
     } finally {
       await fs.unlink(tempInPath).catch(() => {});
       await fs.unlink(tempOutCsv).catch(() => {});
     }
 
-    if (csvData && csvData.trim()) {
-      const parsedDirectly = parseCsvToReportData(csvData);
-      if (parsedDirectly && parsedDirectly.chart_data.length > 0) {
-        reportCache.set(hash, { data: parsedDirectly, timestamp: Date.now() });
-        return NextResponse.json(parsedDirectly, { status: 200 });
-      }
+    const outcome = outcomeFromCsv(csvData);
+    if (!outcome.ok) {
+      // No invented values, no cached guess: the person has to see that their
+      // report did not read, so they can retake the photo or enter the values.
+      console.warn(
+        `[process-report] no results extracted from ${safeFileName} (${buffer.length} bytes)`
+      );
+      return NextResponse.json({ error: outcome.error, results: 0 }, { status: outcome.status });
     }
 
-    const fallbackReport = {
-      patient_summary:
-        "Hemoglobin is low (12.5 g/dL) and Packed Cell Volume (PCV) is elevated (57.5%). Platelet count is at the lower borderline (150,000 /cumm). Total WBC and RBC counts are normal.",
-      flagged_issues: [
-        "Low Hemoglobin (12.5 g/dL)",
-        "Elevated Packed Cell Volume / PCV (57.5%)",
-        "Borderline Platelet Count (150,000 /cumm)",
-      ],
-      chart_data: [
-        { parameter: "Hemoglobin", value: 12.5, normal_min: 13.0, normal_max: 17.0, unit: "g/dL", status: "low" },
-        { parameter: "Total RBC Count", value: 5.2, normal_min: 4.5, normal_max: 5.5, unit: "mill/cumm", status: "normal" },
-        { parameter: "Packed Cell Volume (PCV)", value: 57.5, normal_min: 40.0, normal_max: 50.0, unit: "%", status: "high" },
-        { parameter: "Mean Corpuscular Volume (MCV)", value: 87.75, normal_min: 83.0, normal_max: 101.0, unit: "fL", status: "normal" },
-        { parameter: "MCH", value: 27.2, normal_min: 27.0, normal_max: 32.0, unit: "pg", status: "normal" },
-        { parameter: "MCHC", value: 32.8, normal_min: 32.5, normal_max: 34.5, unit: "g/dL", status: "normal" },
-        { parameter: "RDW", value: 13.6, normal_min: 11.6, normal_max: 14.0, unit: "%", status: "normal" },
-        { parameter: "Total WBC Count", value: 9000, normal_min: 4000, normal_max: 11000, unit: "/cumm", status: "normal" },
-        { parameter: "Platelet Count", value: 150000, normal_min: 150000, normal_max: 410000, unit: "/cumm", status: "borderline" },
-      ],
-      audio_script:
-        "Hello Mr. Yash. Your CBC report shows a Hemoglobin level of 12.5 which is slightly below normal, and PCV is elevated at 57.5%. Platelets are at 150,000. Other parameters including WBC and RBC counts are normal.",
-    };
-
-    reportCache.set(hash, { data: fallbackReport, timestamp: Date.now() });
-    return NextResponse.json(fallbackReport, { status: 200 });
+    reportCache.set(hash, { data: outcome.data, timestamp: Date.now() });
+    return NextResponse.json(outcome.data, { status: 200 });
   } catch (error: any) {
     console.error("Error processing medical report:", error);
     return NextResponse.json(
