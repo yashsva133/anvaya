@@ -49,6 +49,7 @@ import {
 import { createProvider, type ChatMessage, type Provider } from "./providers";
 import { MockProvider, composeMockAnswer, type MockContext } from "./mock";
 import { matchRules } from "./rules";
+import { composeExplanation, detectTestInQuestion } from "./explain";
 import type {
   AgentAnswer,
   GenerationOutput,
@@ -142,6 +143,9 @@ export function resetSessions() {
 
 /** Only report/result turns are allowed to receive patient report context. */
 export function isReportRelatedQuestion(question: string): boolean {
+  // A question that names a specific test ("what is MCV?", "एमसीवी क्या होता है?")
+  // is report-related even when the word itself is not in the keyword list.
+  if (detectTestInQuestion(question)) return true;
   return /(?:\breport\b|\bresult\b|\blab\b|\blaboratory\b|\btest\b|\bvalue\b|\breading\b|\brange\b|\bhemoglobin\b|\bhaemoglobin\b|\bhba1c\b|\ba1c\b|\bglucose\b|\bsugar\b|\bcholesterol\b|\blipid\b|\bldl\b|\bhdl\b|\btriglyceride\b|\bcreatinine\b|\bmc[vh]\b|\bplatelet\b|\bwhite blood\b|\bcbc\b|\banaemia\b|\banemia\b|\bdiabetes\b|\bmy blood\b|\bmy health\b|\bwhat matters\b|\bexplain this\b|\bexplain my\b|\bwhat should i ask\b|\bdoctor\b|रिपोर्ट|नतीजा|परिणाम|जाँच|जांच|हीमोग्लोबिन|शुगर|कोलेस्ट्रॉल|रक्त|ফলাফল|রিপোর্ট|அறிக்கை|முடிவு|నివేదిక|ఫలితం|रिपोर्ट|निकाल|અહેવાલ|પરિણામ|ವರದಿ|ಫಲಿತಾಂಶ|റിപ്പോർട്ട്|ഫലം|ਰਿਪੋਰਟ|ਨਤੀਜਾ|رپورٹ|نتیجہ|ଓଡ଼ିଆ|ଫଳାଫળ|ଫଳାଫଳ|ৰিপৰ্ট|ফলাফল|হিমোগ্লোবিন|சோதனை|அறிக்கை|ஹீமோகுளோபின்|சர்க்கரை|రక్త పరీక్ష|హిమోగ్లోబిన్|చక్కెర|हिमोग्लोबिन|रक्त तपासणी|साखर|હિમોગ્લોબિન|રક્ત પરીક્ષણ|ખાંડ|ಹಿಮೋಗ್ಲೋಬಿನ್|ರಕ್ತ ಪರೀಕ್ಷೆ|ಸಕ್ಕರೆ|ഹീമോഗ്ലോബിൻ|രക്തപരിശോധന|പഞ്ചസാര|ਹੀਮੋਗਲੋਬਿਨ|ਖੂਨ ਦੀ ਜਾਂਚ|ਸ਼ੂਗਰ|ہیموگلوبن|خون کا ٹیسٹ|شوگر|ହିମୋଗ୍ଲୋବିନ|ରକ୍ତ ପରୀକ୍ଷା|ଚିନି|হিমোগ্লোবিন|ৰক্ত পৰীক্ষা|চেনি|हिमोग्लोबिन|रगत परीक्षण|चिनी)/iu.test(
     question
   );
@@ -263,6 +267,9 @@ function localAnswer(args: {
     trustFormula: args.env.ai.trustFormula,
     weights: parseWeights(args.env.ai.trustFormula),
     guardLanguage: "curated",
+    // Every localAnswer caller supplies human-authored (or phrasebook) copy, so
+    // the model-hallucination number check does not apply here.
+    curated: true,
   });
   guard.safety_flags = [...guard.safety_flags, ...args.notes];
   remember(args.sessionId, "user", args.question);
@@ -301,6 +308,44 @@ function localMultilingualReportAnswer(args: {
   inputTranslated?: boolean;
   inputLatencyMs?: number;
 }): AgentAnswer {
+  // A question about a specific test ("what is MCV?") deserves the full
+  // catalogue-grounded explanation in the person's language, not the generic
+  // report summary. This only applies to en/hi — the two languages the
+  // clinical catalogue actually carries — so the other twelve keep the
+  // reviewed localized phrasebook below.
+  const namedTest = detectTestInQuestion(args.question);
+  if (namedTest && (args.answerLang === "en" || args.answerLang === "hi")) {
+    const composed = composeExplanation({
+      testId: namedTest,
+      lang: args.answerLang,
+      payload: args.payload,
+    });
+    if (composed) {
+      return localAnswer({
+        text: composed.text,
+        question: args.question,
+        matched: composed.matched,
+        answerLang: args.answerLang,
+        lang: args.lang,
+        payload: args.payload,
+        prompt: args.prompt,
+        env: args.env,
+        sessionId: args.sessionId,
+        startedAt: args.startedAt,
+        notes: [...args.notes, `fallback:test_explanation:${args.reason}`],
+        engine: "fallback",
+        retrieval: args.retrieval,
+        translation: {
+          provider: translationProviderName(args.env),
+          target_language: args.answerLang,
+          input_translated: Boolean(args.inputTranslated),
+          output_translated: false,
+          ...(args.inputLatencyMs !== undefined ? { input_latency_ms: args.inputLatencyMs } : {}),
+        },
+      });
+    }
+  }
+
   const text = composeMockAnswer({
     payload: args.payload,
     matches: args.retrieval?.matches ?? [],
@@ -574,6 +619,16 @@ async function finishEnglishAnswer(args: {
 }
 
 function reportFallbackText(question: string, payload: AgentAnswer["payload"]): { text: string; matched: string } {
+  // A question naming a specific test gets the full educational explanation
+  // (what it is, your value, what it means, lifestyle tips) rather than a bare
+  // "your value is X" line. It is composed in English here and translated by
+  // finishEnglishAnswer for non-English answers.
+  const namedTest = detectTestInQuestion(question);
+  if (namedTest) {
+    const composed = composeExplanation({ testId: namedTest, lang: "en", payload });
+    if (composed) return composed;
+  }
+
   const q = question.toLowerCase();
   const result = payload.results.find((item) =>
     [item.test, item.label].some((name) => name && q.includes(name.toLowerCase()))
@@ -823,6 +878,30 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
   }
 
   if (!hasReport) {
+    // A definitional question about a named test ("what is MCV?") is answered
+    // from the clinical catalogue even before any report is uploaded, in the
+    // two languages the catalogue carries. The other languages keep the
+    // localized "please upload a report" copy.
+    const namedTest = detectTestInQuestion(question);
+    if (namedTest && (answerLang === "en" || answerLang === "hi")) {
+      const composed = composeExplanation({ testId: namedTest, lang: answerLang, payload: null });
+      if (composed) {
+        return localAnswer({
+          text: composed.text,
+          question,
+          matched: composed.matched,
+          answerLang,
+          lang,
+          payload: emptyPayload,
+          prompt: initialPrompt,
+          env,
+          sessionId,
+          startedAt,
+          notes: [...notes, "definitional_answer:no_report"],
+          engine: "rules",
+        });
+      }
+    }
     return localAnswer({
       text: noReportText(answerLang),
       question,

@@ -14,6 +14,7 @@ const { loadAiEnv, describeConfig } = await import("../src/lib/ai/env.ts");
 const { guardInput } = await import("../src/lib/ai/guardrails.ts");
 const { parseClientReport, computeStatusForRange } = await import("../src/lib/ai/clientReport.ts");
 const { buildAnonymisedPayload } = await import("../src/lib/ai/anonymizer.ts");
+const { detectTestInQuestion, composeExplanation } = await import("../src/lib/ai/explain.ts");
 const { composeMockAnswer } = await import("../src/lib/ai/mock.ts");
 
 test("explicit language requests win over the UI language", () => {
@@ -465,4 +466,59 @@ test("a non-English no-report turn is screened without adding report context", a
     globalThis.fetch = previousFetch;
     resetSessions();
   }
+});
+
+test("a named test resolves in Hindi transliteration and plain English", () => {
+  assert.equal(detectTestInQuestion("एमसीवी क्या होता है?"), "mcv");
+  assert.equal(detectTestInQuestion("what is mcv"), "mcv");
+  assert.equal(detectTestInQuestion("एचबीए1सी का मतलब"), "hba1c");
+  assert.equal(detectTestInQuestion("bad cholesterol"), "ldl");
+  assert.equal(detectTestInQuestion("explain my report"), null);
+});
+
+test("a definitional question is answered from the catalogue even with no report", async () => {
+  resetSessions();
+  const answer = await askAgent({
+    question: "एमसीवी क्या होता है?",
+    lang: "en",
+    answerLang: "hi",
+    env: testEnv("none", "none"),
+    sessionId: "test-definitional",
+  });
+  assert.equal(answer.matched, "test:mcv");
+  assert.equal(answer.answer_lang, "hi");
+  assert.equal(answer.engine, "rules");
+  assert.match(answer.answer, /लाल रक्त कोशिका/);
+  assert.match(answer.answer, /जीवनशैली/);
+  assert.match(answer.answer, new RegExp(safetyFooter("hi")));
+  assert.equal(answer.payload.results.length, 0);
+});
+
+test("a report question naming a test gets its value, range and lifestyle tips", async () => {
+  resetSessions();
+  const report = parseClientReport({
+    dateLabel: "30 Jul 2026",
+    results: [
+      {
+        test: "hemoglobin",
+        value: 15,
+        label: "Hemoglobin",
+        unit: "g/dL",
+        reference: { low: 12, high: 16, text: "12–16 g/dL" },
+      },
+    ],
+  });
+  const answer = await askAgent({
+    question: "What is hemoglobin?",
+    lang: "en",
+    answerLang: "en",
+    report,
+    env: testEnv("none", "none"),
+    sessionId: "test-test-explanation",
+  });
+  assert.equal(answer.matched, "test:hemoglobin");
+  assert.match(answer.answer, /15 g\/dL/);
+  assert.match(answer.answer, /12–16/);
+  assert.match(answer.answer, /Lifestyle & diet tips/);
+  assert.match(answer.answer, /discuss these results with your doctor/);
 });

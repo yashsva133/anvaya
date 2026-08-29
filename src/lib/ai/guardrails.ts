@@ -289,6 +289,14 @@ export interface OutputGuardOptions {
    * coverage warning. Model output should leave this at the default.
    */
   guardLanguage?: "model" | "curated";
+  /**
+   * True for application-authored copy (safety text, catalogue-grounded
+   * explanations). The numeric-grounding check exists to catch a MODEL
+   * inventing a value; curated copy is already reviewed against the catalogue,
+   * so running it there would flag, for example, a standard reference range
+   * that the answer is deliberately quoting. Model output must leave this off.
+   */
+  curated?: boolean;
 }
 
 /**
@@ -320,7 +328,11 @@ export function guardOutput(opts: OutputGuardOptions): GuardResult {
     refusal = true;
   }
 
-  const ungrounded = ungroundedNumbers(body, payload);
+  // Curated, application-authored copy is not screened for invented numbers:
+  // that check exists to catch model hallucination, and the review that went
+  // into the copy already binds it to the catalogue. (The refusal/diagnosis/
+  // dosing patterns still run, since even curated copy must stay within scope.)
+  const ungrounded = opts.curated ? [] : ungroundedNumbers(body, payload);
   if (ungrounded.length > 0) {
     flags.push(`ungrounded_numbers:${ungrounded.join(",")}`);
   }
