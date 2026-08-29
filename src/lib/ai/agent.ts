@@ -49,7 +49,7 @@ import {
 import { createProvider, type ChatMessage, type Provider } from "./providers";
 import { MockProvider, composeMockAnswer, type MockContext } from "./mock";
 import { matchRules } from "./rules";
-import { composeExplanation, detectTestInQuestion } from "./explain";
+import { composeExplanation, detectTestInQuestion, explainLangReviewed } from "./explain";
 import type {
   AgentAnswer,
   GenerationOutput,
@@ -308,19 +308,22 @@ function localMultilingualReportAnswer(args: {
   inputTranslated?: boolean;
   inputLatencyMs?: number;
 }): AgentAnswer {
-  // A question about a specific test ("what is MCV?") deserves the full
-  // catalogue-grounded explanation in the person's language, not the generic
-  // report summary. This only applies to en/hi — the two languages the
-  // clinical catalogue actually carries — so the other twelve keep the
-  // reviewed localized phrasebook below.
+  // A question about a specific test ("what is MCV?", "எம்சிவி என்றால் என்ன?")
+  // gets the full catalogue-grounded explanation in the person's language, not
+  // the generic report summary. Every supported language has content; the
+  // twelve beyond en/hi are recorded as unreviewed in a safety note.
   const namedTest = detectTestInQuestion(args.question);
-  if (namedTest && (args.answerLang === "en" || args.answerLang === "hi")) {
+  if (namedTest) {
     const composed = composeExplanation({
       testId: namedTest,
       lang: args.answerLang,
       payload: args.payload,
     });
     if (composed) {
+      const explainNotes = [...args.notes, `fallback:test_explanation:${args.reason}`];
+      if (!explainLangReviewed(args.answerLang)) {
+        explainNotes.push(`explain_language_unreviewed:${args.answerLang}`);
+      }
       return localAnswer({
         text: composed.text,
         question: args.question,
@@ -332,7 +335,7 @@ function localMultilingualReportAnswer(args: {
         env: args.env,
         sessionId: args.sessionId,
         startedAt: args.startedAt,
-        notes: [...args.notes, `fallback:test_explanation:${args.reason}`],
+        notes: explainNotes,
         engine: "fallback",
         retrieval: args.retrieval,
         translation: {
@@ -880,12 +883,16 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
   if (!hasReport) {
     // A definitional question about a named test ("what is MCV?") is answered
     // from the clinical catalogue even before any report is uploaded, in the
-    // two languages the catalogue carries. The other languages keep the
-    // localized "please upload a report" copy.
+    // person's language. The twelve languages beyond en/hi are recorded as
+    // unreviewed so a reviewer can find them.
     const namedTest = detectTestInQuestion(question);
-    if (namedTest && (answerLang === "en" || answerLang === "hi")) {
+    if (namedTest) {
       const composed = composeExplanation({ testId: namedTest, lang: answerLang, payload: null });
       if (composed) {
+        const explainNotes = [...notes, "definitional_answer:no_report"];
+        if (!explainLangReviewed(answerLang)) {
+          explainNotes.push(`explain_language_unreviewed:${answerLang}`);
+        }
         return localAnswer({
           text: composed.text,
           question,
@@ -897,7 +904,7 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
           env,
           sessionId,
           startedAt,
-          notes: [...notes, "definitional_answer:no_report"],
+          notes: explainNotes,
           engine: "rules",
         });
       }

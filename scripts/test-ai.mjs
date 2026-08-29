@@ -522,3 +522,52 @@ test("a report question naming a test gets its value, range and lifestyle tips",
   assert.match(answer.answer, /Lifestyle & diet tips/);
   assert.match(answer.answer, /discuss these results with your doctor/);
 });
+
+test("test names are detected across all supported scripts", () => {
+  assert.equal(detectTestInQuestion("எம்சிவி என்றால் என்ன?"), "mcv");
+  assert.equal(detectTestInQuestion("ఎంసీవీ అంటే ఏమిటి?"), "mcv");
+  assert.equal(detectTestInQuestion("एमसीव्ही म्हणजे काय?"), "mcv");
+  assert.equal(detectTestInQuestion("એમસીવી શું છે?"), "mcv");
+  assert.equal(detectTestInQuestion("ಎಂಸಿವಿ ಎಂದರೇನು?"), "mcv");
+  assert.equal(detectTestInQuestion("എംസിവി എന്താണ്?"), "mcv");
+  assert.equal(detectTestInQuestion("ਐਮਸੀਵੀ ਕੀ ਹੈ?"), "mcv");
+  assert.equal(detectTestInQuestion("ایم سی وی کیا ہے؟"), "mcv");
+  assert.equal(detectTestInQuestion("ଏମସିଭି କ'ଣ?"), "mcv");
+  assert.equal(detectTestInQuestion("এমচিভি মানে কি?"), "mcv");
+  assert.equal(detectTestInQuestion("एमसीवी के हो?"), "mcv");
+  assert.equal(detectTestInQuestion("এমসিভি কি?"), "mcv");
+  assert.equal(detectTestInQuestion("ஹீமோகுளோபின் குறைவாக உள்ளது ஏன்?"), "hemoglobin");
+  assert.equal(detectTestInQuestion("ہیموگلوبن کم کیوں ہے؟"), "hemoglobin");
+});
+
+test("a Tamil test question is answered natively without a translation provider", async () => {
+  resetSessions();
+  const report = parseClientReport({
+    dateLabel: "30 Jul 2026",
+    results: [
+      {
+        test: "hemoglobin",
+        value: 10.5,
+        label: "Hemoglobin",
+        unit: "g/dL",
+        reference: { low: 12, high: 16, text: "12–16 g/dL" },
+      },
+    ],
+  });
+  const answer = await askAgent({
+    question: "ஹீமோகுளோபின் குறைவாக உள்ளது ஏன்?",
+    lang: "en",
+    answerLang: "ta",
+    report,
+    env: testEnv("none", "none"),
+    sessionId: "test-native-tamil",
+  });
+  assert.equal(answer.matched, "test:hemoglobin");
+  assert.equal(answer.answer_lang, "ta");
+  assert.match(answer.answer, /10\.5/);
+  assert.match(answer.answer, /12–16/);
+  assert.match(answer.answer, /இந்தச் சோதனை என்ன/);
+  assert.match(answer.answer, /வாழ்க்கைமுறை/);
+  assert.match(answer.answer, new RegExp(safetyFooter("ta")));
+  assert.ok(answer.guard.safety_flags.includes("explain_language_unreviewed:ta"));
+});
