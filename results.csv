@@ -1,0 +1,22 @@
+report_date,test_name,value,unit,ref_low,ref_high,status,ocr_confidence
+2026-08-29,Hemoglobin,15.0,g/dL,13.0,17.0,Normal,0.463
+2026-08-29,WBC Count,5000.0,/cumm,4000,11000,Normal,0.819
+2026-08-29,Neutrophils,,%,40,80,Needs Input,0.593
+2026-08-29,Lymphocytes,40.0,%,20,40,Normal,0.474
+2026-08-29,Eosinophils,,%,1,6,Needs Input,0.595
+2026-08-29,Monocytes,,%,2,10,Needs Input,0.589
+2026-08-29,Basophils,0.0,%,0,2,Normal,0.538
+2026-08-29,Absolute Neutrophils,2500.0,/cumm,2000,7000,Normal,0.825
+2026-08-29,Absolute Lymphocytes,2000.0,/cumm,1000,3000,Normal,0.867
+2026-08-29,Absolute Eosinophils,50.0,/cumm,20,500,Normal,0.827
+2026-08-29,Absolute Monocytes,450.0,/cumm,200,1000,Normal,0.852
+2026-08-29,RBC Count,,mill/cumm,4.5,5.5,Needs Input,0.877
+2026-08-29,MCV,80.0,fL,83,101,Low,0.413
+2026-08-29,MCH,30.0,pg,27,32,Normal,0.476
+2026-08-29,MCHC,37.5,g/dL,31.5,34.5,High,0.512
+2026-08-29,Packed Cell Volume,40.0,%,40,50,Normal,0.36
+2026-08-29,RDW-CV,,%,11.6,14.0,Needs Input,0.54
+2026-08-29,RDW-SD,40.0,fL,39.0,46.0,Normal,0.44
+2026-08-29,Platelet Count,3.0,lakh/cumm,1.5,4.5,Normal,0.771
+2026-08-29,PCT,35.0,%,0.1,0.5,High,0.405
+2026-08-29,MPV,,fL,7.5,11.5,Needs Input,0.683

@@ -52,8 +52,9 @@ node_modules/
 
 # Temporary files
 *.patch
-
-# Reports & CSV Outputs (allowed for project samples)
+install.log
+test_*.csv
+temp*.csv
 
 # Paddle / Model cache
 .paddlex/

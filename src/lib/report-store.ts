@@ -224,30 +224,51 @@ export function mapChartDataToEntries(chartData: ExtractedParam[]): ReportEntry[
     const rawHigh = finite(p.normal_max);
     const suppliedRangeValid =
       rawLow === undefined || rawHigh === undefined || rawLow <= rawHigh;
-    // Keep a known catalogue's trusted default when OCR supplied a reversed
-    // pair; an unknown test remains unassessed instead of inheriting anything.
-    const low = suppliedRangeValid ? rawLow ?? knownDef?.ref.low : knownDef?.ref.low;
-    const high = suppliedRangeValid ? rawHigh ?? knownDef?.ref.high : knownDef?.ref.high;
-    const unit = cleanText(p.unit, 32) || knownDef?.unit || "";
+    let low = suppliedRangeValid ? rawLow ?? knownDef?.ref.low : knownDef?.ref.low;
+    let high = suppliedRangeValid ? rawHigh ?? knownDef?.ref.high : knownDef?.ref.high;
+    let finalValue = value;
+    let unit = cleanText(p.unit, 32) || knownDef?.unit || "";
+
+    // Harmonize scale mismatches (e.g. absolute /cumm vs 10^3 multipliers)
+    if (testKey === "wbc" && finalValue !== undefined) {
+      if (finalValue > 100 && low !== undefined && low < 50) {
+        low = low * 1000;
+        if (high !== undefined) high = high * 1000;
+        unit = "/cumm";
+      } else if (finalValue < 50 && low !== undefined && low > 100) {
+        finalValue = finalValue * 1000;
+        unit = "/cumm";
+      }
+    } else if (testKey === "platelets" && finalValue !== undefined) {
+      if (finalValue > 1000 && low !== undefined && low < 1000) {
+        const mult = low < 10 ? 100000 : 1000;
+        low = low * mult;
+        if (high !== undefined) high = high * mult;
+        unit = "/cumm";
+      } else if (finalValue <= 1000 && low !== undefined && low > 1000) {
+        const mult = finalValue < 10 ? 100000 : 1000;
+        finalValue = finalValue * mult;
+        unit = "/cumm";
+      }
+    }
+
     const referenceText = cleanText(
       p.reference_text,
       96
-    ) || (knownDef?.ref.text ?? (low !== undefined && high !== undefined
+    ) || (low !== undefined && high !== undefined
       ? `${low}–${high}${unit ? ` ${unit}` : ""}`
       : low !== undefined
         ? `above ${low}${unit ? ` ${unit}` : ""}`
         : high !== undefined
           ? `below ${high}${unit ? ` ${unit}` : ""}`
-          : "Reference range not reported"));
-    // Status is derived from a range when one exists. A source-provided status
-    // is never allowed to manufacture a clinical classification for an unknown
-    // result with no reference range.
+          : (knownDef?.ref.text ?? "Reference range not reported"));
+
     const statusKnown = low !== undefined || high !== undefined;
-    const status = statusKnown ? statusFromRange(value, low, high) : "normal";
+    const status = statusKnown ? statusFromRange(finalValue, low, high) : "normal";
 
     return [{
       test: testKey,
-      value,
+      value: finalValue,
       status,
       statusKnown,
       label,

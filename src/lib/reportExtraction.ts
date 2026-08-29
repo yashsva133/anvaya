@@ -78,10 +78,11 @@ export const OCR_SCRIPT = "lab_ocr_paddleocr.py";
  * was pointless; a POSIX venv path was missing entirely.
  */
 export function defaultPythonCandidates(cwd: string = process.cwd()): string[] {
+  const posixCwd = cwd.replace(/\\/g, "/");
   return [
     path.join(cwd, "venv", "Scripts", "python.exe"),
-    path.join(cwd, "venv", "bin", "python3"),
-    path.join(cwd, "venv", "bin", "python"),
+    `${posixCwd}/venv/bin/python3`,
+    `${posixCwd}/venv/bin/python`,
     "python",
     "python3",
   ];
