@@ -148,6 +148,19 @@ const RULES: Rule[] = [
     sourceId: "medlineplus-creatinine",
   },
   {
+    id: "pattern-metabolic",
+    title: {
+      en: "Metabolic and cardiovascular risk indicators",
+      hi: "मेटाबोलिक और हृदय रोग जोख़िम संकेतक",
+      bn: "বিপাকীয় এবং কার্ডিওভাসকুলার ঝুঁকির সূচক",
+    },
+    tests: ["glucose", "triglycerides", "hdl", "hba1c"],
+    anchors: ["glucose", "triglycerides"],
+    minFlagged: 2,
+    sourceId: "cdc-a1c",
+    seededId: "pattern-metabolic",
+  },
+  {
     id: "pattern-thyroid",
     title: {
       en: "Thyroid function tests move together",

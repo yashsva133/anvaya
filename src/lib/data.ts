@@ -1091,8 +1091,75 @@ export const PATTERNS: Pattern[] = [
     source: "cdc-a1c",
     conf: { level: "high", pct: 94 },
   },
+  {
+    id: "pattern-metabolic",
+    title: { en: "Metabolic risk pattern", hi: "मेटाबोलिक जोख़िम पैटर्न" },
+    nodes: [
+      { test: "glucose", arrow: "up", note: { en: "raised", hi: "बढ़ी हुई" } },
+      { test: "triglycerides", arrow: "up", note: { en: "raised", hi: "बढ़ी हुई" } },
+      { test: "hdl", arrow: "down", note: { en: "low", hi: "कम" } },
+      { test: "hba1c", arrow: "up", note: { en: "raised", hi: "बढ़ी हुई" } },
+    ],
+    expl: {
+      en: "These markers indicate how your body processes sugars and fats. When they move together in this way, it forms a metabolic pattern.",
+      hi: "ये संकेतक बताते हैं कि आपका शरीर शुगर और वसा को कैसे संसाधित करता है। जब ये एक साथ इस तरह बदलते हैं, तो यह एक मेटाबोलिक पैटर्न बनाता है।"
+    },
+    risk: {
+      en: "This combination may increase the risk for metabolic syndrome, heart disease, or diabetes over time.",
+      hi: "यह संयोजन समय के साथ मेटाबोलिक सिंड्रोम, हृदय रोग या डायबिटीज़ के जोखिम को बढ़ा सकता है।"
+    },
+    disclaimer: {
+      en: "Only a doctor can say what this means for you, after further assessment.",
+      hi: "पुष्टि जाँच के बाद ही डॉक्टर बता सकते हैं कि यह आपके लिए क्या अर्थ रखता है।"
+    },
+    source: "cdc-a1c",
+    conf: { level: "high", pct: 90 },
+  },
+  {
+    id: "pattern-kidney",
+    title: { en: "Kidney marker pattern", hi: "किडनी मार्कर पैटर्न" },
+    nodes: [
+      { test: "creatinine", arrow: "up", note: { en: "high", hi: "अधिक" } },
+      { test: "potassium", arrow: "up", note: { en: "high", hi: "अधिक" } },
+    ],
+    expl: {
+      en: "These tests help evaluate kidney function. Their combined result is more informative than either alone.",
+      hi: "ये परीक्षण किडनी की कार्यक्षमता का आकलन करने में मदद करते हैं। इनका संयुक्त परिणाम किसी एक के अकेले परिणाम से अधिक जानकारीपूर्ण है।"
+    },
+    risk: {
+      en: "Abnormalities here could point to reduced kidney function, affecting how your body filters waste.",
+      hi: "यहाँ असामान्यताएं गुर्दे की कम कार्यक्षमता की ओर इशारा कर सकती हैं, जो अपशिष्ट हटाने को प्रभावित करती हैं।"
+    },
+    disclaimer: {
+      en: "This does not establish a diagnosis.",
+      hi: "यह निदान सिद्ध नहीं करता।"
+    },
+    source: "medlineplus-creatinine",
+    conf: { level: "high", pct: 90 },
+  },
+  {
+    id: "pattern-wbc",
+    title: { en: "White-cell pattern", hi: "श्वेत-कोशिका पैटर्न" },
+    nodes: [
+      { test: "wbc", arrow: "up", note: { en: "high", hi: "अधिक" } },
+      { test: "neutrophils", arrow: "up", note: { en: "high", hi: "अधिक" } },
+    ],
+    expl: {
+      en: "These are your infection-fighting cells. When multiple types are elevated, it indicates a coordinated immune response.",
+      hi: "ये आपकी संक्रमण से लड़ने वाली कोशिकाएं हैं। जब कई प्रकार बढ़ जाते हैं, तो यह एक समन्वित प्रतिरक्षा प्रतिक्रिया का संकेत देता है।"
+    },
+    risk: {
+      en: "This pattern is often a sign of an active infection or inflammation that your body is fighting.",
+      hi: "यह पैटर्न अक्सर एक सक्रिय संक्रमण या सूजन का संकेत होता है जिससे आपका शरीर लड़ रहा है।"
+    },
+    disclaimer: {
+      en: "This does not establish a diagnosis.",
+      hi: "यह निदान सिद्ध नहीं करता।"
+    },
+    source: "medlineplus-hgb",
+    conf: { level: "moderate", pct: 80 },
+  }
 ];
-
 /* ------------------------------- HEALTH STORY ------------------------------ */
 
 export const STORY: { when: L2; text: L2; status: Status }[] = [
