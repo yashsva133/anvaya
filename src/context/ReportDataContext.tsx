@@ -158,7 +158,7 @@ export function ReportDataProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("anvaya_report_updated", onReportUpdated);
       window.removeEventListener("storage", onReportUpdated);
     };
-  }, [loadData, user?.id]);
+  }, [loadData, user]);
 
   const getEntry = useCallback(
     (testId: string): ReportEntry | undefined =>

@@ -4,6 +4,7 @@
 // Every setting applies app-wide instantly, and evidence library opens on demand.
 
 import { useEffect, useState } from "react";
+
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -62,26 +63,55 @@ export default function SettingsPage() {
     router.replace("/login");
   };
 
-  const userAge =
-    (dbPatient?.age && !isNaN(dbPatient.age) && dbPatient.age > 0 ? dbPatient.age : null) ||
-    (patient?.age && !isNaN(patient.age) && patient.age > 0 ? patient.age : null) ||
-    (patient?.date_of_birth
-      ? Math.floor((Date.now() - new Date(patient.date_of_birth).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
-      : null) ||
-    (user?.user_metadata?.age ? Number(user.user_metadata.age) : null) ||
-    (typeof window !== "undefined" && user?.id && localStorage.getItem(`anvaya_age_${user.id}`)
-      ? parseInt(localStorage.getItem(`anvaya_age_${user.id}`)!, 10)
-      : null) ||
-    (typeof window !== "undefined" && localStorage.getItem("anvaya_user_age")
-      ? parseInt(localStorage.getItem("anvaya_user_age")!, 10)
-      : null);
+  const [userAge, setUserAge] = useState<number | null>(null);
+  const [userSex, setUserSex] = useState<"male" | "female" | "other" | "unspecified">("male");
 
-  const userSex =
-    dbPatient?.gender?.en?.toLowerCase() ||
-    patient?.sex ||
-    user?.user_metadata?.gender ||
-    user?.user_metadata?.sex ||
-    (typeof window !== "undefined" ? (localStorage.getItem("anvaya_user_sex") as any) : null);
+  useEffect(() => {
+    let calculatedAge: number | null = null;
+    if (patient?.date_of_birth) {
+      const birthDate = new Date(patient.date_of_birth);
+      if (!isNaN(birthDate.getTime())) {
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+        if (age > 0) calculatedAge = age;
+      }
+    }
+
+    const resolvedAge =
+      (dbPatient?.age && !isNaN(dbPatient.age) && dbPatient.age > 0 ? dbPatient.age : null) ||
+      (patient?.age && !isNaN(patient.age) && patient.age > 0 ? patient.age : null) ||
+      calculatedAge ||
+      (user?.user_metadata?.age ? Number(user.user_metadata.age) : null) ||
+      (typeof window !== "undefined" && user?.id && localStorage.getItem(`anvaya_age_${user.id}`)
+        ? parseInt(localStorage.getItem(`anvaya_age_${user.id}`)!, 10)
+        : null) ||
+      (typeof window !== "undefined" && localStorage.getItem("anvaya_user_age")
+        ? parseInt(localStorage.getItem("anvaya_user_age")!, 10)
+        : null);
+
+    setUserAge(resolvedAge || null);
+
+    const resolvedSex =
+      dbPatient?.gender?.en?.toLowerCase() ||
+      patient?.sex ||
+      user?.user_metadata?.gender ||
+      user?.user_metadata?.sex ||
+      (typeof window !== "undefined" ? localStorage.getItem("anvaya_user_sex") : null);
+
+    if (
+      resolvedSex === "male" ||
+      resolvedSex === "female" ||
+      resolvedSex === "other" ||
+      resolvedSex === "unspecified"
+    ) {
+      setUserSex(resolvedSex);
+    }
+  }, [dbPatient, patient, user]);
+
 
   const displayName =
     dbPatient?.name?.en ||

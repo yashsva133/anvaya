@@ -800,9 +800,22 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
     });
   }
 
-  // Small talk and greetings are now passed directly to MedGemma, 
-  // letting it act as a natural companion.
-
+  if (conversation) {
+    return localAnswer({
+      text: conversationText(conversation, answerLang),
+      question,
+      matched: `conversation_${conversation}`,
+      answerLang,
+      lang,
+      payload: emptyPayload,
+      prompt: initialPrompt,
+      env,
+      sessionId,
+      startedAt,
+      notes,
+      engine: "rules",
+    });
+  }
   const translator = createTranslator(env.translation);
   let modelQuestion = question;
   let inputTranslated = false;
@@ -880,35 +893,43 @@ export async function askAgent(opts: AskOptions): Promise<AgentAnswer> {
     }
   }
 
-  if (!hasReport) {
-    // A definitional question about a named test ("what is MCV?") is answered
-    // from the clinical catalogue even before any report is uploaded, in the
-    // person's language. The twelve languages beyond en/hi are recorded as
-    // unreviewed so a reviewer can find them.
-    const namedTest = detectTestInQuestion(question);
-    if (namedTest) {
-      const composed = composeExplanation({ testId: namedTest, lang: answerLang, payload: null });
-      if (composed) {
-        const explainNotes = [...notes, "definitional_answer:no_report"];
-        if (!explainLangReviewed(answerLang)) {
-          explainNotes.push(`explain_language_unreviewed:${answerLang}`);
-        }
-        return localAnswer({
-          text: composed.text,
-          question,
-          matched: composed.matched,
-          answerLang,
-          lang,
-          payload: emptyPayload,
-          prompt: initialPrompt,
-          env,
-          sessionId,
-          startedAt,
-          notes: explainNotes,
-          engine: "rules",
-        });
+  const effectivePayload = hasReport
+    ? buildAnonymisedPayload({
+        lang: "en",
+        pseudonym: sessionPseudonym(sessionId),
+        report: opts.report,
+      })
+    : null;
+
+  // A definitional question about a named test ("what is MCV?") is answered
+  // from the clinical catalogue in the person's language, whether they have a report or not.
+  // The twelve languages beyond en/hi are recorded as unreviewed so a reviewer can find them.
+  const namedTest = detectTestInQuestion(question);
+  if (namedTest) {
+    const composed = composeExplanation({ testId: namedTest, lang: answerLang, payload: effectivePayload });
+    if (composed) {
+      const explainNotes = [...notes, `definitional_answer:${hasReport ? "with_report" : "no_report"}`];
+      if (!explainLangReviewed(answerLang)) {
+        explainNotes.push(`explain_language_unreviewed:${answerLang}`);
       }
+      return localAnswer({
+        text: composed.text,
+        question,
+        matched: composed.matched,
+        answerLang,
+        lang,
+        payload: effectivePayload ?? emptyPayload,
+        prompt: initialPrompt,
+        env,
+        sessionId,
+        startedAt,
+        notes: explainNotes,
+        engine: "rules",
+      });
     }
+  }
+
+  if (!hasReport) {
     return localAnswer({
       text: noReportText(answerLang),
       question,

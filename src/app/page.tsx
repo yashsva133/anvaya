@@ -624,7 +624,7 @@ export default function LandingPage() {
               : "RxAnvaya is for educational and informational purposes only. It is not a substitute for professional medical advice, diagnosis, or treatment. Always consult a qualified healthcare provider regarding any medical condition or symptoms."}
           </p>
           <p className="mt-2 text-[11px] font-medium text-slate-400">
-            RxAnvaya prototype · Smart India Hackathon 2026 · All patient data shown is fictional.
+            RxAnvaya · Open Source Clinical Lab Intelligence · Made with ❤️ by Team Anvaya · Smart India Hackathon 2026
           </p>
         </div>
       </section>

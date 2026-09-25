@@ -1,6 +1,0 @@
-# .env.local  — place this file in the ROOT of your Next.js project (anvaya-demo/)
-# Next.js reads this automatically. Never commit it to git.
-
-NEXT_PUBLIC_SUPABASE_URL=https://juszolscuqbienqcnmub.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1c3pvbHNjdXFiaWVucWNubXViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3NzY0MTgsImV4cCI6MjEwMzM1MjQxOH0.xVrJgmUiU0Tr33ksacBDo530WtUHmZhVCHZI8t1b9gc
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1c3pvbHNjdXFiaWVucWNubXViIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4Nzc3NjQxOCwiZXhwIjoyMTAzMzUyNDE4fQ.EcOu9a4KeouCRB-fTUH6MWzVUwmN1Rl0V0MY6wj-zyo

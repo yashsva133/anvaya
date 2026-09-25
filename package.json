@@ -1,6 +1,28 @@
 {
-  "name": "anvaya-demo",
-  "private": true,
+  "name": "rx-anvaya",
+  "version": "1.0.0",
+  "description": "RxAnvaya — Multilingual Clinical Lab Report Intelligence & Patient Companion Platform by Team Anvaya",
+  "author": "Team Anvaya",
+  "license": "MIT",
+  "homepage": "https://github.com/yashsva133/anvaya#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yashsva133/anvaya.git"
+  },
+  "keywords": [
+    "healthcare",
+    "medical-ai",
+    "lab-reports",
+    "ocr",
+    "multilingual",
+    "paddleocr",
+    "nextjs",
+    "react",
+    "typescript",
+    "supabase",
+    "rxanvaya",
+    "team-anvaya"
+  ],
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build",

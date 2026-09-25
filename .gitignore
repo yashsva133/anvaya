@@ -1,67 +1,77 @@
-# Virtual Environments
-myenv/
-# dependencies
+# Dependencies
 node_modules/
 /.pnp
 .pnp.*
 
-# testing
-/coverage
+# Production & Build outputs
+.next/
+out/
+build/
+dist/
+/coverage/
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-/dist
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# local env files
-.env*.local
+# Local Environment & Secrets (NEVER COMMIT)
 .env
+.env*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+dot env*
+*.pem
+*.key
 
-# typescript
+# TypeScript
 *.tsbuildinfo
+next-env.d.ts
 
-# python
+# Python Virtual Environments & Packages
 .venv/
 venv/
 env/
 ENV/
-
-# Python cache and bytecode
+myenv/
 __pycache__/
 *.py[cod]
 *$py.class
 *.pyc
+*.pyd
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Web / Node
-node_modules/
-.next/
-.env.local
-.env*.local
+# PaddleX / Deep Learning Model Cache
+.paddlex/
+official_models/
+*.onnx
+*.pdparams
+*.pdmodel
+*.pdopt
 
-# Temporary files
+# Binary executables and installers
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+
+# Temporary & Test artifact files
 *.patch
 install.log
 test_*.csv
 temp*.csv
+resul*.csv
+results*.csv
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Paddle / Model cache
-.paddlex/
-official_models/
-
-# OS / IDE artifacts
-.vscode/
-.idea/
+# OS & Editor files
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
